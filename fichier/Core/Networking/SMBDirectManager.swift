@@ -286,74 +286,59 @@ public final class SMBDirectManager {
     private func streamVideoThumbnail(for item: SMBItem, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
-        await videoThumbnailLimiter.acquire()
-        defer { videoThumbnailLimiter.release() }
-        
-        if Task.isCancelled { return nil }
-        
-        var validItem = item
-        if validItem.size <= 0 {
-            let realSize = await fetchFileSize(for: item)
-            if realSize > 0 {
-                validItem = SMBItem(
-                    name: item.name,
-                    shareName: item.shareName,
-                    path: item.path,
-                    isDirectory: item.isDirectory,
-                    size: realSize,
-                    modifiedDate: item.modifiedDate
-                )
+        return await videoThumbnailLimiter.withPermit {
+            if Task.isCancelled { return nil }
+            
+            var validItem = item
+            if validItem.size <= 0 {
+                let realSize = await fetchFileSize(for: item)
+                if realSize > 0 {
+                    validItem = SMBItem(
+                        name: item.name,
+                        shareName: item.shareName,
+                        path: item.path,
+                        isDirectory: item.isDirectory,
+                        size: realSize,
+                        modifiedDate: item.modifiedDate
+                    )
+                }
             }
-        }
-        guard validItem.size > 0 else { return nil }
-        
-        let uniqueID = UUID().uuidString
-        let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
-        guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
-            return nil
-        }
-        
-        let asset = AVURLAsset(url: streamURL)
-        let delegate = SMBResourceLoaderDelegate(manager: self, item: validItem)
-        let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
-        asset.resourceLoader.setDelegate(delegate, queue: queue)
-        
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
-        
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                Task {
-                    var resumed = false
-                    
-                    let timeoutTask = Task {
-                        try? await Task.sleep(for: .seconds(20.0))
-                        if !resumed {
-                            resumed = true
-                            delegate.cancelAll()
-                            continuation.resume(returning: nil)
+            guard validItem.size > 0 else { return nil }
+            
+            let uniqueID = UUID().uuidString
+            let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
+            guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
+                return nil
+            }
+            
+            let asset = AVURLAsset(url: streamURL)
+            let delegate = SMBResourceLoaderDelegate(manager: self, item: validItem)
+            let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
+            asset.resourceLoader.setDelegate(delegate, queue: queue)
+            
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
+            generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
+            generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
+            
+            return await withTaskCancellationHandler {
+                await withCheckedContinuation { continuation in
+                    Task {
+                        var resumed = false
+                        
+                        let timeoutTask = Task {
+                            try? await Task.sleep(for: .seconds(20.0))
+                            if !resumed {
+                                resumed = true
+                                delegate.cancelAll()
+                                continuation.resume(returning: nil)
+                            }
                         }
-                    }
-                    
-                    // 1. Try 5.0s frame first (avoids blank/black intro frames and gives a representative preview)
-                    do {
-                        let (cgImage, _) = try await generator.image(at: CMTime(seconds: 5.0, preferredTimescale: 600))
-                        timeoutTask.cancel()
-                        if !resumed {
-                            resumed = true
-                            delegate.cancelAll()
-                            continuation.resume(returning: UIImage(cgImage: cgImage))
-                            return
-                        }
-                    } catch {
-                        // 2. Fallback: try .zero or 0.5s if video is shorter than 5s or 5.0s is unavailable
-                        generator.requestedTimeToleranceBefore = .positiveInfinity
-                        generator.requestedTimeToleranceAfter = .positiveInfinity
+                        
+                        // 1. Try 5.0s frame first (avoids blank/black intro frames and gives a representative preview)
                         do {
-                            let (cgImage, _) = try await generator.image(at: .zero)
+                            let (cgImage, _) = try await generator.image(at: CMTime(seconds: 5.0, preferredTimescale: 600))
                             timeoutTask.cancel()
                             if !resumed {
                                 resumed = true
@@ -362,8 +347,11 @@ public final class SMBDirectManager {
                                 return
                             }
                         } catch {
+                            // 2. Fallback: try .zero or 0.5s if video is shorter than 5s or 5.0s is unavailable
+                            generator.requestedTimeToleranceBefore = .positiveInfinity
+                            generator.requestedTimeToleranceAfter = .positiveInfinity
                             do {
-                                let (cgImage, _) = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
+                                let (cgImage, _) = try await generator.image(at: .zero)
                                 timeoutTask.cancel()
                                 if !resumed {
                                     resumed = true
@@ -372,21 +360,32 @@ public final class SMBDirectManager {
                                     return
                                 }
                             } catch {
-                                print("⚠️ [SMB] Thumbnail extraction failed for \(validItem.name) (\(validItem.formattedSize)): \(error.localizedDescription)")
+                                do {
+                                    let (cgImage, _) = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
+                                    timeoutTask.cancel()
+                                    if !resumed {
+                                        resumed = true
+                                        delegate.cancelAll()
+                                        continuation.resume(returning: UIImage(cgImage: cgImage))
+                                        return
+                                    }
+                                } catch {
+                                    print("⚠️ [SMB] Thumbnail extraction failed for \(validItem.name) (\(validItem.formattedSize)): \(error.localizedDescription)")
+                                }
                             }
                         }
-                    }
-                    
-                    timeoutTask.cancel()
-                    if !resumed {
-                        resumed = true
-                        delegate.cancelAll()
-                        continuation.resume(returning: nil)
+                        
+                        timeoutTask.cancel()
+                        if !resumed {
+                            resumed = true
+                            delegate.cancelAll()
+                            continuation.resume(returning: nil)
+                        }
                     }
                 }
+            } onCancel: {
+                delegate.cancelAll()
             }
-        } onCancel: {
-            delegate.cancelAll()
         }
     }
     

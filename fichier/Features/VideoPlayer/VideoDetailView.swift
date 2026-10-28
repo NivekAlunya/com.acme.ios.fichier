@@ -33,6 +33,9 @@ public struct VideoDetailView: View {
     @State private var videoDurationSeconds: Double = 0
     @State private var wasPlayingBeforeScrub: Bool = false
     @State private var scrubDismissTask: Task<Void, Never>?
+    @State private var isSeekingFrame: Bool = false
+    @State private var pendingSeekSeconds: Double? = nil
+    @State private var lastSeekTime: Date = Date.distantPast
     
     public init(
         manager: SMBDirectManager,
@@ -350,6 +353,8 @@ public struct VideoDetailView: View {
         scrubDismissTask = nil
         isScrubbingWithGesture = false
         scrubDeltaSeconds = 0
+        isSeekingFrame = false
+        pendingSeekSeconds = nil
         loadTask?.cancel()
         loadTask = nil
         monitorTask?.cancel()
@@ -465,6 +470,9 @@ public struct VideoDetailView: View {
                 } else {
                     scrubTargetTimeSeconds = max(0, target)
                 }
+                
+                // Live frame rendering while sliding/swiping
+                requestLiveFrameSeek(to: scrubTargetTimeSeconds)
             }
             .onEnded { value in
                 guard isScrubbingWithGesture else { return }
@@ -472,6 +480,9 @@ public struct VideoDetailView: View {
                     isScrubbingWithGesture = false
                     return
                 }
+                
+                pendingSeekSeconds = nil
+                isSeekingFrame = false
                 
                 let hTranslation = value.translation.width
                 let vTranslation = value.translation.height
@@ -494,14 +505,22 @@ public struct VideoDetailView: View {
                     }
                     
                     let targetCM = CMTime(seconds: scrubTargetTimeSeconds, preferredTimescale: 600)
-                    player.seek(to: targetCM)
-                    if wasPlayingBeforeScrub {
-                        player.play()
+                    player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                        Task { @MainActor in
+                            if wasPlayingBeforeScrub {
+                                player.play()
+                            }
+                        }
                     }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 } else {
-                    if wasPlayingBeforeScrub {
-                        player.play()
+                    let targetCM = CMTime(seconds: scrubTargetTimeSeconds, preferredTimescale: 600)
+                    player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+                        Task { @MainActor in
+                            if wasPlayingBeforeScrub {
+                                player.play()
+                            }
+                        }
                     }
                 }
                 
@@ -515,6 +534,42 @@ public struct VideoDetailView: View {
                     }
                 }
             }
+    }
+    
+    // MARK: - Live Frame Seeking During Gesture
+    
+    private func requestLiveFrameSeek(to targetSeconds: Double) {
+        guard let player = player else { return }
+        
+        // If an async seek is currently in flight, record this as the pending target
+        guard !isSeekingFrame else {
+            pendingSeekSeconds = targetSeconds
+            return
+        }
+        
+        // Throttle slightly (at least 60ms between calls) to prevent flooding decoder / network
+        let now = Date()
+        if now.timeIntervalSince(lastSeekTime) < 0.06 {
+            pendingSeekSeconds = targetSeconds
+            return
+        }
+        
+        isSeekingFrame = true
+        lastSeekTime = now
+        
+        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
+        // Keyframe tolerance during interactive scrubbing for instant visual frame response
+        let tolerance = CMTime(seconds: 1.0, preferredTimescale: 600)
+        
+        player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
+            Task { @MainActor in
+                self.isSeekingFrame = false
+                if let nextTarget = self.pendingSeekSeconds {
+                    self.pendingSeekSeconds = nil
+                    self.requestLiveFrameSeek(to: nextTarget)
+                }
+            }
+        }
     }
     
     private func formatDeltaSeconds(_ delta: Double) -> String {

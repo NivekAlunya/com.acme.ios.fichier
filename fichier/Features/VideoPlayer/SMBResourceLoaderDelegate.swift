@@ -6,11 +6,10 @@
 import Foundation
 import AVFoundation
 
-nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
+nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
     private let manager: SMBDirectManager
     private let item: SMBItem
-    private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
-    private let lock = NSLock()
+    private let taskTracker = ResourceLoadingTaskTracker()
     
     public init(manager: SMBDirectManager, item: SMBItem) {
         self.manager = manager
@@ -58,9 +57,15 @@ nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResou
         }
         
         let targetEnd = startOffset + Int64(safeLength)
+        let tracker = self.taskTracker
         
         let task = Task { [weak self] in
             guard let self else { return }
+            defer {
+                Task {
+                    await tracker.remove(for: loadingRequest)
+                }
+            }
             do {
                 var currentOffset = startOffset
                 let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
@@ -90,14 +95,10 @@ nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResou
                     loadingRequest.finishLoading(with: error)
                 }
             }
-            
-            self.lock.withLock {
-                _ = self.activeTasks.removeValue(forKey: loadingRequest)
-            }
         }
         
-        lock.withLock {
-            activeTasks[loadingRequest] = task
+        Task {
+            await tracker.track(task: task, for: loadingRequest)
         }
         
         return true
@@ -107,18 +108,14 @@ nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResou
         _ resourceLoader: AVAssetResourceLoader,
         didCancel loadingRequest: AVAssetResourceLoadingRequest
     ) {
-        let task = lock.withLock {
-            activeTasks.removeValue(forKey: loadingRequest)
+        Task { [tracker = self.taskTracker] in
+            await tracker.cancelTask(for: loadingRequest)
         }
-        task?.cancel()
     }
     
     nonisolated public func cancelAll() {
-        let tasks = lock.withLock { () -> [Task<Void, Never>] in
-            let list = Array(activeTasks.values)
-            activeTasks.removeAll()
-            return list
+        Task { [tracker = self.taskTracker] in
+            await tracker.cancelAll()
         }
-        tasks.forEach { $0.cancel() }
     }
 }

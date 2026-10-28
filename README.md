@@ -44,7 +44,7 @@ Built with modern **SwiftUI** and structured around **Swift Concurrency**, *fich
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 33 independent, modular Swift files.
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 34 independent, modular Swift files.
 2. **Feature-Driven Architecture**: Code is decoupled into vertical domain features and shared core modules.
 
 ### Directory Structure
@@ -86,8 +86,9 @@ fichier/
 │   │
 │   └── VideoPlayer/                        # Video player & streaming delegate
 │       ├── VideoDetailView.swift           # Fullscreen AVPlayer with swipe seek & autoplay
-│       ├── VideoThumbnailLimiter.swift     # Task concurrency throttle for video frames
-│       └── SMBResourceLoaderDelegate.swift # Custom AVAsset byte-range streaming delegate
+│       ├── VideoThumbnailLimiter.swift     # Actor-based concurrency throttle for video frames
+│       ├── SMBResourceLoaderDelegate.swift # Custom AVAsset byte-range streaming delegate
+│       └── ResourceLoadingTaskTracker.swift# Actor-isolated task tracker for range requests
 │
 └── Core/                                   # Shared services, models & actors
     ├── Networking/                         # Protocol engine and credential storage

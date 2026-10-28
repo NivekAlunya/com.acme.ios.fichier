@@ -5,38 +5,35 @@
 
 import Foundation
 
-final class VideoThumbnailLimiter: @unchecked Sendable {
-    private let lock = NSLock()
+public actor VideoThumbnailLimiter {
     private var activeCount = 0
     private let maxConcurrent = 2
     private var waiters: [CheckedContinuation<Void, Never>] = []
     
-    func acquire() async {
-        let shouldWait = lock.withLock { () -> Bool in
-            if activeCount < maxConcurrent {
-                activeCount += 1
-                return false
-            } else {
-                return true
-            }
+    public init() {}
+    
+    public func withPermit<T: Sendable>(_ operation: () async throws -> T) async rethrows -> T {
+        await acquire()
+        defer { release() }
+        return try await operation()
+    }
+    
+    private func acquire() async {
+        if activeCount < maxConcurrent {
+            activeCount += 1
+            return
         }
-        if shouldWait {
-            await withCheckedContinuation { continuation in
-                lock.withLock {
-                    waiters.append(continuation)
-                }
-            }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
         }
     }
     
-    func release() {
-        lock.withLock {
-            if !waiters.isEmpty {
-                let next = waiters.removeFirst()
-                next.resume()
-            } else {
-                activeCount = max(0, activeCount - 1)
-            }
+    private func release() {
+        if !waiters.isEmpty {
+            let next = waiters.removeFirst()
+            next.resume()
+        } else {
+            activeCount = max(0, activeCount - 1)
         }
     }
 }
