@@ -1,0 +1,124 @@
+//
+//  SMBResourceLoaderDelegate.swift
+//  fichier
+//
+
+import Foundation
+import AVFoundation
+
+nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
+    private let manager: SMBDirectManager
+    private let item: SMBItem
+    private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
+    private let lock = NSLock()
+    
+    public init(manager: SMBDirectManager, item: SMBItem) {
+        self.manager = manager
+        self.item = item
+        super.init()
+    }
+    
+    public func resourceLoader(
+        _ resourceLoader: AVAssetResourceLoader,
+        shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
+    ) -> Bool {
+        // 1. Content Information Request
+        if let info = loadingRequest.contentInformationRequest {
+            let ext = (item.name as NSString).pathExtension.lowercased()
+            if ext == "mov" {
+                info.contentType = "com.apple.quicktime-movie"
+            } else {
+                info.contentType = "public.mpeg-4"
+            }
+            info.contentLength = max(1, item.size)
+            info.isByteRangeAccessSupported = true
+        }
+        
+        // 2. Data Request (Stream Byte Range on Demand in Fast 1MB Chunks)
+        guard let dataRequest = loadingRequest.dataRequest else {
+            loadingRequest.finishLoading()
+            return true
+        }
+        
+        let startOffset = dataRequest.currentOffset
+        let requestedLength = dataRequest.requestedLength
+        let total = item.size
+        
+        let safeLength: Int
+        if total > 0 {
+            let remaining = max(0, total - startOffset)
+            safeLength = min(requestedLength, Int(remaining))
+        } else {
+            safeLength = requestedLength
+        }
+        
+        guard safeLength > 0 else {
+            loadingRequest.finishLoading()
+            return true
+        }
+        
+        let targetEnd = startOffset + Int64(safeLength)
+        
+        let task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                var currentOffset = startOffset
+                let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
+                
+                while currentOffset < targetEnd {
+                    if Task.isCancelled || loadingRequest.isCancelled { return }
+                    
+                    let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
+                    let chunk = try await self.manager.fetchMediaRange(
+                        for: self.item,
+                        offset: currentOffset,
+                        length: bytesToRead
+                    )
+                    
+                    if Task.isCancelled || loadingRequest.isCancelled { return }
+                    if chunk.isEmpty { break }
+                    
+                    dataRequest.respond(with: chunk)
+                    currentOffset += Int64(chunk.count)
+                }
+                
+                if !loadingRequest.isCancelled && !Task.isCancelled {
+                    loadingRequest.finishLoading()
+                }
+            } catch {
+                if !loadingRequest.isCancelled && !Task.isCancelled {
+                    loadingRequest.finishLoading(with: error)
+                }
+            }
+            
+            self.lock.withLock {
+                _ = self.activeTasks.removeValue(forKey: loadingRequest)
+            }
+        }
+        
+        lock.withLock {
+            activeTasks[loadingRequest] = task
+        }
+        
+        return true
+    }
+    
+    public func resourceLoader(
+        _ resourceLoader: AVAssetResourceLoader,
+        didCancel loadingRequest: AVAssetResourceLoadingRequest
+    ) {
+        let task = lock.withLock {
+            activeTasks.removeValue(forKey: loadingRequest)
+        }
+        task?.cancel()
+    }
+    
+    nonisolated public func cancelAll() {
+        let tasks = lock.withLock { () -> [Task<Void, Never>] in
+            let list = Array(activeTasks.values)
+            activeTasks.removeAll()
+            return list
+        }
+        tasks.forEach { $0.cancel() }
+    }
+}
