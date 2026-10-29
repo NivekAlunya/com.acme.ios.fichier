@@ -16,6 +16,7 @@ public struct PictureDetailView: View {
     @State private var isPlayingSlideshow: Bool
     @State private var slideDirection: SlideDirection = .forward
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
+    @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
     @State private var showControls: Bool = true
     
     // Tier 1 features
@@ -64,14 +65,7 @@ public struct PictureDetailView: View {
                         }
                     )
                     .id(currentItem.id)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: slideDirection == .forward ? .trailing : .leading)
-                                .combined(with: .opacity),
-                            removal: .move(edge: slideDirection == .forward ? .leading : .trailing)
-                                .combined(with: .opacity)
-                        )
-                    )
+                    .transition(activeTransition)
                 }
                 .contentShape(Rectangle())
                 .gesture(
@@ -262,15 +256,25 @@ public struct PictureDetailView: View {
                         .padding(5)
                 }
                 
-                // 6. Slideshow Duration Selector
+                // 6. Slideshow Duration & Transition Style Menu
                 Menu {
-                    Picker("Slideshow Duration", selection: $slideshowInterval) {
-                        Text("2 seconds").tag(2.0)
-                        Text("3 seconds").tag(3.0)
-                        Text("5 seconds").tag(5.0)
-                        Text("10 seconds").tag(10.0)
-                        Text("15 seconds").tag(15.0)
-                        Text("30 seconds").tag(30.0)
+                    Section("Transition Style") {
+                        Picker("Style", selection: $transitionStyle) {
+                            ForEach(SlideshowTransitionStyle.allCases) { style in
+                                Label(style.rawValue, systemImage: style.iconName).tag(style)
+                            }
+                        }
+                    }
+                    
+                    Section("Duration") {
+                        Picker("Slideshow Duration", selection: $slideshowInterval) {
+                            Text("2 seconds").tag(2.0)
+                            Text("3 seconds").tag(3.0)
+                            Text("5 seconds").tag(5.0)
+                            Text("10 seconds").tag(10.0)
+                            Text("15 seconds").tag(15.0)
+                            Text("30 seconds").tag(30.0)
+                        }
                     }
                 } label: {
                     HStack(spacing: 3) {
@@ -350,6 +354,22 @@ public struct PictureDetailView: View {
             Spacer()
         }
         .padding(.bottom, 24)
+    }
+    
+    private var activeTransition: AnyTransition {
+        switch transitionStyle {
+        case .slide:
+            return .asymmetric(
+                insertion: .move(edge: slideDirection == .forward ? .trailing : .leading)
+                    .combined(with: .opacity),
+                removal: .move(edge: slideDirection == .forward ? .leading : .trailing)
+                    .combined(with: .opacity)
+            )
+        case .dissolve:
+            return .opacity
+        case .kenBurns:
+            return .opacity.combined(with: .scale(scale: 0.94))
+        }
     }
     
     // MARK: - Actions & Navigation Helpers
