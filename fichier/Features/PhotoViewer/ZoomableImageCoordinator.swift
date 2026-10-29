@@ -5,6 +5,7 @@
 
 import UIKit
 
+@MainActor
 final class ZoomableImageCoordinator: NSObject, UIScrollViewDelegate {
     weak var imageView: UIImageView?
     var onTap: () -> Void

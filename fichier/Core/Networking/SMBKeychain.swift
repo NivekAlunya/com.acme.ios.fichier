@@ -9,13 +9,17 @@ import Security
 nonisolated enum SMBKeychain {
     private static let service = "com.acme.ios.photos.smb"
     
-    static func savePassword(_ password: String, for account: String) {
-        let data = Data(password.utf8)
-        let query: [String: Any] = [
+    private static func baseQuery(for account: String) -> [String: Any] {
+        [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
+    }
+    
+    static func savePassword(_ password: String, for account: String) {
+        let data = Data(password.utf8)
+        let query = baseQuery(for: account)
         SecItemDelete(query as CFDictionary)
         
         var addQuery = query
@@ -24,13 +28,10 @@ nonisolated enum SMBKeychain {
     }
     
     static func loadPassword(for account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
+        var query = baseQuery(for: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else { return nil }
@@ -38,11 +39,7 @@ nonisolated enum SMBKeychain {
     }
     
     static func deletePassword(for account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
+        let query = baseQuery(for: account)
         SecItemDelete(query as CFDictionary)
     }
 }

@@ -5,7 +5,6 @@
 
 import SwiftUI
 import AVKit
-import Combine
 
 public struct VideoDetailView: View {
     var manager: SMBDirectManager
@@ -661,7 +660,7 @@ public struct VideoDetailView: View {
             }
             
             let asset = AVURLAsset(url: streamURL)
-            let delegate = SMBResourceLoaderDelegate(manager: self.manager, item: validItem)
+            let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem)
             self.loaderDelegate = delegate
             
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(uniqueID)", qos: .userInitiated)

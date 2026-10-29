@@ -12,7 +12,7 @@ public actor VideoThumbnailLimiter {
     
     public init() {}
     
-    public func withPermit<T: Sendable>(_ operation: () async throws -> T) async rethrows -> T {
+    public func withPermit<T: Sendable>(_ operation: @Sendable () async throws -> T) async rethrows -> T {
         await acquire()
         defer { release() }
         return try await operation()

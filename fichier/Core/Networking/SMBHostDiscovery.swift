@@ -37,7 +37,7 @@ public final class SMBHostDiscovery {
         
         browser.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 switch state {
                 case .ready:
                     print("📡 [Bonjour] SMB Browser is active and scanning (IPv4)...")
@@ -55,7 +55,7 @@ public final class SMBHostDiscovery {
         
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             guard let self else { return }
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 self.handleBrowseResults(results)
             }
         }

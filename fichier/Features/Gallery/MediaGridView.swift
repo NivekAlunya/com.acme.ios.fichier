@@ -60,14 +60,6 @@ struct MediaGridView: View {
         return sortItems(list)
     }
     
-    private var mediaSectionTitle: String {
-        switch mediaFilter {
-        case .all: return String(localized: .Strings.galleryTitleMedia)
-        case .photos: return String(localized: .Strings.galleryFilterPhotos)
-        case .videos: return String(localized: .Strings.galleryFilterVideos)
-        }
-    }
-    
     private var mediaSectionHeader: LocalizedStringResource {
         let count = filteredPictures.count
         switch mediaFilter {

@@ -153,7 +153,7 @@ actor SMBClientActor {
             } else if resourceType == .regular {
                 let ext = (name as NSString).pathExtension.lowercased()
                 if supportedMediaExtensions.contains(ext) {
-                    let size = (entry[.fileSizeKey] as? NSNumber)?.int64Value ?? (entry[.fileSizeKey] as? Int64) ?? (entry[.fileSizeKey] as? Int).map(Int64.init) ?? 0
+                    let size = Self.extractFileSize(from: entry)
                     pictures.append(SMBItem(
                         name: name,
                         shareName: shareName,
@@ -276,10 +276,14 @@ actor SMBClientActor {
         do {
             let client = try await ensureConnected(to: item.shareName)
             let attrs = try await client.attributesOfItem(atPath: item.path)
-            return (attrs[.fileSizeKey] as? NSNumber)?.int64Value ?? (attrs[.fileSizeKey] as? Int64) ?? (attrs[.fileSizeKey] as? Int).map(Int64.init) ?? 0
+            return Self.extractFileSize(from: attrs)
         } catch {
             return 0
         }
+    }
+    
+    private static func extractFileSize(from dict: [URLResourceKey: Any]) -> Int64 {
+        (dict[.fileSizeKey] as? NSNumber)?.int64Value ?? (dict[.fileSizeKey] as? Int64) ?? (dict[.fileSizeKey] as? Int).map(Int64.init) ?? 0
     }
     
     /// Downloads the full-resolution image (cached for smooth navigation & slideshow)

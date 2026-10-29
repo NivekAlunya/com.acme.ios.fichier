@@ -6,13 +6,13 @@
 import Foundation
 import AVFoundation
 
-nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
-    private let manager: SMBDirectManager
+nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
+    private let worker: SMBClientActor
     private let item: SMBItem
     private let taskTracker = ResourceLoadingTaskTracker()
     
-    public init(manager: SMBDirectManager, item: SMBItem) {
-        self.manager = manager
+    init(worker: SMBClientActor, item: SMBItem) {
+        self.worker = worker
         self.item = item
         super.init()
     }
@@ -74,7 +74,7 @@ nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResou
                     if Task.isCancelled || loadingRequest.isCancelled { return }
                     
                     let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
-                    let chunk = try await self.manager.fetchMediaRange(
+                    let chunk = try await self.worker.fetchMediaRange(
                         for: self.item,
                         offset: currentOffset,
                         length: bytesToRead
@@ -113,7 +113,7 @@ nonisolated public final class SMBResourceLoaderDelegate: NSObject, AVAssetResou
         }
     }
     
-    nonisolated public func cancelAll() {
+    nonisolated func cancelAll() {
         Task { [tracker = self.taskTracker] in
             await tracker.cancelAll()
         }

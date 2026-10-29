@@ -35,6 +35,7 @@ public final class SMBDirectManager {
     private var loadFolderTask: Task<Void, Never>?
     
     private let worker = SMBClientActor()
+    nonisolated var clientActor: SMBClientActor { worker }
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
     
@@ -184,23 +185,19 @@ public final class SMBDirectManager {
                 let (subfolders, foundPictures) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
                 try Task.checkCancellation()
                 
-                await MainActor.run {
-                    guard !Task.isCancelled, self.activeFolderID == targetID else { return }
-                    self.currentFolders = subfolders
-                    self.pictures = foundPictures
-                    self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
-                    self.isLoading = false
-                    print("✅ [SMB] Share '\(targetShare)' path '\(targetPath)': \(subfolders.count) subfolders, \(foundPictures.count) pictures")
-                }
+                guard !Task.isCancelled, self.activeFolderID == targetID else { return }
+                self.currentFolders = subfolders
+                self.pictures = foundPictures
+                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
+                self.isLoading = false
+                print("✅ [SMB] Share '\(targetShare)' path '\(targetPath)': \(subfolders.count) subfolders, \(foundPictures.count) pictures")
             } catch is CancellationError {
                 // Superseded by another folder click; silently exit
             } catch {
-                await MainActor.run {
-                    guard !Task.isCancelled, self.activeFolderID == targetID else { return }
-                    self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
-                    self.isLoading = false
-                    print("❌ [SMB] Error scanning folder \(targetShare)/\(targetPath): \(error)")
-                }
+                guard !Task.isCancelled, self.activeFolderID == targetID else { return }
+                self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
+                self.isLoading = false
+                print("❌ [SMB] Error scanning folder \(targetShare)/\(targetPath): \(error)")
             }
         }
         
@@ -311,7 +308,7 @@ public final class SMBDirectManager {
             }
             
             let asset = AVURLAsset(url: streamURL)
-            let delegate = SMBResourceLoaderDelegate(manager: self, item: validItem)
+            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem)
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
@@ -322,88 +319,37 @@ public final class SMBDirectManager {
             generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
             
             return await withTaskCancellationHandler {
-                await withCheckedContinuation { continuation in
-                    Task {
-                        var resumed = false
-                        
-                        let timeoutTask = Task {
-                            try? await Task.sleep(for: .seconds(12.0))
-                            if !resumed {
-                                resumed = true
-                                generator.cancelAllCGImageGeneration()
-                                delegate.cancelAll()
-                                continuation.resume(returning: nil)
-                            }
-                        }
-                        
-                        if Task.isCancelled {
-                            timeoutTask.cancel()
-                            if !resumed {
-                                resumed = true
-                                generator.cancelAllCGImageGeneration()
-                                delegate.cancelAll()
-                                continuation.resume(returning: nil)
-                            }
-                            return
-                        }
-                        
-                        // 1. Try 5.0s frame first (avoids blank/black intro frames and gives a representative preview)
+                await withTaskGroup(of: UIImage?.self) { group in
+                    group.addTask {
+                        // 1. Try 5.0s frame first (representative preview)
                         do {
                             let (cgImage, _) = try await generator.image(at: CMTime(seconds: 5.0, preferredTimescale: 600))
-                            timeoutTask.cancel()
-                            if !resumed {
-                                resumed = true
-                                delegate.cancelAll()
-                                continuation.resume(returning: UIImage(cgImage: cgImage))
-                                return
-                            }
+                            return UIImage(cgImage: cgImage)
                         } catch {
-                            if Task.isCancelled {
-                                timeoutTask.cancel()
-                                if !resumed {
-                                    resumed = true
-                                    generator.cancelAllCGImageGeneration()
-                                    delegate.cancelAll()
-                                    continuation.resume(returning: nil)
-                                }
-                                return
-                            }
-                            // 2. Fallback: try .zero or 0.5s if video is shorter than 5s or 5.0s is unavailable
+                            guard !Task.isCancelled else { return nil }
+                            // 2. Fallback: try .zero or 0.5s if video is shorter than 5s
                             generator.requestedTimeToleranceBefore = .positiveInfinity
                             generator.requestedTimeToleranceAfter = .positiveInfinity
-                            do {
-                                let (cgImage, _) = try await generator.image(at: .zero)
-                                timeoutTask.cancel()
-                                if !resumed {
-                                    resumed = true
-                                    delegate.cancelAll()
-                                    continuation.resume(returning: UIImage(cgImage: cgImage))
-                                    return
-                                }
-                            } catch {
-                                do {
-                                    let (cgImage, _) = try await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600))
-                                    timeoutTask.cancel()
-                                    if !resumed {
-                                        resumed = true
-                                        delegate.cancelAll()
-                                        continuation.resume(returning: UIImage(cgImage: cgImage))
-                                        return
-                                    }
-                                } catch {
-                                    print("⚠️ [SMB] Thumbnail extraction failed for \(validItem.name) (\(validItem.formattedSize)): \(error.localizedDescription)")
-                                }
+                            if let (cgImage, _) = try? await generator.image(at: .zero) {
+                                return UIImage(cgImage: cgImage)
                             }
-                        }
-                        
-                        timeoutTask.cancel()
-                        if !resumed {
-                            resumed = true
-                            generator.cancelAllCGImageGeneration()
-                            delegate.cancelAll()
-                            continuation.resume(returning: nil)
+                            if let (cgImage, _) = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
+                                return UIImage(cgImage: cgImage)
+                            }
+                            return nil
                         }
                     }
+                    
+                    group.addTask {
+                        try? await Task.sleep(for: .seconds(12.0))
+                        return nil
+                    }
+                    
+                    let first = await group.next() ?? nil
+                    group.cancelAll()
+                    generator.cancelAllCGImageGeneration()
+                    delegate.cancelAll()
+                    return first
                 }
             } onCancel: {
                 generator.cancelAllCGImageGeneration()
@@ -428,7 +374,7 @@ public final class SMBDirectManager {
     
     // MARK: - Video Support & Disk Cache (Tier 3)
     
-    public func fetchMediaRange(for item: SMBItem, offset: Int64, length: Int) async throws -> Data {
+    nonisolated public func fetchMediaRange(for item: SMBItem, offset: Int64, length: Int) async throws -> Data {
         try await worker.fetchMediaRange(for: item, offset: offset, length: length)
     }
     
