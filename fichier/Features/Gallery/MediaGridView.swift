@@ -15,10 +15,17 @@ struct MediaGridView: View {
     @AppStorage("gallery_sort_option") private var sortOption: SortOption = .nameAsc
     @AppStorage("gallery_grid_size") private var gridSize: GridSize = .medium
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
+    @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
     @State private var searchText = ""
     @State private var lastPinchScale: CGFloat = 1.0
     @State private var showFavoritesOnly = false
     @State private var mediaFilter: MediaFilter = .all
+    @State private var isSelectionMode = false
+    @State private var selectedItems: Set<SMBItem> = []
+    @State private var isBatchProcessing = false
+    @State private var batchProgressMessage: String?
+    @State private var batchStatusToast: String?
+    @State private var shareSheetItems: [Any]?
     
     private var currentDirectoryID: String {
         manager.selectedFolder?.id ?? "root"
@@ -81,54 +88,197 @@ struct MediaGridView: View {
     }
     
     var body: some View {
-        Group {
-            if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
-                ProgressView("Loading folder contents...")
-            } else if let error = manager.errorMessage, manager.pictures.isEmpty {
-                ContentUnavailableView {
-                    Label("Unable to Load Folder", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(error)
-                } actions: {
-                    if let folder = manager.selectedFolder {
-                        Button("Retry") {
-                            Task { await manager.selectAndLoadFolder(folder) }
+        ZStack(alignment: .bottom) {
+            Group {
+                if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
+                    ProgressView("Loading folder contents...")
+                } else if let error = manager.errorMessage, manager.pictures.isEmpty {
+                    ContentUnavailableView {
+                        Label("Unable to Load Folder", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        if let folder = manager.selectedFolder {
+                            Button("Retry") {
+                                Task { await manager.selectAndLoadFolder(folder) }
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
+                    }
+                } else if !searchText.isEmpty && filteredPictures.isEmpty && filteredFolders.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
+                    ContentUnavailableView(
+                        "Empty Folder",
+                        systemImage: "photo.on.rectangle.angled",
+                        description: Text("No pictures or subfolders found in \(manager.selectedFolder?.name ?? "this folder").")
+                    )
+                } else {
+                    switch viewMode {
+                    case .grid:
+                        gridContent
+                    case .list:
+                        listContent
                     }
                 }
-            } else if !searchText.isEmpty && filteredPictures.isEmpty && filteredFolders.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
-                ContentUnavailableView(
-                    "Empty Folder",
-                    systemImage: "photo.on.rectangle.angled",
-                    description: Text("No pictures or subfolders found in \(manager.selectedFolder?.name ?? "this folder").")
+            }
+            
+            // Bottom Action Bar when in Selection Mode
+            if isSelectionMode {
+                MediaSelectionBottomBar(
+                    selectedCount: selectedItems.count,
+                    isAllFavorites: !selectedItems.isEmpty && selectedItems.allSatisfy { FavoritesManager.shared.isFavorite($0) },
+                    isProcessing: isBatchProcessing,
+                    progressMessage: batchProgressMessage,
+                    onToggleFavorite: { batchToggleFavorites() },
+                    onSaveToPhotos: { batchSaveToPhotos() },
+                    onShare: { batchShare() }
                 )
-            } else {
-                switch viewMode {
-                case .grid:
-                    gridContent
-                case .list:
-                    listContent
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            
+            // Status Toast Banner (e.g. Saved to Photos)
+            if let toast = batchStatusToast {
+                VStack {
+                    Spacer().frame(height: 70)
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                        Text(toast)
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Capsule().fill(.ultraThinMaterial))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    Spacer()
                 }
             }
         }
         .searchable(text: $searchText, prompt: "Search pictures and folders")
+        .sheet(isPresented: Binding(
+            get: { shareSheetItems != nil },
+            set: { if !$0 { shareSheetItems = nil } }
+        )) {
+            if let shareSheetItems {
+                MediaActivityShareSheet(activityItems: shareSheetItems)
+            }
+        }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 8) {
-                    // Slideshow trigger & duration menu
-                    if !filteredPictures.isEmpty {
-                        Menu {
-                            Button {
-                                onStartSlideshow?()
+            if isSelectionMode {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty ? "Deselect All" : "Select All") {
+                        toggleAllSelection()
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    Text(selectedItems.isEmpty ? "Select Items" : "\(selectedItems.count) Selected")
+                        .font(.headline)
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        withAnimation {
+                            isSelectionMode = false
+                            selectedItems.removeAll()
+                        }
+                    }
+                    .font(.body.bold())
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 8) {
+                        if !filteredPictures.isEmpty {
+                            Button("Select") {
+                                withAnimation {
+                                    isSelectionMode = true
+                                }
+                            }
+                        }
+                        
+                        // Slideshow trigger & duration menu
+                        if !filteredPictures.isEmpty {
+                            Menu {
+                                Button {
+                                    onStartSlideshow?()
+                                } label: {
+                                    Label("Start Slideshow", systemImage: "play.fill")
+                                }
+                                
+                                Section("Transition Style") {
+                                    Picker("Transition", selection: $transitionStyle) {
+                                        ForEach(SlideshowTransitionStyle.allCases) { style in
+                                            Label(style.rawValue, systemImage: style.iconName).tag(style)
+                                        }
+                                    }
+                                }
+                                
+                                Section("Slide Duration") {
+                                    Picker("Duration", selection: $slideshowInterval) {
+                                        Text("2 seconds").tag(2.0)
+                                        Text("3 seconds").tag(3.0)
+                                        Text("5 seconds").tag(5.0)
+                                        Text("10 seconds").tag(10.0)
+                                        Text("15 seconds").tag(15.0)
+                                        Text("30 seconds").tag(30.0)
+                                    }
+                                }
                             } label: {
-                                Label("Start Slideshow", systemImage: "play.fill")
+                                Label("Slideshow", systemImage: "play.circle.fill")
+                            } primaryAction: {
+                                onStartSlideshow?()
+                            }
+                        }
+                        
+                        // Unified View, Sort & Grid Size Menu
+                        Menu {
+                            Section("Layout") {
+                                Picker("View Mode", selection: $viewMode) {
+                                    Label("Grid", systemImage: "square.grid.2x2").tag(ViewMode.grid)
+                                    Label("List", systemImage: "list.bullet").tag(ViewMode.list)
+                                }
                             }
                             
-                            Section("Slide Duration") {
-                                Picker("Duration", selection: $slideshowInterval) {
+                            if viewMode == .grid {
+                                Section("Grid Density") {
+                                    Picker("Size", selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
+                                        ForEach(GridSize.allCases) { size in
+                                            Label(size.rawValue, systemImage: size.iconName).tag(size)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            Section("Filter") {
+                                Picker("Media Type", selection: $mediaFilter) {
+                                    ForEach(MediaFilter.allCases) { filter in
+                                        Label(filter.rawValue, systemImage: filter.iconName).tag(filter)
+                                    }
+                                }
+                                
+                                Toggle(isOn: $showFavoritesOnly) {
+                                    Label("Favorites Only", systemImage: "heart.fill")
+                                }
+                            }
+                            
+                            Section("Sort By") {
+                                Picker("Sort By", selection: $sortOption) {
+                                    ForEach(SortOption.allCases) { option in
+                                        Label(option.rawValue, systemImage: option.iconName).tag(option)
+                                    }
+                                }
+                            }
+                            
+                            Section("Slideshow") {
+                                Picker("Transition", selection: $transitionStyle) {
+                                    ForEach(SlideshowTransitionStyle.allCases) { style in
+                                        Label(style.rawValue, systemImage: style.iconName).tag(style)
+                                    }
+                                }
+                                
+                                Picker("Slide Duration", selection: $slideshowInterval) {
                                     Text("2 seconds").tag(2.0)
                                     Text("3 seconds").tag(3.0)
                                     Text("5 seconds").tag(5.0)
@@ -137,81 +287,27 @@ struct MediaGridView: View {
                                     Text("30 seconds").tag(30.0)
                                 }
                             }
-                        } label: {
-                            Label("Slideshow", systemImage: "play.circle.fill")
-                        } primaryAction: {
-                            onStartSlideshow?()
-                        }
-                    }
-                    
-                    // Unified View, Sort & Grid Size Menu
-                    Menu {
-                        Section("Layout") {
-                            Picker("View Mode", selection: $viewMode) {
-                                Label("Grid", systemImage: "square.grid.2x2").tag(ViewMode.grid)
-                                Label("List", systemImage: "list.bullet").tag(ViewMode.list)
-                            }
-                        }
-                        
-                        if viewMode == .grid {
-                            Section("Grid Density") {
-                                Picker("Size", selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
-                                    ForEach(GridSize.allCases) { size in
-                                        Label(size.rawValue, systemImage: size.iconName).tag(size)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Section("Filter") {
-                            Picker("Media Type", selection: $mediaFilter) {
-                                ForEach(MediaFilter.allCases) { filter in
-                                    Label(filter.rawValue, systemImage: filter.iconName).tag(filter)
-                                }
-                            }
                             
-                            Toggle(isOn: $showFavoritesOnly) {
-                                Label("Favorites Only", systemImage: "heart.fill")
-                            }
-                        }
-                        
-                        Section("Sort By") {
-                            Picker("Sort By", selection: $sortOption) {
-                                ForEach(SortOption.allCases) { option in
-                                    Label(option.rawValue, systemImage: option.iconName).tag(option)
+                            Section("Disk Cache (\(manager.mediaCacheSize))") {
+                                Button(role: .destructive) {
+                                    manager.clearMediaCache()
+                                } label: {
+                                    Label("Clear Cache", systemImage: "trash")
                                 }
                             }
+                        } label: {
+                            Image(systemName: (mediaFilter != .all || showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                         }
                         
-                        Section("Slideshow") {
-                            Picker("Slide Duration", selection: $slideshowInterval) {
-                                Text("2 seconds").tag(2.0)
-                                Text("3 seconds").tag(3.0)
-                                Text("5 seconds").tag(5.0)
-                                Text("10 seconds").tag(10.0)
-                                Text("15 seconds").tag(15.0)
-                                Text("30 seconds").tag(30.0)
+                        Button {
+                            if let folder = manager.selectedFolder {
+                                Task { await manager.selectAndLoadFolder(folder) }
                             }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
                         }
-                        
-                        Section("Disk Cache (\(manager.mediaCacheSize))") {
-                            Button(role: .destructive) {
-                                manager.clearMediaCache()
-                            } label: {
-                                Label("Clear Cache", systemImage: "trash")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: (mediaFilter != .all || showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                     }
-                    
-                    Button {
-                        if let folder = manager.selectedFolder {
-                            Task { await manager.selectAndLoadFolder(folder) }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
+                    .id(filteredFolders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
         }
@@ -289,9 +385,26 @@ struct MediaGridView: View {
                                     MediaThumbnailCell(
                                         manager: manager,
                                         item: pic,
-                                        maxDimension: gridSize.thumbnailPixels
+                                        maxDimension: gridSize.thumbnailPixels,
+                                        isSelected: selectedItems.contains(pic),
+                                        isSelectionMode: isSelectionMode
                                     )
-                                    .onTapGesture { onSelectPicture(pic) }
+                                    .onTapGesture {
+                                        if isSelectionMode {
+                                            toggleSelection(for: pic)
+                                        } else {
+                                            onSelectPicture(pic)
+                                        }
+                                    }
+                                    .onLongPressGesture {
+                                        if !isSelectionMode {
+                                            withAnimation {
+                                                isSelectionMode = true
+                                                selectedItems.insert(pic)
+                                            }
+                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                        }
+                                    }
                                 }
                             }
                             .padding(.horizontal, 12)
@@ -381,12 +494,6 @@ struct MediaGridView: View {
     private var listContent: some View {
         ScrollViewReader { proxy in
             List {
-                Color.clear
-                    .frame(height: 0)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .id("topOfList")
-                
                 if !filteredFolders.isEmpty {
                     Section("Subfolders (\(filteredFolders.count))") {
                         ForEach(filteredFolders) { subfolder in
@@ -414,19 +521,41 @@ struct MediaGridView: View {
                             }
                         }
                     }
+                    .id("topOfList")
                 }
                 
                 if !filteredPictures.isEmpty {
                     Section("\(mediaSectionTitle) (\(filteredPictures.count))") {
                         ForEach(filteredPictures) { pic in
                             Button {
-                                onSelectPicture(pic)
+                                if isSelectionMode {
+                                    toggleSelection(for: pic)
+                                } else {
+                                    onSelectPicture(pic)
+                                }
                             } label: {
-                                MediaListRowCell(manager: manager, item: pic)
+                                MediaListRowCell(
+                                    manager: manager,
+                                    item: pic,
+                                    isSelected: selectedItems.contains(pic),
+                                    isSelectionMode: isSelectionMode
+                                )
                             }
                             .buttonStyle(.plain)
+                            .simultaneousGesture(
+                                LongPressGesture().onEnded { _ in
+                                    if !isSelectionMode {
+                                        withAnimation {
+                                            isSelectionMode = true
+                                            selectedItems.insert(pic)
+                                        }
+                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    }
+                                }
+                            )
                         }
                     }
+                    .id(filteredFolders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
             .id(currentDirectoryID)
@@ -444,6 +573,111 @@ struct MediaGridView: View {
                 } else {
                     await manager.refreshSharesAndFolders()
                 }
+            }
+        }
+    }
+    
+    // MARK: - Batch Selection Actions
+    
+    private func toggleSelection(for item: SMBItem) {
+        if selectedItems.contains(item) {
+            selectedItems.remove(item)
+        } else {
+            selectedItems.insert(item)
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    
+    private func toggleAllSelection() {
+        if selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty {
+            selectedItems.removeAll()
+        } else {
+            selectedItems = Set(filteredPictures)
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+    
+    private func batchToggleFavorites() {
+        let items = Array(selectedItems)
+        guard !items.isEmpty else { return }
+        let allAreFavs = items.allSatisfy { FavoritesManager.shared.isFavorite($0) }
+        for item in items {
+            if allAreFavs {
+                if FavoritesManager.shared.isFavorite(item) {
+                    FavoritesManager.shared.toggleFavorite(item)
+                }
+            } else {
+                if !FavoritesManager.shared.isFavorite(item) {
+                    FavoritesManager.shared.toggleFavorite(item)
+                }
+            }
+        }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+    
+    private func batchSaveToPhotos() {
+        let items = Array(selectedItems)
+        guard !items.isEmpty else { return }
+        isBatchProcessing = true
+        
+        Task {
+            var savedCount = 0
+            for (idx, item) in items.enumerated() {
+                batchProgressMessage = "Saving \(idx + 1) of \(items.count)..."
+                do {
+                    if item.isVideo {
+                        let localURL = try await manager.fetchVideoURL(for: item)
+                        try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+                    } else {
+                        if let image = await manager.downloadImage(for: item) {
+                            try await PhotoLibrarySaver.saveImageToPhotos(image)
+                        }
+                    }
+                    savedCount += 1
+                } catch {
+                    print("⚠️ [Photos] Failed to save \(item.name): \(error)")
+                }
+            }
+            
+            isBatchProcessing = false
+            batchProgressMessage = nil
+            withAnimation {
+                batchStatusToast = "Saved \(savedCount) items to Photos"
+                isSelectionMode = false
+                selectedItems.removeAll()
+            }
+            
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation {
+                batchStatusToast = nil
+            }
+        }
+    }
+    
+    private func batchShare() {
+        let items = Array(selectedItems)
+        guard !items.isEmpty else { return }
+        isBatchProcessing = true
+        batchProgressMessage = "Preparing items for sharing..."
+        
+        Task {
+            var shareables: [Any] = []
+            for item in items {
+                if item.isVideo {
+                    if let localURL = try? await manager.fetchVideoURL(for: item) {
+                        shareables.append(localURL)
+                    }
+                } else {
+                    if let image = await manager.downloadImage(for: item) {
+                        shareables.append(image)
+                    }
+                }
+            }
+            isBatchProcessing = false
+            batchProgressMessage = nil
+            
+            if !shareables.isEmpty {
+                self.shareSheetItems = shareables
             }
         }
     }
