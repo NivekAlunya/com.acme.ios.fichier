@@ -1,184 +1,213 @@
 //
 //  SMBConnectWithDiscoveryView.swift
-//  com.acme.ios.photos
-//
-//  Created by Kevin LAUNAY on 27/10/2026.
+//  fichier
 //
 
 import SwiftUI
 
-public struct SMBConnectWithDiscoveryView: View {
+struct SMBConnectWithDiscoveryView: View {
     var smbManager: SMBDirectManager
     @State private var discovery = SMBHostDiscovery()
     
-    @State private var host = ""
+    @State private var selectedHost = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var showingSettings = false
     
-    public var body: some View {
+    var body: some View {
         NavigationStack {
             Form {
-                // MARK: - Saved Validated Connections Section
+                // 0. Saved Validated Connections Section
                 if !smbManager.savedConnections.isEmpty {
-                    Section("Saved Servers") {
+                    Section(.Strings.connectionSectionSavedServers) {
                         ForEach(smbManager.savedConnections) { saved in
                             Button {
-                                let savedPassword = smbManager.password(for: saved)
-                                self.host = saved.host
-                                self.username = saved.username
-                                self.password = savedPassword
-                                
+                                selectedHost = saved.host
+                                username = saved.username
+                                password = smbManager.password(for: saved)
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 Task {
-                                    discovery.stopDiscovery()
                                     await smbManager.connect(
-                                        host: saved.host,
-                                        user: saved.username,
-                                        pass: savedPassword
+                                        host: selectedHost,
+                                        user: username,
+                                        pass: password
                                     )
                                 }
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "externaldrive.connected.to.line.below.fill")
-                                        .font(.title3)
                                         .foregroundColor(.blue)
+                                        .font(.title3)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(saved.host)
                                             .font(.headline)
                                             .foregroundColor(.primary)
-                                        Text("User: \(saved.username)")
+                                        
+                                        Text(.Strings.connectionSavedServerUser(saved.username))
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
                                     
                                     Spacer()
                                     
-                                    Image(systemName: "arrow.right.circle.fill")
-                                        .foregroundColor(.blue)
+                                    if selectedHost == saved.host && username == saved.username && smbManager.isLoading {
+                                        ProgressView()
+                                    } else {
+                                        Image(systemName: "arrow.right.circle.fill")
+                                            .foregroundColor(.blue.opacity(0.8))
+                                    }
                                 }
                             }
+                            .disabled(smbManager.isLoading)
                         }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                let item = smbManager.savedConnections[index]
-                                smbManager.removeSavedConnection(item)
+                        .onDelete { offsets in
+                            for index in offsets {
+                                let conn = smbManager.savedConnections[index]
+                                smbManager.removeSavedConnection(conn)
                             }
                         }
                     }
                 }
                 
-                // MARK: - Auto-Discovered Hosts Section (IPv4)
+                // 1. Bonjour Local Network Discovery Section
                 Section {
                     if discovery.isScanning && discovery.discoveredHosts.isEmpty {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Searching local network for Macs (IPv4)...")
+                            Text(.Strings.connectionSearchingLocalNetwork)
                                 .foregroundColor(.secondary)
                         }
                     } else if discovery.discoveredHosts.isEmpty {
                         HStack {
-                            Text("No SMB servers found yet")
+                            Text(.Strings.connectionNoServersFound)
                                 .foregroundColor(.secondary)
                             Spacer()
-                            Button("Scan") { discovery.startDiscovery() }
+                            Button(.Strings.connectionButtonScan) {
+                                discovery.startDiscovery()
+                            }
                         }
                     } else {
-                        ForEach(discovery.discoveredHosts) { server in
+                        ForEach(discovery.discoveredHosts) { host in
                             Button {
-                                if let ipv4 = server.resolvedHost {
-                                    self.host = ipv4
+                                if let ipv4 = host.resolvedHost {
+                                    selectedHost = ipv4
                                 }
                             } label: {
                                 HStack {
-                                    Image(systemName: "desktopcomputer")
-                                        .font(.title2)
+                                    Image(systemName: "macmini.fill")
                                         .foregroundColor(.blue)
+                                        .font(.title3)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(server.name)
+                                        Text(host.name)
                                             .font(.headline)
                                             .foregroundColor(.primary)
                                         
-                                        Text(server.resolvedHost ?? "Resolving IPv4 address...")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                        if let ipv4 = host.resolvedHost {
+                                            Text(ipv4)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        } else {
+                                            Text(.Strings.connectionResolvingAddress)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
+                                    
                                     Spacer()
-                                    if let ipv4 = server.resolvedHost, host == ipv4 {
+                                    
+                                    if let ipv4 = host.resolvedHost, selectedHost == ipv4 {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.blue)
                                     }
                                 }
                             }
-                            .disabled(server.resolvedHost == nil)
+                            .disabled(host.resolvedHost == nil)
                         }
                     }
                 } header: {
                     HStack {
-                        Text("Discovered Servers")
+                        Text(.Strings.connectionSectionDiscoveredServers)
                         Spacer()
-                        if discovery.isScanning {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Button("Refresh") { discovery.startDiscovery() }
+                        Button {
+                            discovery.startDiscovery()
+                        } label: {
+                            Label(.Strings.connectionButtonRefresh, systemImage: "arrow.clockwise")
                                 .font(.caption)
                         }
                     }
                 }
                 
-                // MARK: - Server Credentials (No Share Name Needed!)
-                Section("Server Credentials (IPv4)") {
-                    TextField("Host IPv4 (e.g. 192.168.1.50)", text: $host)
+                // 2. Credentials & Manual Host Input
+                Section(.Strings.connectionSectionServerCredentials) {
+                    TextField(.Strings.connectionFieldHostAddress, text: $selectedHost)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                         .keyboardType(.numbersAndPunctuation)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
                     
-                    TextField("Mac Username", text: $username)
-                        .autocorrectionDisabled()
+                    TextField(.Strings.connectionFieldMacUsername, text: $username)
                         .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                     
-                    SecureField("Mac Password", text: $password)
+                    SecureField(.Strings.connectionFieldMacPassword, text: $password)
                 }
                 
-                if let error = smbManager.errorMessage {
+                // 3. Error Display
+                if let error = smbManager.errorMessage ?? discovery.errorMessage {
                     Section {
                         Text(error)
                             .foregroundColor(.red)
-                            .font(.caption)
+                            .font(.footnote)
                     }
                 }
                 
-                Button {
-                    Task {
-                        discovery.stopDiscovery()
-                        await smbManager.connect(host: host, user: username, pass: password)
-                    }
-                } label: {
-                    if smbManager.isLoading {
+                // 4. Connect Button
+                Section {
+                    Button {
+                        Task {
+                            await smbManager.connect(
+                                host: selectedHost,
+                                user: username,
+                                pass: password
+                            )
+                        }
+                    } label: {
                         HStack {
                             Spacer()
-                            ProgressView()
+                            if smbManager.isLoading {
+                                ProgressView()
+                            } else {
+                                Text(.Strings.connectionButtonConnectListShares)
+                                    .bold()
+                            }
                             Spacer()
                         }
-                    } else {
-                        Text("Connect & List Shares")
-                            .frame(maxWidth: .infinity)
-                            .bold()
                     }
+                    .disabled(selectedHost.isEmpty || username.isEmpty || smbManager.isLoading)
                 }
-                .disabled(host.isEmpty || username.isEmpty || smbManager.isLoading)
             }
-            .navigationTitle("Mac mini Photos")
-            .refreshable {
-                discovery.startDiscovery()
+            .navigationTitle(.Strings.connectionTitleMacMiniPhotos)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel(.Strings.settingsTitle)
+                }
+            }
+            .sheet(isPresented: $showingSettings) {
+                AppSettingsView()
             }
             .onAppear {
-                if host.isEmpty, let last = smbManager.savedConnections.first {
-                    host = last.host
-                    username = last.username
-                    password = smbManager.password(for: last)
-                }
                 discovery.startDiscovery()
+                if selectedHost.isEmpty, let mostRecent = smbManager.savedConnections.first {
+                    selectedHost = mostRecent.host
+                    username = mostRecent.username
+                    password = smbManager.password(for: mostRecent)
+                }
             }
             .onDisappear {
                 discovery.stopDiscovery()

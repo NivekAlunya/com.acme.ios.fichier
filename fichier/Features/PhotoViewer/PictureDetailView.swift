@@ -141,7 +141,7 @@ public struct PictureDetailView: View {
             if let meta = activeMetadata {
                 PictureInfoSheet(metadata: meta, item: currentItem)
             } else {
-                ProgressView("Reading metadata...")
+                ProgressView(.Strings.photoViewerReadingMetadata)
                     .presentationDetents([.medium])
             }
         }
@@ -225,7 +225,7 @@ public struct PictureDetailView: View {
                         .lineLimit(1)
                         .frame(maxWidth: 120)
                     
-                    Text("\(currentIndex + 1) of \(pictures.count) • \(currentItem.formattedSize)")
+                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, pictures.count, currentItem.formattedSize))
                         .font(.system(size: 9))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -258,29 +258,29 @@ public struct PictureDetailView: View {
                 
                 // 6. Slideshow Duration & Transition Style Menu
                 Menu {
-                    Section("Transition Style") {
-                        Picker("Style", selection: $transitionStyle) {
+                    Section(.Strings.slideshowSectionTransitionStyle) {
+                        Picker(.Strings.slideshowPickerStyle, selection: $transitionStyle) {
                             ForEach(SlideshowTransitionStyle.allCases) { style in
-                                Label(style.rawValue, systemImage: style.iconName).tag(style)
+                                Label(style.localizedTitle, systemImage: style.iconName).tag(style)
                             }
                         }
                     }
                     
-                    Section("Duration") {
-                        Picker("Slideshow Duration", selection: $slideshowInterval) {
-                            Text("2 seconds").tag(2.0)
-                            Text("3 seconds").tag(3.0)
-                            Text("5 seconds").tag(5.0)
-                            Text("10 seconds").tag(10.0)
-                            Text("15 seconds").tag(15.0)
-                            Text("30 seconds").tag(30.0)
+                    Section(.Strings.slideshowPickerDuration) {
+                        Picker(.Strings.slideshowPickerSlideshowDuration, selection: $slideshowInterval) {
+                            Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                            Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                            Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                            Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                            Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                            Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                         }
                     }
                 } label: {
                     HStack(spacing: 3) {
                         Image(systemName: "timer")
                             .font(.system(size: 10))
-                        Text("\(Int(slideshowInterval))s")
+                        Text(.Strings.slideshowDurationSecondsShort(Int(slideshowInterval)))
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .foregroundStyle(.white)
@@ -381,11 +381,11 @@ public struct PictureDetailView: View {
             do {
                 try await PhotoLibrarySaver.saveImageToPhotos(img)
                 withAnimation {
-                    saveStatusMessage = "Photo Saved to Photos"
+                    saveStatusMessage = String(localized: .Strings.photoViewerSavedToPhotos)
                 }
             } catch {
                 withAnimation {
-                    saveStatusMessage = "Failed to save: \(error.localizedDescription)"
+                    saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
                 }
             }
             isSaving = false

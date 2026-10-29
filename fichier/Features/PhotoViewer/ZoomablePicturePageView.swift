@@ -29,7 +29,7 @@ struct ZoomablePicturePageView: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.largeTitle)
                         .foregroundColor(.white.opacity(0.5))
-                    Text("Failed to load picture")
+                    Text(.Strings.photoViewerErrorFailedToLoad)
                         .foregroundColor(.white.opacity(0.5))
                 }
             }

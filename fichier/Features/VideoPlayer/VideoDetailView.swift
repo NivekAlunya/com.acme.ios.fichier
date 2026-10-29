@@ -74,7 +74,7 @@ public struct VideoDetailView: View {
                     ProgressView()
                         .scaleEffect(1.2)
                         .tint(.white)
-                    Text("Buffering video from server...")
+                    Text(.Strings.videoPlayerBuffering)
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.85))
                 }
@@ -94,7 +94,7 @@ public struct VideoDetailView: View {
                         .foregroundColor(.white)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                    Button("Retry") {
+                    Button(.Strings.commonRetry) {
                         setupPlayer(for: currentItem)
                     }
                     .buttonStyle(.borderedProminent)
@@ -232,7 +232,7 @@ public struct VideoDetailView: View {
                         .lineLimit(1)
                         .frame(maxWidth: 140)
                     
-                    Text("\(currentIndex + 1) of \(videos.count) • \(currentItem.formattedSize)")
+                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
                         .font(.system(size: 9))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -333,11 +333,11 @@ public struct VideoDetailView: View {
                 let localURL = try await manager.fetchVideoURL(for: currentItem)
                 try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
                 withAnimation {
-                    saveStatusMessage = "Video Saved to Photos"
+                    saveStatusMessage = String(localized: .Strings.videoPlayerSavedToPhotos)
                 }
             } catch {
                 withAnimation {
-                    saveStatusMessage = "Failed to save: \(error.localizedDescription)"
+                    saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
                 }
             }
             isSaving = false
@@ -655,7 +655,7 @@ public struct VideoDetailView: View {
             let uniqueID = UUID().uuidString
             let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
             guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
-                self.errorMessage = "Invalid video stream URL"
+                self.errorMessage = String(localized: .Strings.videoPlayerErrorInvalidStreamUrl)
                 self.isBuffering = false
                 return
             }
@@ -683,7 +683,7 @@ public struct VideoDetailView: View {
                         break
                     }
                     if let err = p.currentItem?.error {
-                        self.errorMessage = "Playback error: \(err.localizedDescription)"
+                        self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(err.localizedDescription))
                         self.isBuffering = false
                         break
                     }

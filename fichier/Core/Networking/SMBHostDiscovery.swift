@@ -43,7 +43,7 @@ public final class SMBHostDiscovery {
                     print("📡 [Bonjour] SMB Browser is active and scanning (IPv4)...")
                 case .failed(let error):
                     print("❌ [Bonjour] Scan failed: \(error)")
-                    self.errorMessage = "Discovery failed: \(error.localizedDescription)"
+                    self.errorMessage = String(localized: .Strings.networkingErrorDiscoveryFailed(error.localizedDescription))
                     self.isScanning = false
                 case .cancelled:
                     self.isScanning = false

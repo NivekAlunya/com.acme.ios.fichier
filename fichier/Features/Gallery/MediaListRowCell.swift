@@ -75,7 +75,7 @@ struct MediaListRowCell: View {
                         .padding(2)
                         .frame(width: 52, height: 52, alignment: .bottomTrailing)
                 } else if item.isGIF {
-                    Text("GIF")
+                    Text(.Strings.galleryBadgeGif)
                         .font(.system(size: 7, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 3)

@@ -6,7 +6,6 @@
 import Foundation
 
 enum SortOption: String, CaseIterable, Identifiable {
-    var id: String { rawValue }
     case nameAsc = "Name (A–Z)"
     case nameDesc = "Name (Z–A)"
     case dateDesc = "Date (Newest First)"
@@ -14,14 +13,24 @@ enum SortOption: String, CaseIterable, Identifiable {
     case sizeDesc = "Size (Largest First)"
     case sizeAsc = "Size (Smallest First)"
     
+    var id: String { rawValue }
+    
+    var localizedTitle: LocalizedStringResource {
+        switch self {
+        case .nameAsc: return .Strings.gallerySortNameAscending
+        case .nameDesc: return .Strings.gallerySortNameDescending
+        case .dateDesc: return .Strings.gallerySortDateNewest
+        case .dateAsc: return .Strings.gallerySortDateOldest
+        case .sizeDesc: return .Strings.gallerySortSizeLargest
+        case .sizeAsc: return .Strings.gallerySortSizeSmallest
+        }
+    }
+    
     var iconName: String {
         switch self {
-        case .nameAsc: return "arrow.up"
-        case .nameDesc: return "arrow.down"
-        case .dateDesc: return "calendar.badge.clock"
-        case .dateAsc: return "calendar"
-        case .sizeDesc: return "arrow.down.circle"
-        case .sizeAsc: return "arrow.up.circle"
+        case .nameAsc, .nameDesc: return "textformat.abc"
+        case .dateDesc, .dateAsc: return "calendar"
+        case .sizeDesc, .sizeAsc: return "arrow.up.arrow.down.circle"
         }
     }
 }

@@ -11,7 +11,7 @@ struct SidebarFolderTreeView: View {
     
     var body: some View {
         List {
-            Section("Server Shares (\(manager.folderTree.count))") {
+            Section(String(localized: .Strings.sidebarSectionServerShares(manager.folderTree.count))) {
                 ForEach(manager.folderTree) { shareRootNode in
                     FolderTreeNodeView(
                         node: shareRootNode,

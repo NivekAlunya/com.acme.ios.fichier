@@ -1,0 +1,163 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "com.acme.ios.fichier"
+          }
+        }
+      },
+      "shouldTranslate" : false
+    },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Privacy - Local Network Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Erlaube den Zugriff, um SMB-Dateifreigaben deines Mac im lokalen Netzwerk zu suchen und dich mit ihnen zu verbinden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "We need access to your local network to discover your Mac mini and Samba shares."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permite el acceso para descubrir y conectarte a las carpetas compartidas SMB de tu Mac en la red local."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Autorisez l’accès pour découvrir les partages de fichiers SMB de votre Mac sur le réseau local et vous y connecter."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Consenti l’accesso per rilevare e connetterti alle condivisioni file SMB del tuo Mac sulla rete locale."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "ローカルネットワーク上のMacのSMBファイル共有を検出して接続するためにアクセスを許可します。"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Sta toegang toe om SMB-bestandsdelingen van je Mac op het lokale netwerk te ontdekken en er verbinding mee te maken."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Zezwól na dostęp, aby wykrywać udziały plikowe SMB na komputerze Mac w sieci lokalnej i łączyć się z nimi."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permita o acesso para descobrir e estabelecer ligação às partilhas de ficheiros SMB do seu Mac na rede local."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "允许访问以在局域网中发现并连接到您 Mac 上的 SMB 共享文件夹。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "允許存取以在區域網路中探索並連線至您 Mac 上的 SMB 共享檔案夾。"
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "comment" : "Privacy - Photo Library Additions Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Erlaube das Speichern von Fotos und Videos von deiner SMB-Freigabe in deiner Fotomediathek."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "We need access to save pictures from your Mac mini to your Photos library."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permite guardar fotos y vídeos desde tu carpeta compartida SMB en tu fototeca."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Autorisez l’enregistrement des photos et vidéos de votre partage SMB dans votre photothèque."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Consenti il salvataggio di foto e video dalla condivisione SMB nella tua libreria foto."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "SMB共有内の写真やビデオを写真ライブラリに保存することを許可します。"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Sta het bewaren van foto’s en video’s van je SMB-deling in je fotobibliotheek toe."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Zezwól na zapisywanie zdjęć i wideo z udziału SMB w bibliotece zdjęć."
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "Permita guardar fotografias e vídeos da sua partilha SMB na sua Fototeca."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "允许将 SMB 共享中的照片和视频保存到您的照片图库。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "needs_review",
+            "value" : "允許將 SMB 共享中的照片和影片儲存至您的照片圖庫。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.3"
+}

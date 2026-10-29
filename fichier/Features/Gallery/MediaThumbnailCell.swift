@@ -41,7 +41,7 @@ struct MediaThumbnailCell: View {
                             Image(systemName: "arrow.clockwise.circle.fill")
                                 .font(.system(size: 26))
                                 .foregroundColor(.white.opacity(0.85))
-                            Text("Retry Preview")
+                            Text(.Strings.galleryThumbnailRetryPreview)
                                 .font(.system(size: 9, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.85))
                         }
@@ -59,7 +59,7 @@ struct MediaThumbnailCell: View {
                     HStack(spacing: 3) {
                         Image(systemName: "video.fill")
                             .font(.system(size: 9))
-                        Text("VIDEO")
+                        Text(.Strings.galleryBadgeVideo)
                             .font(.system(size: 8, weight: .bold))
                     }
                     .foregroundColor(.white)
@@ -70,7 +70,7 @@ struct MediaThumbnailCell: View {
                     .padding(6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 } else if item.isGIF {
-                    Text("GIF")
+                    Text(.Strings.galleryBadgeGif)
                         .font(.system(size: 8, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, 5)

@@ -94,7 +94,7 @@ public final class SMBDirectManager {
             .components(separatedBy: "%").first ?? host
         
         if cleanHost.contains(":") && !cleanHost.hasPrefix("[") {
-            errorMessage = "Please select or enter an IPv4 address (e.g. 192.168.1.x)."
+            errorMessage = String(localized: .Strings.networkingErrorEnterValidAddress)
             isLoading = false
             return
         }
@@ -102,7 +102,7 @@ public final class SMBDirectManager {
         let credential = URLCredential(user: user, password: pass, persistence: .forSession)
         
         guard let url = URL(string: "smb://\(cleanHost)") else {
-            errorMessage = "Invalid IPv4 host URL"
+            errorMessage = String(localized: .Strings.networkingErrorInvalidHostUrl)
             isLoading = false
             return
         }
@@ -110,7 +110,7 @@ public final class SMBDirectManager {
         do {
             let discoveredShares = try await worker.connectAndListShares(url: url, credential: credential)
             guard !discoveredShares.isEmpty else {
-                errorMessage = "Connected to server, but no shared folders were found."
+                errorMessage = String(localized: .Strings.networkingErrorNoSharedFolders)
                 isLoading = false
                 return
             }
@@ -126,7 +126,7 @@ public final class SMBDirectManager {
                 await selectAndLoadFolder(firstShare)
             }
         } catch {
-            self.errorMessage = "Connection failed: \(error.localizedDescription)"
+            self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
             self.isConnected = false
         }
         
@@ -147,7 +147,7 @@ public final class SMBDirectManager {
                 await selectAndLoadFolder(first)
             }
         } catch {
-            self.errorMessage = "Failed to refresh shares: \(error.localizedDescription)"
+            self.errorMessage = String(localized: .Strings.networkingErrorRefreshSharesFailed(error.localizedDescription))
         }
     }
     
@@ -197,7 +197,7 @@ public final class SMBDirectManager {
             } catch {
                 await MainActor.run {
                     guard !Task.isCancelled, self.activeFolderID == targetID else { return }
-                    self.errorMessage = "Failed to load folder '\(targetName)': \(error.localizedDescription)"
+                    self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
                     self.isLoading = false
                     print("❌ [SMB] Error scanning folder \(targetShare)/\(targetPath): \(error)")
                 }

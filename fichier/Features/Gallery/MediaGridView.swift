@@ -11,6 +11,7 @@ struct MediaGridView: View {
     var onStartSlideshow: (() -> Void)? = nil
     let onSelectPicture: (SMBItem) -> Void
     
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("gallery_view_mode") private var viewMode: ViewMode = .grid
     @AppStorage("gallery_sort_option") private var sortOption: SortOption = .nameAsc
     @AppStorage("gallery_grid_size") private var gridSize: GridSize = .medium
@@ -26,6 +27,7 @@ struct MediaGridView: View {
     @State private var batchProgressMessage: String?
     @State private var batchStatusToast: String?
     @State private var shareSheetItems: [Any]?
+    @State private var showingSettings = false
     
     private var currentDirectoryID: String {
         manager.selectedFolder?.id ?? "root"
@@ -60,9 +62,18 @@ struct MediaGridView: View {
     
     private var mediaSectionTitle: String {
         switch mediaFilter {
-        case .all: return "Media"
-        case .photos: return "Photos"
-        case .videos: return "Videos"
+        case .all: return String(localized: .Strings.galleryTitleMedia)
+        case .photos: return String(localized: .Strings.galleryFilterPhotos)
+        case .videos: return String(localized: .Strings.galleryFilterVideos)
+        }
+    }
+    
+    private var mediaSectionHeader: LocalizedStringResource {
+        let count = filteredPictures.count
+        switch mediaFilter {
+        case .all: return .Strings.gallerySectionMediaCount(count)
+        case .photos: return .Strings.gallerySectionPhotosCount(count)
+        case .videos: return .Strings.gallerySectionVideosCount(count)
         }
     }
     
@@ -91,15 +102,15 @@ struct MediaGridView: View {
         ZStack(alignment: .bottom) {
             Group {
                 if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
-                    ProgressView("Loading folder contents...")
+                    ProgressView(.Strings.galleryLoadingFolderContents)
                 } else if let error = manager.errorMessage, manager.pictures.isEmpty {
                     ContentUnavailableView {
-                        Label("Unable to Load Folder", systemImage: "exclamationmark.triangle")
+                        Label(.Strings.galleryErrorUnableToLoadFolder, systemImage: "exclamationmark.triangle")
                     } description: {
                         Text(error)
                     } actions: {
                         if let folder = manager.selectedFolder {
-                            Button("Retry") {
+                            Button(.Strings.commonRetry) {
                                 Task { await manager.selectAndLoadFolder(folder) }
                             }
                             .buttonStyle(.borderedProminent)
@@ -109,9 +120,9 @@ struct MediaGridView: View {
                     ContentUnavailableView.search(text: searchText)
                 } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
                     ContentUnavailableView(
-                        "Empty Folder",
+                        String(localized: .Strings.galleryEmptyFolderTitle),
                         systemImage: "photo.on.rectangle.angled",
-                        description: Text("No pictures or subfolders found in \(manager.selectedFolder?.name ?? "this folder").")
+                        description: Text(.Strings.galleryEmptyFolderDescription(manager.selectedFolder?.name ?? String(localized: .Strings.galleryEmptyFolderDefaultName)))
                     )
                 } else {
                     switch viewMode {
@@ -156,7 +167,7 @@ struct MediaGridView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search pictures and folders")
+        .searchable(text: $searchText, prompt: .Strings.gallerySearchPrompt)
         .sheet(isPresented: Binding(
             get: { shareSheetItems != nil },
             set: { if !$0 { shareSheetItems = nil } }
@@ -165,21 +176,24 @@ struct MediaGridView: View {
                 MediaActivityShareSheet(activityItems: shareSheetItems)
             }
         }
+        .sheet(isPresented: $showingSettings) {
+            AppSettingsView()
+        }
         .toolbar {
             if isSelectionMode {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty ? "Deselect All" : "Select All") {
+                    Button(selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
                         toggleAllSelection()
                     }
                 }
                 
                 ToolbarItem(placement: .principal) {
-                    Text(selectedItems.isEmpty ? "Select Items" : "\(selectedItems.count) Selected")
+                    Text(selectedItems.isEmpty ? .Strings.gallerySelectionPrompt : .Strings.gallerySelectionCount(selectedItems.count))
                         .font(.headline)
                 }
                 
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                    Button(.Strings.commonDone) {
                         withAnimation {
                             isSelectionMode = false
                             selectedItems.removeAll()
@@ -191,7 +205,7 @@ struct MediaGridView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
                         if !filteredPictures.isEmpty {
-                            Button("Select") {
+                            Button(.Strings.galleryButtonSelect) {
                                 withAnimation {
                                     isSelectionMode = true
                                 }
@@ -204,29 +218,29 @@ struct MediaGridView: View {
                                 Button {
                                     onStartSlideshow?()
                                 } label: {
-                                    Label("Start Slideshow", systemImage: "play.fill")
+                                    Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
                                 }
                                 
-                                Section("Transition Style") {
-                                    Picker("Transition", selection: $transitionStyle) {
+                                Section(.Strings.slideshowSectionTransitionStyle) {
+                                    Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
                                         ForEach(SlideshowTransitionStyle.allCases) { style in
-                                            Label(style.rawValue, systemImage: style.iconName).tag(style)
+                                            Label(style.localizedTitle, systemImage: style.iconName).tag(style)
                                         }
                                     }
                                 }
                                 
-                                Section("Slide Duration") {
-                                    Picker("Duration", selection: $slideshowInterval) {
-                                        Text("2 seconds").tag(2.0)
-                                        Text("3 seconds").tag(3.0)
-                                        Text("5 seconds").tag(5.0)
-                                        Text("10 seconds").tag(10.0)
-                                        Text("15 seconds").tag(15.0)
-                                        Text("30 seconds").tag(30.0)
+                                Section(.Strings.slideshowSectionSlideDuration) {
+                                    Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
+                                        Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                        Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                        Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                        Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                        Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                        Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                     }
                                 }
                             } label: {
-                                Label("Slideshow", systemImage: "play.circle.fill")
+                                Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
                             } primaryAction: {
                                 onStartSlideshow?()
                             }
@@ -234,65 +248,75 @@ struct MediaGridView: View {
                         
                         // Unified View, Sort & Grid Size Menu
                         Menu {
-                            Section("Layout") {
-                                Picker("View Mode", selection: $viewMode) {
-                                    Label("Grid", systemImage: "square.grid.2x2").tag(ViewMode.grid)
-                                    Label("List", systemImage: "list.bullet").tag(ViewMode.list)
+                            Section(.Strings.galleryMenuLayout) {
+                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode) {
+                                    Label(.Strings.galleryViewModeGrid, systemImage: "square.grid.2x2").tag(ViewMode.grid)
+                                    Label(.Strings.galleryViewModeList, systemImage: "list.bullet").tag(ViewMode.list)
                                 }
                             }
                             
                             if viewMode == .grid {
-                                Section("Grid Density") {
-                                    Picker("Size", selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
+                                Section(.Strings.galleryMenuGridDensity) {
+                                    Picker(.Strings.galleryPickerGridSize, selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
                                         ForEach(GridSize.allCases) { size in
-                                            Label(size.rawValue, systemImage: size.iconName).tag(size)
+                                            Label(size.localizedTitle, systemImage: size.iconName).tag(size)
                                         }
                                     }
                                 }
                             }
                             
-                            Section("Filter") {
-                                Picker("Media Type", selection: $mediaFilter) {
+                            Section(.Strings.galleryMenuFilter) {
+                                Picker(.Strings.galleryPickerMediaType, selection: $mediaFilter) {
                                     ForEach(MediaFilter.allCases) { filter in
-                                        Label(filter.rawValue, systemImage: filter.iconName).tag(filter)
+                                        Label(filter.localizedTitle, systemImage: filter.iconName).tag(filter)
                                     }
                                 }
                                 
                                 Toggle(isOn: $showFavoritesOnly) {
-                                    Label("Favorites Only", systemImage: "heart.fill")
+                                    Label(.Strings.galleryFilterFavoritesOnly, systemImage: "heart.fill")
                                 }
                             }
                             
-                            Section("Sort By") {
-                                Picker("Sort By", selection: $sortOption) {
+                            Section(.Strings.galleryMenuSortBy) {
+                                Picker(.Strings.galleryMenuSortBy, selection: $sortOption) {
                                     ForEach(SortOption.allCases) { option in
-                                        Label(option.rawValue, systemImage: option.iconName).tag(option)
+                                        Label(option.localizedTitle, systemImage: option.iconName).tag(option)
                                     }
                                 }
                             }
                             
-                            Section("Slideshow") {
-                                Picker("Transition", selection: $transitionStyle) {
+                            Section(.Strings.galleryMenuSlideshow) {
+                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
                                     ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.rawValue, systemImage: style.iconName).tag(style)
+                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
                                     }
                                 }
                                 
-                                Picker("Slide Duration", selection: $slideshowInterval) {
-                                    Text("2 seconds").tag(2.0)
-                                    Text("3 seconds").tag(3.0)
-                                    Text("5 seconds").tag(5.0)
-                                    Text("10 seconds").tag(10.0)
-                                    Text("15 seconds").tag(15.0)
-                                    Text("30 seconds").tag(30.0)
+                                Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
+                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                 }
                             }
                             
-                            Section("Disk Cache (\(manager.mediaCacheSize))") {
+                            Section(String(localized: .Strings.gallerySectionDiskCache(manager.mediaCacheSize))) {
                                 Button(role: .destructive) {
                                     manager.clearMediaCache()
                                 } label: {
-                                    Label("Clear Cache", systemImage: "trash")
+                                    Label(.Strings.galleryButtonClearCache, systemImage: "trash")
+                                }
+                            }
+                            
+                            if horizontalSizeClass == .compact {
+                                Section {
+                                    Button {
+                                        showingSettings = true
+                                    } label: {
+                                        Label(.Strings.settingsTitle, systemImage: "gearshape")
+                                    }
                                 }
                             }
                         } label: {
@@ -306,8 +330,16 @@ struct MediaGridView: View {
                         } label: {
                             Image(systemName: "arrow.clockwise")
                         }
+                        
+                        if horizontalSizeClass == .compact {
+                            Button {
+                                showingSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .accessibilityLabel(.Strings.settingsTitle)
+                        }
                     }
-                    .id(filteredFolders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
         }
@@ -325,7 +357,7 @@ struct MediaGridView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if !filteredFolders.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Subfolders (\(filteredFolders.count))")
+                            Text(.Strings.gallerySectionSubfoldersCount(filteredFolders.count))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal, 12)
@@ -368,13 +400,13 @@ struct MediaGridView: View {
                     if !filteredPictures.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text("\(mediaSectionTitle) (\(filteredPictures.count))")
+                                Text(mediaSectionHeader)
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundColor(.secondary)
                                 
                                 Spacer()
                                 
-                                Text(sortOption.rawValue)
+                                Text(sortOption.localizedTitle)
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -412,9 +444,9 @@ struct MediaGridView: View {
                         }
                     } else if !filteredFolders.isEmpty {
                         ContentUnavailableView(
-                            "No Pictures in This Folder",
+                            String(localized: .Strings.galleryNoPicturesTitle),
                             systemImage: "photo",
-                            description: Text("Select a subfolder above or from the sidebar.")
+                            description: Text(.Strings.galleryNoPicturesDescription)
                         )
                         .padding(.top, 24)
                     }
@@ -495,7 +527,7 @@ struct MediaGridView: View {
         ScrollViewReader { proxy in
             List {
                 if !filteredFolders.isEmpty {
-                    Section("Subfolders (\(filteredFolders.count))") {
+                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(filteredFolders.count))) {
                         ForEach(filteredFolders) { subfolder in
                             Button {
                                 onSelectFolder?(subfolder)
@@ -525,7 +557,7 @@ struct MediaGridView: View {
                 }
                 
                 if !filteredPictures.isEmpty {
-                    Section("\(mediaSectionTitle) (\(filteredPictures.count))") {
+                    Section(String(localized: mediaSectionHeader)) {
                         ForEach(filteredPictures) { pic in
                             Button {
                                 if isSelectionMode {
@@ -623,7 +655,7 @@ struct MediaGridView: View {
         Task {
             var savedCount = 0
             for (idx, item) in items.enumerated() {
-                batchProgressMessage = "Saving \(idx + 1) of \(items.count)..."
+                batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(idx + 1, items.count))
                 do {
                     if item.isVideo {
                         let localURL = try await manager.fetchVideoURL(for: item)
@@ -642,7 +674,7 @@ struct MediaGridView: View {
             isBatchProcessing = false
             batchProgressMessage = nil
             withAnimation {
-                batchStatusToast = "Saved \(savedCount) items to Photos"
+                batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
                 isSelectionMode = false
                 selectedItems.removeAll()
             }
@@ -658,7 +690,7 @@ struct MediaGridView: View {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
         isBatchProcessing = true
-        batchProgressMessage = "Preparing items for sharing..."
+        batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
         
         Task {
             var shareables: [Any] = []

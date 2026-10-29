@@ -12,6 +12,14 @@ public enum SlideshowTransitionStyle: String, CaseIterable, Identifiable {
     
     public var id: String { rawValue }
     
+    public var localizedTitle: LocalizedStringResource {
+        switch self {
+        case .slide: return .Strings.slideshowTransitionSlide
+        case .dissolve: return .Strings.slideshowTransitionDissolve
+        case .kenBurns: return .Strings.slideshowTransitionKenBurns
+        }
+    }
+    
     public var iconName: String {
         switch self {
         case .slide: return "arrow.left.and.right.square"

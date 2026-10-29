@@ -12,6 +12,7 @@ public struct RootSMBView: View {
     @State private var shouldAutoStartSlideshow = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var showingSettings = false
     
     public init() {}
     
@@ -35,10 +36,18 @@ public struct RootSMBView: View {
                             }
                         }
                     )
-                    .navigationTitle("Shared Folders")
+                    .navigationTitle(.Strings.connectionTitleSharedFolders)
                     .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                showingSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .accessibilityLabel(.Strings.settingsTitle)
+                        }
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button("Disconnect", role: .destructive) {
+                            Button(.Strings.connectionButtonDisconnect, role: .destructive) {
                                 smbManager.disconnect()
                             }
                         }
@@ -68,7 +77,7 @@ public struct RootSMBView: View {
                             }
                         }
                     )
-                    .navigationTitle(smbManager.selectedFolder?.name ?? "Files")
+                    .navigationTitle(smbManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
                 }
                 .fullScreenCover(item: $activePictureForViewer) { pic in
                     PictureDetailView(
@@ -84,6 +93,9 @@ public struct RootSMBView: View {
                         videos: smbManager.pictures.filter { $0.isVideo },
                         initialItem: vid
                     )
+                }
+                .sheet(isPresented: $showingSettings) {
+                    AppSettingsView()
                 }
             }
         }

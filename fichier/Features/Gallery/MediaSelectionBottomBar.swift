@@ -41,7 +41,7 @@ struct MediaSelectionBottomBar: View {
                         Image(systemName: isAllFavorites ? "heart.slash.fill" : "heart.fill")
                             .font(.system(size: 20))
                             .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
-                        Text(isAllFavorites ? "Unfavorite" : "Favorite")
+                        Text(isAllFavorites ? .Strings.galleryActionUnfavorite : .Strings.galleryActionFavorite)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
                     }
@@ -58,7 +58,7 @@ struct MediaSelectionBottomBar: View {
                         Image(systemName: "square.and.arrow.down")
                             .font(.system(size: 20))
                             .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
-                        Text("Save to Photos")
+                        Text(.Strings.galleryActionSaveToPhotos)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
                     }
@@ -75,7 +75,7 @@ struct MediaSelectionBottomBar: View {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 20))
                             .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
-                        Text("Share")
+                        Text(.Strings.galleryActionShare)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
                     }

@@ -13,56 +13,56 @@ struct PictureInfoSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("File Details") {
-                    LabeledContent("Name", value: metadata.fileName)
-                    LabeledContent("Size", value: metadata.fileSize)
+                Section(.Strings.photoInfoSectionFileDetails) {
+                    LabeledContent(.Strings.photoInfoLabelName, value: metadata.fileName)
+                    LabeledContent(.Strings.photoInfoLabelSize, value: metadata.fileSize)
                     if let fmt = metadata.fileFormat {
-                        LabeledContent("Format", value: fmt)
+                        LabeledContent(.Strings.photoInfoLabelFormat, value: fmt)
                     }
                     if let dim = metadata.dimensions {
-                        LabeledContent("Dimensions", value: dim)
+                        LabeledContent(.Strings.photoInfoLabelDimensions, value: dim)
                     }
                     if let mp = metadata.megapixels {
-                        LabeledContent("Resolution", value: mp)
+                        LabeledContent(.Strings.photoInfoLabelResolution, value: mp)
                     }
                     if let date = metadata.dateTaken {
-                        LabeledContent("Date Taken", value: date)
+                        LabeledContent(.Strings.photoInfoLabelDateTaken, value: date)
                     }
                 }
                 
                 if metadata.cameraModel != nil || metadata.lensModel != nil {
-                    Section("Camera & Lens") {
+                    Section(.Strings.photoInfoSectionCameraLens) {
                         if let cam = metadata.cameraModel {
-                            LabeledContent("Camera", value: cam)
+                            LabeledContent(.Strings.photoInfoLabelCamera, value: cam)
                         }
                         if let lens = metadata.lensModel {
-                            LabeledContent("Lens", value: lens)
+                            LabeledContent(.Strings.photoInfoLabelLens, value: lens)
                         }
                     }
                 }
                 
                 if metadata.aperture != nil || metadata.shutterSpeed != nil || metadata.iso != nil || metadata.focalLength != nil {
-                    Section("Exposure Settings") {
+                    Section(.Strings.photoInfoSectionExposureSettings) {
                         if let ap = metadata.aperture {
-                            LabeledContent("Aperture", value: ap)
+                            LabeledContent(.Strings.photoInfoLabelAperture, value: ap)
                         }
                         if let shutter = metadata.shutterSpeed {
-                            LabeledContent("Shutter Speed", value: shutter)
+                            LabeledContent(.Strings.photoInfoLabelShutterSpeed, value: shutter)
                         }
                         if let iso = metadata.iso {
-                            LabeledContent("ISO", value: iso)
+                            LabeledContent(.Strings.photoInfoLabelIso, value: iso)
                         }
                         if let fl = metadata.focalLength {
-                            LabeledContent("Focal Length", value: fl)
+                            LabeledContent(.Strings.photoInfoLabelFocalLength, value: fl)
                         }
                     }
                 }
             }
-            .navigationTitle("Photo Info")
+            .navigationTitle(.Strings.photoInfoTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(.Strings.commonDone) { dismiss() }
                 }
             }
         }
