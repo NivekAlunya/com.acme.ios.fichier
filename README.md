@@ -44,7 +44,7 @@ Built with modern **SwiftUI** and structured around **Swift Concurrency**, *fich
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 34 independent, modular Swift files.
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 38 independent, modular Swift files.
 2. **Feature-Driven Architecture**: Code is decoupled into vertical domain features and shared core modules.
 
 ### Directory Structure
@@ -70,6 +70,8 @@ fichier/
 │   │   ├── MediaGridView.swift             # Main media gallery view & toolbars
 │   │   ├── MediaThumbnailCell.swift        # Grid thumbnail item with async loader
 │   │   ├── MediaListRowCell.swift          # List row item with metadata
+│   │   ├── MediaSelectionBottomBar.swift   # Floating multi-selection action bar
+│   │   ├── MediaActivityShareSheet.swift   # UIActivityViewController wrapper
 │   │   ├── GridSize.swift                  # Small, Medium, Large grid layout enum
 │   │   ├── MediaFilter.swift               # All, Photos, Videos filter enum
 │   │   ├── SortOption.swift                # Name, Date, Size sort enum
@@ -82,7 +84,8 @@ fichier/
 │   │   ├── ZoomableImageCoordinator.swift  # UIScrollViewDelegate handling double-tap & zoom
 │   │   ├── PictureInfoSheet.swift          # Modal EXIF sheet
 │   │   ├── PictureEXIFData.swift           # Parsed EXIF property model
-│   │   └── SlideDirection.swift            # Transition direction enum
+│   │   ├── SlideDirection.swift            # Transition direction enum
+│   │   └── SlideshowTransitionStyle.swift  # Slide, Dissolve, Ken Burns transition enum
 │   │
 │   └── VideoPlayer/                        # Video player & streaming delegate
 │       ├── VideoDetailView.swift           # Fullscreen AVPlayer with swipe seek & autoplay
@@ -102,7 +105,8 @@ fichier/
         ├── MediaCacheManager.swift         # Persistent disk cache & file manager
         ├── FavoritesManager.swift          # UserDefaults-backed favorite items store
         ├── ImageMetadataExtractor.swift    # ImageIO CGImageSource EXIF parser
-        └── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
+        ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
+        └── AnimatedImageDecoder.swift      # ImageIO multi-frame GIF & WebP decoder
 ```
 
 ### Concurrency Model
