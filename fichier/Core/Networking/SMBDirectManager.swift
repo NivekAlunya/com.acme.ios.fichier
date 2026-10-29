@@ -273,10 +273,9 @@ public final class SMBDirectManager {
                 return thumb
             }
             
-            // 3. Fallback placeholder (do NOT persist to disk, so it retries on next view)
-            let placeholder = MediaCacheManager.shared.generateVideoPlaceholder(for: item, maxDimension: maxDimension)
-            await worker.cacheThumbnail(placeholder, forKey: memoryCacheKey)
-            return placeholder
+            // 3. If streaming failed or was cancelled due to scrolling, do NOT cache a placeholder
+            // This allows the cell to retry fetching the actual thumbnail when visible
+            return nil
         }
         
         return await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
@@ -328,12 +327,24 @@ public final class SMBDirectManager {
                         var resumed = false
                         
                         let timeoutTask = Task {
-                            try? await Task.sleep(for: .seconds(20.0))
+                            try? await Task.sleep(for: .seconds(12.0))
                             if !resumed {
                                 resumed = true
+                                generator.cancelAllCGImageGeneration()
                                 delegate.cancelAll()
                                 continuation.resume(returning: nil)
                             }
+                        }
+                        
+                        if Task.isCancelled {
+                            timeoutTask.cancel()
+                            if !resumed {
+                                resumed = true
+                                generator.cancelAllCGImageGeneration()
+                                delegate.cancelAll()
+                                continuation.resume(returning: nil)
+                            }
+                            return
                         }
                         
                         // 1. Try 5.0s frame first (avoids blank/black intro frames and gives a representative preview)
@@ -347,6 +358,16 @@ public final class SMBDirectManager {
                                 return
                             }
                         } catch {
+                            if Task.isCancelled {
+                                timeoutTask.cancel()
+                                if !resumed {
+                                    resumed = true
+                                    generator.cancelAllCGImageGeneration()
+                                    delegate.cancelAll()
+                                    continuation.resume(returning: nil)
+                                }
+                                return
+                            }
                             // 2. Fallback: try .zero or 0.5s if video is shorter than 5s or 5.0s is unavailable
                             generator.requestedTimeToleranceBefore = .positiveInfinity
                             generator.requestedTimeToleranceAfter = .positiveInfinity
@@ -378,12 +399,14 @@ public final class SMBDirectManager {
                         timeoutTask.cancel()
                         if !resumed {
                             resumed = true
+                            generator.cancelAllCGImageGeneration()
                             delegate.cancelAll()
                             continuation.resume(returning: nil)
                         }
                     }
                 }
             } onCancel: {
+                generator.cancelAllCGImageGeneration()
                 delegate.cancelAll()
             }
         }

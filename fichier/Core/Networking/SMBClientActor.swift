@@ -35,7 +35,11 @@ actor SMBClientActor {
     }
     
     private let imageExtensions: Set<String> = [
-        "jpg", "jpeg", "png", "heic", "webp", "gif", "tiff", "bmp", "cr2", "nef", "arw", "dng"
+        "jpg", "jpeg", "jpe", "jif", "jfif",
+        "png", "heic", "heif", "webp", "avif",
+        "gif", "tiff", "tif", "bmp", "ico",
+        "jp2", "j2k", "jpf", "jpx",
+        "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "pef", "raf"
     ]
     
     private let videoExtensions: Set<String> = [
@@ -212,7 +216,7 @@ actor SMBClientActor {
                 return nil
             }
             
-            guard let image = Self.downsample(data: data, maxDimension: maxDimension) ?? UIImage(data: data) else {
+            guard let image = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
                 return nil
             }
             thumbnailCache.setObject(image, forKey: memoryCacheKey)
@@ -297,7 +301,7 @@ actor SMBClientActor {
             let data = try await client.contents(atPath: item.path)
             if Task.isCancelled { return nil }
             
-            guard let image = UIImage(data: data) else { return nil }
+            guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
             fullImageCache.setObject(image, forKey: cacheKey)
             return image
         } catch {

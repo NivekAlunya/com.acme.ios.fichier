@@ -49,4 +49,9 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
         let ext = (name as NSString).pathExtension.lowercased()
         return ["mp4", "mov", "m4v"].contains(ext)
     }
+    
+    public var isGIF: Bool {
+        let ext = (name as NSString).pathExtension.lowercased()
+        return ext == "gif"
+    }
 }
