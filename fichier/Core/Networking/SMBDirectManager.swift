@@ -401,6 +401,7 @@ public final class SMBDirectManager {
         activeFolderID = nil
         
         isConnected = false
+        isLoading = false
         folderTree = []
         currentFolders = []
         selectedFolder = nil

@@ -716,7 +716,7 @@ public struct VideoDetailView: View {
                 showControls = true
             }
         } else {
-            if let current = player.currentItem, currentPlaybackSeconds >= totalDurationSeconds - 0.5 && totalDurationSeconds > 1.0 {
+            if totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 {
                 player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
                 currentPlaybackSeconds = 0
             }

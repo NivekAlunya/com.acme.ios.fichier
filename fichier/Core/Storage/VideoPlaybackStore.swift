@@ -96,6 +96,7 @@ public final class VideoPlaybackStore {
     
     public func markFinished(for item: SMBItem, duration: Double = 0) {
         let dur = duration > 0 ? duration : (records[item.id]?.duration ?? 0)
+        guard dur >= 2.0 else { return }
         let pos = max(dur, records[item.id]?.position ?? 0)
         records[item.id] = VideoPlaybackRecord(position: pos, duration: max(dur, pos), isFinished: true)
         persist()
