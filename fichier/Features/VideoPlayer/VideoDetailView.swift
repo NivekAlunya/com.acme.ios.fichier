@@ -14,6 +14,7 @@ public struct VideoDetailView: View {
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var currentItem: SMBItem
     @State private var currentlyLoadedItem: SMBItem?
     @State private var playbackStartTime: Date = Date()
@@ -149,8 +150,13 @@ public struct VideoDetailView: View {
             
             // Custom Controls Overlay (Top HUD, Center Play/Pause, Side Navigation, Bottom Timeline)
             ZStack {
-                VStack {
+                VStack(spacing: 12) {
                     topBar
+                    
+                    if let message = resumedToastMessage {
+                        resumeToastView(message: message)
+                    }
+                    
                     Spacer()
                     bottomControls
                 }
@@ -222,35 +228,6 @@ public struct VideoDetailView: View {
                     Spacer()
                 }
             }
-            
-            // Resume Playback Toast Banner
-            if let message = resumedToastMessage {
-                VStack {
-                    Spacer().frame(height: 70)
-                    HStack(spacing: 12) {
-                        Image(systemName: "arrow.counterclockwise.circle.fill")
-                            .foregroundColor(.blue)
-                        Text(message)
-                            .font(.subheadline.bold())
-                            .foregroundColor(.white)
-                        Button {
-                            restartVideo()
-                        } label: {
-                            Text(.Strings.videoPlayerRestartButton)
-                                .font(.caption.bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Capsule().fill(Color.blue))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Capsule().fill(.ultraThinMaterial))
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    Spacer()
-                }
-            }
         }
         .animation(.easeInOut(duration: 0.25), value: isBuffering)
         .preferredColorScheme(.dark)
@@ -315,6 +292,10 @@ public struct VideoDetailView: View {
     
     // MARK: - Top Bar
     
+    private var isRegular: Bool {
+        horizontalSizeClass == .regular
+    }
+    
     private var topBar: some View {
         HStack {
             // Close Button (Lonely at top leading)
@@ -347,10 +328,41 @@ public struct VideoDetailView: View {
                     resetAutoHideTimer()
                 }
         }
+        .frame(minHeight: isRegular ? 84 : 64)
         .overlay(alignment: .center) {
             centerToolsBar
+                .padding(.top, isRegular ? 20 : 0)
         }
-        .padding(.top, 10)
+        .padding(.top, isRegular ? 20 : 10)
+    }
+    
+    // MARK: - Resume Playback Toast (Stacked below topBar)
+    
+    @ViewBuilder
+    private func resumeToastView(message: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.counterclockwise.circle.fill")
+                .foregroundColor(.blue)
+            Text(message)
+                .font(.subheadline.bold())
+                .foregroundColor(.white)
+            Button {
+                restartVideo()
+            } label: {
+                Text(.Strings.videoPlayerRestartButton)
+                    .font(.caption.bold())
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.blue))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(.ultraThinMaterial))
+        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
     
     // MARK: - Center Tools Toolbar (Previous, 2-line Middle, Next)
@@ -696,13 +708,17 @@ public struct VideoDetailView: View {
     // MARK: - Auto-Hide Controls
     
     private func scheduleControlsAutoHide(delay: Double = 3.5) {
+        guard showControls && isPlaying && !isBuffering && !isScrubbingWithGesture && !isScrubbingTimeline else {
+            hideControlsTask?.cancel()
+            hideControlsTask = nil
+            return
+        }
         hideControlsTask?.cancel()
-        guard showControls && isPlaying && !isScrubbingWithGesture && !isScrubbingTimeline else { return }
         hideControlsTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
-                showControls = false
+            withAnimation(.easeInOut(duration: 0.35)) {
+                self.showControls = false
             }
         }
     }
@@ -882,6 +898,7 @@ public struct VideoDetailView: View {
         playbackStartTime = Date()
         tearDownPlayer()
         currentlyLoadedItem = item
+        showControls = true
         
         // Show immediate preview frame while video buffers
         Task { @MainActor in
@@ -966,9 +983,11 @@ public struct VideoDetailView: View {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             self.isBuffering = false
                         }
-                        self.isPlaying = (p.timeControlStatus == .playing)
+                        self.isPlaying = (p.timeControlStatus != .paused)
                         if let item = p.currentItem {
-                            await self.trackManager.loadTracks(for: item)
+                            Task { @MainActor in
+                                await self.trackManager.loadTracks(for: item)
+                            }
                         }
                         self.scheduleControlsAutoHide()
                         break
@@ -1031,13 +1050,18 @@ public struct VideoDetailView: View {
                 if dur.isFinite && !dur.isNaN && dur > 0 {
                     self.totalDurationSeconds = dur
                 }
-                self.isPlaying = (p.timeControlStatus == .playing)
+                let isCurrentlyPlaying = (p.timeControlStatus != .paused)
+                let wasPlaying = self.isPlaying
+                self.isPlaying = isCurrentlyPlaying
                 
                 // If the video is rendering frames or time is advancing, dismiss buffering popup
                 if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.isBuffering = false
                     }
+                    self.scheduleControlsAutoHide()
+                } else if !wasPlaying && isCurrentlyPlaying {
+                    self.scheduleControlsAutoHide()
                 }
                 
                 if !self.isScrubbingWithGesture && !self.isScrubbingTimeline && secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
