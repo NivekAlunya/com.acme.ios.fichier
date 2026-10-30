@@ -99,6 +99,7 @@ public struct VideoDetailView: View {
                 .padding(20)
                 .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                .transition(.opacity)
             }
             
             // Error Message
@@ -129,16 +130,19 @@ public struct VideoDetailView: View {
                 }
                 
                 // Center Play / Pause Toggle
-                Button {
-                    togglePlayPause()
-                } label: {
-                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 64))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                if !isBuffering && errorMessage == nil {
+                    Button {
+                        togglePlayPause()
+                    } label: {
+                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 64))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity)
                 }
-                .buttonStyle(.plain)
                 
                 // Side Navigation Arrows
                 if videos.count > 1 {
@@ -171,6 +175,7 @@ public struct VideoDetailView: View {
             }
             .opacity(showControls ? 1 : 0)
             .animation(.easeInOut(duration: 0.35), value: showControls)
+            .animation(.easeInOut(duration: 0.25), value: isBuffering)
             .allowsHitTesting(showControls)
             
             // Save Toast Banner
@@ -221,6 +226,7 @@ public struct VideoDetailView: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isBuffering)
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .contentShape(Rectangle())
