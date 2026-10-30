@@ -238,13 +238,36 @@ actor SMBClientActor {
         }
         
         let client = try await ensureConnected(to: item.shareName)
+        let partURL = localURL.appendingPathExtension("part")
         
-        // Stream directly to local file on disk (no large RAM allocations)
-        try await client.downloadItem(atPath: item.path, to: localURL) { bytes, total in
-            if Task.isCancelled { return false }
-            progress?(bytes, total)
-            return true
+        // Remove any dangling partial download from a previous aborted attempt
+        try? FileManager.default.removeItem(at: partURL)
+        
+        do {
+            // Stream directly to temporary .part file on disk (atomic download)
+            try await client.downloadItem(atPath: item.path, to: partURL) { bytes, total in
+                if Task.isCancelled { return false }
+                progress?(bytes, total)
+                return true
+            }
+            
+            if Task.isCancelled {
+                try? FileManager.default.removeItem(at: partURL)
+                throw CancellationError()
+            }
+            
+            // Promote temporary .part file to final local video file atomically
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                try? FileManager.default.removeItem(at: localURL)
+            }
+            try FileManager.default.moveItem(at: partURL, to: localURL)
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw error
         }
+        
+        // Evict older videos if cache exceeds limit, protecting the newly downloaded one
+        MediaCacheManager.shared.evictVideosIfNeeded(keeping: [localURL])
         
         // Upgrade thumbnail cache with real video frame now that it's downloaded
         let diskKey = MediaCacheManager.shared.cacheKey(for: item.shareName, path: "\(item.path)_vidstream_v7", dimension: 260)

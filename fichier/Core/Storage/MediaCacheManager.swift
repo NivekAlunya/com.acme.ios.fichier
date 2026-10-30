@@ -24,8 +24,11 @@ nonisolated public final class MediaCacheManager: Sendable {
         self.thumbnailsDirectory = thumbs
         self.videosDirectory = vids
         
-        try? fm.createDirectory(at: thumbs, withIntermediateDirectories: true)
-        try? fm.createDirectory(at: vids, withIntermediateDirectories: true)
+        let attributes: [FileAttributeKey: Any] = [
+            .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+        ]
+        try? fm.createDirectory(at: thumbs, withIntermediateDirectories: true, attributes: attributes)
+        try? fm.createDirectory(at: vids, withIntermediateDirectories: true, attributes: attributes)
     }
     
     // MARK: - Key Hashing
@@ -104,9 +107,59 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    // MARK: - Cache Size & Cleanup
+    // MARK: - Cache Size, Eviction & Cleanup
     
-    public func calculateTotalCacheSize() -> Int64 {
+    /// Evicts oldest cached videos if total video cache size exceeds limitBytes (defaults to 2 GB),
+    /// skipping any files specified in `protectedURLs` (such as the currently playing video).
+    public func evictVideosIfNeeded(limitBytes: Int64 = 2_000_000_000, keeping protectedURLs: Set<URL> = []) {
+        guard let enumerator = fileManager.enumerator(
+            at: videosDirectory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        
+        var videoFiles: [(url: URL, size: Int64, date: Date)] = []
+        var totalSize: Int64 = 0
+        
+        for case let fileURL as URL in enumerator {
+            // Clean up any stale partial downloads (.part)
+            if fileURL.pathExtension == "part" {
+                try? fileManager.removeItem(at: fileURL)
+                continue
+            }
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize else { continue }
+            let fileSize = Int64(size)
+            let date = values.contentModificationDate ?? Date.distantPast
+            totalSize += fileSize
+            videoFiles.append((url: fileURL, size: fileSize, date: date))
+        }
+        
+        guard totalSize > limitBytes else { return }
+        
+        // Sort oldest first (FIFO eviction)
+        videoFiles.sort { $0.date < $1.date }
+        
+        for file in videoFiles {
+            if totalSize <= limitBytes { break }
+            if protectedURLs.contains(file.url) { continue }
+            do {
+                try fileManager.removeItem(at: file.url)
+                totalSize -= file.size
+            } catch {
+                // Ignore failure to remove individual item
+            }
+        }
+    }
+    
+    /// Computes total cache size on a background thread to prevent UI hitches
+    public func calculateTotalCacheSize() async -> Int64 {
+        await Task.detached(priority: .utility) { [self] in
+            self.calculateTotalCacheSizeSync()
+        }.value
+    }
+    
+    public func calculateTotalCacheSizeSync() -> Int64 {
         var total: Int64 = 0
         for dir in [thumbnailsDirectory, videosDirectory] {
             if let enumerator = fileManager.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) {
@@ -120,18 +173,43 @@ nonisolated public final class MediaCacheManager: Sendable {
         return total
     }
     
+    public func formattedCacheSize() async -> String {
+        let bytes = await calculateTotalCacheSize()
+        return formatByteCount(bytes)
+    }
+    
     public func formattedCacheSize() -> String {
-        let bytes = calculateTotalCacheSize()
+        let bytes = calculateTotalCacheSizeSync()
+        return formatByteCount(bytes)
+    }
+    
+    private func formatByteCount(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useAll]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
     
-    public func clearAllCache() {
+    public func clearAllCache(protecting: Set<URL> = []) {
         try? fileManager.removeItem(at: thumbnailsDirectory)
-        try? fileManager.removeItem(at: videosDirectory)
-        try? fileManager.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true)
-        try? fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true)
+        
+        if protecting.isEmpty {
+            try? fileManager.removeItem(at: videosDirectory)
+        } else {
+            // Delete everything except protected files
+            if let enumerator = fileManager.enumerator(at: videosDirectory, includingPropertiesForKeys: nil) {
+                for case let fileURL as URL in enumerator {
+                    if !protecting.contains(fileURL) {
+                        try? fileManager.removeItem(at: fileURL)
+                    }
+                }
+            }
+        }
+        
+        let attributes: [FileAttributeKey: Any] = [
+            .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+        ]
+        try? fileManager.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true, attributes: attributes)
+        try? fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true, attributes: attributes)
     }
 }
