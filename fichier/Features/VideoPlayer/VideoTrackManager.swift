@@ -14,11 +14,14 @@ public final class VideoTrackManager {
     
     public private(set) var availableSubtitles: [VideoTrackOption] = []
     public private(set) var selectedSubtitleID: String? = nil
+    public var currentSubtitleText: String = ""
     
     public var playbackRate: VideoPlaybackRate = .normal
     
     private var audibleGroup: AVMediaSelectionGroup?
     private var legibleGroup: AVMediaSelectionGroup?
+    private var legibleOutput: AVPlayerItemLegibleOutput?
+    private var subtitleDelegate: VideoSubtitleDelegate?
     
     public init() {}
     
@@ -31,8 +34,11 @@ public final class VideoTrackManager {
         selectedAudioID = nil
         availableSubtitles.removeAll()
         selectedSubtitleID = nil
+        currentSubtitleText = ""
         audibleGroup = nil
         legibleGroup = nil
+        legibleOutput = nil
+        subtitleDelegate = nil
         playbackRate = .normal
     }
     
@@ -87,6 +93,19 @@ public final class VideoTrackManager {
             }
             self.availableSubtitles = subOptions
             
+            // Attach legible output to extract text directly
+            if !subGroup.options.isEmpty {
+                let output = AVPlayerItemLegibleOutput()
+                let delegate = VideoSubtitleDelegate { [weak self] text in
+                    self?.currentSubtitleText = text
+                }
+                output.setDelegate(delegate, queue: .main)
+                output.suppressesPlayerRendering = false
+                self.subtitleDelegate = delegate
+                self.legibleOutput = output
+                playerItem.add(output)
+            }
+            
             // Wake up subtitle renderer if a track is active by default
             if let activeOption = currentSelection {
                 playerItem.select(nil, in: subGroup)
@@ -120,6 +139,9 @@ public final class VideoTrackManager {
     
     public func selectSubtitle(option: VideoTrackOption, in playerItem: AVPlayerItem) {
         guard let group = legibleGroup else { return }
+        if option.mediaOption == nil {
+            currentSubtitleText = ""
+        }
         playerItem.select(option.mediaOption, in: group)
         selectedSubtitleID = option.id
     }

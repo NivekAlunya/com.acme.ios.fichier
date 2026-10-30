@@ -18,7 +18,19 @@ public final class VideoPlaybackStore {
     private init() {
         if let data = UserDefaults.standard.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode([String: VideoPlaybackRecord].self, from: data) {
-            self.records = decoded
+            // Clean up any bogus records where duration < 2.0 or position < 2.0
+            var valid: [String: VideoPlaybackRecord] = [:]
+            for (id, record) in decoded {
+                if record.isFinished {
+                    if record.duration >= 2.0 || record.position >= 2.0 {
+                        valid[id] = record
+                    }
+                } else if record.position >= 2.0 {
+                    valid[id] = record
+                }
+            }
+            self.records = valid
+            persist()
         } else if let legacyData = UserDefaults.standard.data(forKey: legacyKey),
                   let legacyPositions = try? JSONDecoder().decode([String: Double].self, from: legacyData) {
             // Migrate v1 saved positions
@@ -54,8 +66,14 @@ public final class VideoPlaybackStore {
     public func savePosition(_ seconds: Double, duration: Double, for item: SMBItem) {
         guard seconds.isFinite && !seconds.isNaN && duration.isFinite && !duration.isNaN else { return }
         
-        // If within the last 5 seconds or >= 95% watched, mark completed
-        if duration > 0 && (seconds >= duration - 5.0 || seconds / duration >= 0.95) {
+        // A video with less than 2 seconds played must never be considered completed or in-progress
+        guard seconds >= 2.0 else { return }
+        
+        // Only mark finished if watched to completion (>= 95% of duration, or within last 4s for videos > 15s)
+        let isNearEnd = duration > 15.0 ? (seconds >= duration - 4.0) : false
+        let isHighPercentage = duration > 0 ? (seconds / duration >= 0.95) : false
+        
+        if duration > 0 && (isNearEnd || isHighPercentage) {
             markFinished(for: item, duration: duration)
         } else if seconds >= 3.0 {
             records[item.id] = VideoPlaybackRecord(position: seconds, duration: duration, isFinished: false)
@@ -65,6 +83,7 @@ public final class VideoPlaybackStore {
     
     public func markFinished(for item: SMBItem, duration: Double = 0) {
         let dur = duration > 0 ? duration : (records[item.id]?.duration ?? 0)
+        guard dur >= 2.0 else { return }
         records[item.id] = VideoPlaybackRecord(position: dur, duration: dur, isFinished: true)
         persist()
     }

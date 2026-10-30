@@ -6,7 +6,7 @@
 import AVKit
 
 @MainActor
-public final class CustomVideoPlayerCoordinator: NSObject, AVPlayerViewControllerDelegate, AVPictureInPictureControllerDelegate {
+public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureControllerDelegate {
     public var onPiPStatusChanged: ((Bool) -> Void)?
     public private(set) var isPiPActive: Bool = false
     public var pipController: AVPictureInPictureController?
@@ -15,8 +15,21 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPlayerViewControlle
         super.init()
     }
     
+    public func setupPiP(with playerLayer: AVPlayerLayer) {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        
+        if let existing = pipController, existing.isPictureInPictureActive {
+            return
+        }
+        
+        let pip = AVPictureInPictureController(playerLayer: playerLayer)
+        pip?.canStartPictureInPictureAutomaticallyFromInline = true
+        pip?.delegate = self
+        self.pipController = pip
+    }
+    
     public func togglePiP() {
-        guard let pip = pipController else { return }
+        guard let pip = pipController, pip.isPictureInPicturePossible else { return }
         if pip.isPictureInPictureActive {
             pip.stopPictureInPicture()
         } else {
@@ -24,28 +37,14 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPlayerViewControlle
         }
     }
     
-    // MARK: - AVPlayerViewControllerDelegate
+    // MARK: - AVPictureInPictureControllerDelegate
     
-    public func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+    public func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         isPiPActive = true
         onPiPStatusChanged?(true)
     }
     
-    public func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) {
-        isPiPActive = false
-        onPiPStatusChanged?(false)
-    }
-    
-    public func playerViewController(
-        _ playerViewController: AVPlayerViewController,
-        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void
-    ) {
-        completionHandler(true)
-    }
-    
-    // MARK: - AVPictureInPictureControllerDelegate
-    
-    public func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+    public func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         isPiPActive = true
         onPiPStatusChanged?(true)
     }

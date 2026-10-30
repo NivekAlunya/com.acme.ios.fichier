@@ -12,6 +12,7 @@ public struct VideoDetailView: View {
     let initialItem: SMBItem
     
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var currentItem: SMBItem
     @State private var player: AVPlayer?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
@@ -70,7 +71,6 @@ public struct VideoDetailView: View {
             if let player {
                 CustomVideoPlayerView(
                     player: player,
-                    showsPlaybackControls: false,
                     onPiPStatusChanged: { isActive in
                         self.isPiPActive = isActive
                     },
@@ -119,6 +119,27 @@ public struct VideoDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
                 }
+            }
+            
+            // Active Subtitle Text Overlay
+            if !trackManager.currentSubtitleText.isEmpty && trackManager.isSubtitlesEnabled {
+                VStack {
+                    Spacer()
+                    Text(trackManager.currentSubtitleText)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.75))
+                        .cornerRadius(6)
+                        .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, showControls ? 68 : 24)
+                        .allowsHitTesting(false)
+                        .animation(.easeInOut(duration: 0.2), value: showControls)
+                }
+                .transition(.opacity)
             }
             
             // Custom Controls Overlay (Top HUD, Center Play/Pause, Side Navigation, Bottom Timeline)
@@ -249,11 +270,13 @@ public struct VideoDetailView: View {
             guard let item = notification.object as? AVPlayerItem,
                   let current = player?.currentItem,
                   item == current else { return }
-            VideoPlaybackStore.shared.markFinished(for: currentItem, duration: totalDurationSeconds)
+            if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
+                VideoPlaybackStore.shared.markFinished(for: currentItem, duration: totalDurationSeconds)
+            }
             playNextVideo()
         }
         .onDisappear {
-            guard !isPiPActive else { return }
+            guard !isPiPActive && scenePhase == .active else { return }
             tearDownPlayer()
         }
     }
@@ -264,6 +287,7 @@ public struct VideoDetailView: View {
         HStack {
             // Close Button (Lonely at top leading)
             Button {
+                tearDownPlayer()
                 dismiss()
             } label: {
                 Image(systemName: "xmark")
@@ -696,7 +720,7 @@ public struct VideoDetailView: View {
         if let p = player, let current = p.currentItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
-            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN {
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: currentItem)
             }
         }
@@ -772,13 +796,13 @@ public struct VideoDetailView: View {
             self.previewThumbnail = await manager.downloadThumbnail(for: item, maxDimension: 600)
         }
         
-        // Configure audio session asynchronously off the main thread to prevent UI hangs
-        Task.detached(priority: .userInitiated) {
-            let session = AVAudioSession.sharedInstance()
-            if session.category != .playback {
-                try? session.setCategory(.playback, mode: .moviePlayback)
-            }
-            try? session.setActive(true)
+        // Configure audio session synchronously before player initialization
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .moviePlayback)
+            try session.setActive(true)
+        } catch {
+            print("[VideoPlayer] Failed to activate audio session: \(error)")
         }
         
         // 1. If previously downloaded/cached locally, play immediately from file
@@ -900,7 +924,7 @@ public struct VideoDetailView: View {
             }
             self.isPlaying = (p.timeControlStatus == .playing)
             
-            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN {
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
             }
         }
