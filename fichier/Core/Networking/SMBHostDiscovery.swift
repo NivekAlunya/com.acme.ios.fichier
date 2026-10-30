@@ -8,6 +8,7 @@
 import Foundation
 import Network
 import Observation
+import OSLog
 
 @Observable
 @MainActor

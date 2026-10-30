@@ -9,6 +9,7 @@ import CoreGraphics
 import ImageIO
 import AMSMB2
 import AVFoundation
+import OSLog
 
 /// Serial actor that ensures libsmb2 operations never collide concurrently on the same socket
 actor SMBClientActor {

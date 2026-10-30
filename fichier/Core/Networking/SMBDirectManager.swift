@@ -7,6 +7,7 @@ import Foundation
 import Observation
 import UIKit
 import AVFoundation
+import OSLog
 
 @Observable
 @MainActor

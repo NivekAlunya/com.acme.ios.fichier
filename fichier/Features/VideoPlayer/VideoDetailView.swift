@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import OSLog
 
 public struct VideoDetailView: View {
     var manager: SMBDirectManager

@@ -3,7 +3,7 @@
 //  fichier
 //
 
-import OSLog
+@_exported import OSLog
 
 /// Centralized loggers. File names and paths are logged with `privacy: .private`
 /// so they are redacted in release logs and sysdiagnose.

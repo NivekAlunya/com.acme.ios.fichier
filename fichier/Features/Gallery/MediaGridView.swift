@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import OSLog
 
 struct MediaGridView: View {
     var manager: SMBDirectManager

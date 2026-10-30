@@ -5,6 +5,7 @@
 
 import Foundation
 import Security
+import OSLog
 
 nonisolated enum SMBKeychain {
     private static let service = "com.acme.ios.photos.smb"
