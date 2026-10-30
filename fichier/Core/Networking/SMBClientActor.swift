@@ -13,6 +13,7 @@ import AVFoundation
 /// Serial actor that ensures libsmb2 operations never collide concurrently on the same socket
 actor SMBClientActor {
     private var client: SMB2Manager?
+    private var currentConnectionID: String = ""
     private var currentShareName: String?
     private var activeFolderID: String?
     private let thumbnailCache = NSCache<NSString, UIImage>()
@@ -51,7 +52,7 @@ actor SMBClientActor {
     }
     
     /// Connects to the server and enumerates all shared folders automatically
-    func connectAndListShares(url: URL, credential: URLCredential) async throws -> [SMBItem] {
+    func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [SMBItem] {
         guard let manager = SMB2Manager(url: url, credential: credential) else {
             throw URLError(.badURL)
         }
@@ -59,11 +60,13 @@ actor SMBClientActor {
         // Fetch all non-hidden shares from the Mac mini via IPC$
         let shares = try await manager.listShares(enumerateHidden: false)
         self.client = manager
+        self.currentConnectionID = connectionID
         self.currentShareName = nil
         
         let items = shares
             .map { share in
                 SMBItem(
+                    connectionID: connectionID,
                     name: share.name,
                     shareName: share.name,
                     path: "/",
@@ -84,10 +87,12 @@ actor SMBClientActor {
         }
         let shares = try await client.listShares(enumerateHidden: false)
         self.currentShareName = nil
+        let connID = self.currentConnectionID
         
         return shares
             .map { share in
                 SMBItem(
+                    connectionID: connID,
                     name: share.name,
                     shareName: share.name,
                     path: "/",
@@ -113,6 +118,7 @@ actor SMBClientActor {
     func disconnect() async {
         try? await client?.disconnectShare()
         client = nil
+        currentConnectionID = ""
         currentShareName = nil
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
@@ -130,6 +136,7 @@ actor SMBClientActor {
         
         var folders: [SMBItem] = []
         var pictures: [SMBItem] = []
+        let connID = self.currentConnectionID
         
         for entry in entries {
             if Task.isCancelled { throw CancellationError() }
@@ -142,6 +149,7 @@ actor SMBClientActor {
             
             if resourceType == .directory {
                 folders.append(SMBItem(
+                    connectionID: connID,
                     name: name,
                     shareName: shareName,
                     path: entryPath,
@@ -155,6 +163,7 @@ actor SMBClientActor {
                 if supportedMediaExtensions.contains(ext) {
                     let size = Self.extractFileSize(from: entry)
                     pictures.append(SMBItem(
+                        connectionID: connID,
                         name: name,
                         shareName: shareName,
                         path: entryPath,
@@ -182,14 +191,25 @@ actor SMBClientActor {
         }
         
         // 1. In-Memory RAM Cache check (Tier 1)
-        let memoryCacheKey = "\(item.shareName)::\(item.path)_thumb_\(Int(maxDimension))" as NSString
+        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
         if let cached = thumbnailCache.object(forKey: memoryCacheKey) {
             return cached
         }
         
         // 2. Persistent On-Disk Cache check (Tier 2 - Bypasses Wi-Fi / SMB completely!)
-        let diskKey = MediaCacheManager.shared.cacheKey(for: item.shareName, path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path, dimension: maxDimension)
-        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey) {
+        let diskKey = MediaCacheManager.shared.cacheKey(
+            for: item.shareName,
+            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
+            for: item.shareName,
+            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
+            dimension: maxDimension,
+            connectionID: ""
+        ) : nil
+        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
             thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
             return diskCached
         }
@@ -270,9 +290,14 @@ actor SMBClientActor {
         MediaCacheManager.shared.evictVideosIfNeeded(keeping: [localURL])
         
         // Upgrade thumbnail cache with real video frame now that it's downloaded
-        let diskKey = MediaCacheManager.shared.cacheKey(for: item.shareName, path: "\(item.path)_vidstream_v7", dimension: 260)
+        let diskKey = MediaCacheManager.shared.cacheKey(
+            for: item.shareName,
+            path: "\(item.path)_vidstream_v7",
+            dimension: 260,
+            connectionID: item.connectionID
+        )
         if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: localURL, maxDimension: 260, preferredTime: CMTime(seconds: 5.0, preferredTimescale: 600)) {
-            let memoryCacheKey = "\(item.shareName)::\(item.path)_thumb_260" as NSString
+            let memoryCacheKey = "\(item.id)_thumb_260" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
         }
@@ -314,7 +339,7 @@ actor SMBClientActor {
         // Videos must never be loaded as full images into RAM
         if Task.isCancelled || item.isVideo { return nil }
         
-        let cacheKey = "\(item.shareName)::\(item.path)_full" as NSString
+        let cacheKey = "\(item.id)_full" as NSString
         if let cached = fullImageCache.object(forKey: cacheKey) {
             return cached
         }

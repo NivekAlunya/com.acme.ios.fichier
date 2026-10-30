@@ -33,28 +33,54 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Key Hashing
     
-    public func cacheKey(for shareName: String, path: String, dimension: CGFloat) -> String {
-        let raw = "\(shareName)::\(path)_\(Int(dimension))"
+    public func cacheKey(for shareName: String, path: String, dimension: CGFloat, connectionID: String = "") -> String {
+        let raw: String
+        if connectionID.isEmpty {
+            raw = "\(shareName)::\(path)_\(Int(dimension))"
+        } else {
+            raw = "\(connectionID)|\(shareName)::\(path)_\(Int(dimension))"
+        }
         let hash = SHA256.hash(data: Data(raw.utf8))
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
-    public func videoKey(for shareName: String, path: String) -> String {
-        let raw = "\(shareName)::\(path)"
+    public func videoKey(for shareName: String, path: String, connectionID: String = "") -> String {
+        let raw: String
+        if connectionID.isEmpty {
+            raw = "\(shareName)::\(path)"
+        } else {
+            raw = "\(connectionID)|\(shareName)::\(path)"
+        }
         let hash = SHA256.hash(data: Data(raw.utf8))
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
     // MARK: - Thumbnail Disk Cache
     
-    public func getThumbnail(for key: String) -> UIImage? {
+    public func getThumbnail(for key: String, fallbackKey: String? = nil) -> UIImage? {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
-        guard fileManager.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL),
-              let image = UIImage(data: data) else {
-            return nil
+        if fileManager.fileExists(atPath: fileURL.path),
+           let data = try? Data(contentsOf: fileURL),
+           let image = UIImage(data: data) {
+            return image
         }
-        return image
+        
+        // Fallback to legacy key and migrate file to new scoped key atomically
+        if let fallbackKey, fallbackKey != key {
+            let legacyURL = thumbnailsDirectory.appendingPathComponent("\(fallbackKey).jpg")
+            if fileManager.fileExists(atPath: legacyURL.path),
+               let data = try? Data(contentsOf: legacyURL),
+               let image = UIImage(data: data) {
+                if !fileManager.fileExists(atPath: fileURL.path) {
+                    try? fileManager.moveItem(at: legacyURL, to: fileURL)
+                } else {
+                    try? fileManager.removeItem(at: legacyURL)
+                }
+                return image
+            }
+        }
+        
+        return nil
     }
     
     public func saveThumbnail(_ image: UIImage, for key: String) {
@@ -66,10 +92,21 @@ nonisolated public final class MediaCacheManager: Sendable {
     // MARK: - Video Disk Cache
     
     public func localVideoURL(for item: SMBItem) -> URL {
-        let key = videoKey(for: item.shareName, path: item.path)
+        let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
         let ext = (item.name as NSString).pathExtension.lowercased()
         let safeExt = ext.isEmpty ? "mp4" : ext
-        return videosDirectory.appendingPathComponent("\(key).\(safeExt)")
+        let url = videosDirectory.appendingPathComponent("\(key).\(safeExt)")
+        
+        // Migrate legacy video cache if present
+        if !item.connectionID.isEmpty && !fileManager.fileExists(atPath: url.path) {
+            let legacyKey = videoKey(for: item.shareName, path: item.path, connectionID: "")
+            let legacyURL = videosDirectory.appendingPathComponent("\(legacyKey).\(safeExt)")
+            if fileManager.fileExists(atPath: legacyURL.path) {
+                try? fileManager.moveItem(at: legacyURL, to: url)
+            }
+        }
+        
+        return url
     }
     
     public func hasCachedVideo(for item: SMBItem) -> Bool {

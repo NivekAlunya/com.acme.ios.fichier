@@ -32,6 +32,7 @@ public final class SMBDirectManager {
     
     // Tracks current active folder to cancel out-of-order thumbnail requests
     public private(set) var activeFolderID: String?
+    public private(set) var currentConnectionID: String = ""
     private var loadFolderTask: Task<Void, Never>?
     
     private let worker = SMBClientActor()
@@ -108,8 +109,11 @@ public final class SMBDirectManager {
             return
         }
         
+        let connID = user.isEmpty ? cleanHost : "\(user)@\(cleanHost)"
+        self.currentConnectionID = connID
+        
         do {
-            let discoveredShares = try await worker.connectAndListShares(url: url, credential: credential)
+            let discoveredShares = try await worker.connectAndListShares(url: url, credential: credential, connectionID: connID)
             guard !discoveredShares.isEmpty else {
                 errorMessage = String(localized: .Strings.networkingErrorNoSharedFolders)
                 isLoading = false
@@ -236,15 +240,26 @@ public final class SMBDirectManager {
             return nil
         }
         
-        let memoryCacheKey = "\(item.shareName)::\(item.path)_thumb_\(Int(maxDimension))" as NSString
+        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
         if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
             return cached
         }
         
         // Video thumbnail streaming & caching
         if item.isVideo {
-            let diskKey = MediaCacheManager.shared.cacheKey(for: item.shareName, path: "\(item.path)_vidstream_v7", dimension: maxDimension)
-            if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey) {
+            let diskKey = MediaCacheManager.shared.cacheKey(
+                for: item.shareName,
+                path: "\(item.path)_vidstream_v7",
+                dimension: maxDimension,
+                connectionID: item.connectionID
+            )
+            let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
+                for: item.shareName,
+                path: "\(item.path)_vidstream_v7",
+                dimension: maxDimension,
+                connectionID: ""
+            ) : nil
+            if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
                 await worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
                 return diskCached
             }
@@ -290,6 +305,7 @@ public final class SMBDirectManager {
                 let realSize = await fetchFileSize(for: item)
                 if realSize > 0 {
                     validItem = SMBItem(
+                        connectionID: item.connectionID,
                         name: item.name,
                         shareName: item.shareName,
                         path: item.path,
@@ -399,6 +415,7 @@ public final class SMBDirectManager {
         loadFolderTask?.cancel()
         loadFolderTask = nil
         activeFolderID = nil
+        currentConnectionID = ""
         
         isConnected = false
         isLoading = false

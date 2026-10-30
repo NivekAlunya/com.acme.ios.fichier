@@ -908,6 +908,7 @@ public struct VideoDetailView: View {
                 let realSize = await manager.fetchFileSize(for: item)
                 if realSize > 0 {
                     validItem = SMBItem(
+                        connectionID: item.connectionID,
                         name: item.name,
                         shareName: item.shareName,
                         path: item.path,

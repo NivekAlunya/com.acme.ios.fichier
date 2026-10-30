@@ -53,7 +53,8 @@ public final class VideoPlaybackStore {
     }
     
     public func status(for item: SMBItem) -> VideoPlaybackStatus {
-        guard let record = records[item.id] else { return .unwatched }
+        let record = records[item.id] ?? (!item.connectionID.isEmpty ? records["\(item.shareName)::\(item.path)"] : nil)
+        guard let record else { return .unwatched }
         if record.isFinished {
             return .finished
         }
@@ -78,7 +79,7 @@ public final class VideoPlaybackStore {
     }
     
     public func isFinished(for item: SMBItem) -> Bool {
-        return records[item.id]?.isFinished ?? false
+        return latestRecord(for: item)?.isFinished ?? false
     }
     
     public func savePosition(_ seconds: Double, duration: Double, for item: SMBItem) {
@@ -96,6 +97,13 @@ public final class VideoPlaybackStore {
         } else if seconds >= 3.0 {
             let updated = VideoPlaybackRecord(position: seconds, duration: duration, isFinished: false)
             
+            // Clean up any old legacy key if we're now saving with connectionID
+            if !item.connectionID.isEmpty {
+                let legacyKey = "\(item.shareName)::\(item.path)"
+                records.removeValue(forKey: legacyKey)
+                liveRecords.removeValue(forKey: legacyKey)
+            }
+            
             // Cheap, non-observed update on every tick (no UI invalidation)
             liveRecords[item.id] = updated
             
@@ -112,15 +120,27 @@ public final class VideoPlaybackStore {
         let dur = duration > 0 ? duration : (existing?.duration ?? 0)
         guard dur >= 2.0 else { return }
         let pos = max(dur, existing?.position ?? 0)
+        
+        if !item.connectionID.isEmpty {
+            let legacyKey = "\(item.shareName)::\(item.path)"
+            records.removeValue(forKey: legacyKey)
+            liveRecords.removeValue(forKey: legacyKey)
+        }
         liveRecords.removeValue(forKey: item.id)
         records[item.id] = VideoPlaybackRecord(position: pos, duration: max(dur, pos), isFinished: true)
         flush()
     }
     
     public func clearPosition(for item: SMBItem) {
-        let hadLive = liveRecords.removeValue(forKey: item.id) != nil
-        let hadRecord = records.removeValue(forKey: item.id) != nil
-        if hadLive || hadRecord {
+        var changed = false
+        if liveRecords.removeValue(forKey: item.id) != nil { changed = true }
+        if records.removeValue(forKey: item.id) != nil { changed = true }
+        if !item.connectionID.isEmpty {
+            let legacyKey = "\(item.shareName)::\(item.path)"
+            if liveRecords.removeValue(forKey: legacyKey) != nil { changed = true }
+            if records.removeValue(forKey: legacyKey) != nil { changed = true }
+        }
+        if changed {
             flush()
         }
     }
@@ -140,7 +160,13 @@ public final class VideoPlaybackStore {
     // MARK: - Private
     
     private func latestRecord(for item: SMBItem) -> VideoPlaybackRecord? {
-        liveRecords[item.id] ?? records[item.id]
+        if let live = liveRecords[item.id] { return live }
+        if let rec = records[item.id] { return rec }
+        if !item.connectionID.isEmpty {
+            let legacyKey = "\(item.shareName)::\(item.path)"
+            return liveRecords[legacyKey] ?? records[legacyKey]
+        }
+        return nil
     }
     
     /// Coarse visual state of a record: changes only when the badge or the progress bar would change (5% steps).

@@ -6,7 +6,14 @@
 import Foundation
 
 nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
-    public var id: String { "\(shareName)::\(path)" }
+    public var id: String {
+        if connectionID.isEmpty {
+            return "\(shareName)::\(path)"
+        } else {
+            return "\(connectionID)|\(shareName)::\(path)"
+        }
+    }
+    public let connectionID: String
     public let name: String
     public let shareName: String
     public let path: String
@@ -16,6 +23,7 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
     public var children: [SMBItem]?
     
     public init(
+        connectionID: String = "",
         name: String,
         shareName: String,
         path: String,
@@ -24,6 +32,7 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
         modifiedDate: Date? = nil,
         children: [SMBItem]? = nil
     ) {
+        self.connectionID = connectionID
         self.name = name
         self.shareName = shareName
         self.path = path
