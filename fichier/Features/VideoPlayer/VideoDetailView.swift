@@ -43,6 +43,7 @@ public struct VideoDetailView: View {
     
     // Swipe for Seeking Gesture State
     @State private var isScrubbingWithGesture: Bool = false
+    @State private var isScrubbingTimeline: Bool = false
     @State private var initialScrubTime: Double = 0
     @State private var wasPlayingBeforeScrub: Bool = false
     @State private var isSeekingFrame: Bool = false
@@ -258,7 +259,7 @@ public struct VideoDetailView: View {
         .contentShape(Rectangle())
         .simultaneousGesture(videoSeekGesture)
         .onTapGesture {
-            guard !isScrubbingWithGesture else { return }
+            guard !isScrubbingWithGesture && !isScrubbingTimeline else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
                 showControls.toggle()
             }
@@ -581,6 +582,7 @@ public struct VideoDetailView: View {
                 requestLiveFrameSeek(to: targetSeconds)
             },
             onScrubStateChanged: { isScrubbing in
+                isScrubbingTimeline = isScrubbing
                 if isScrubbing {
                     hideControlsTask?.cancel()
                     wasPlayingBeforeScrub = (player?.timeControlStatus == .playing)
@@ -602,6 +604,7 @@ public struct VideoDetailView: View {
     private var videoSeekGesture: some Gesture {
         DragGesture(minimumDistance: 15)
             .onChanged { value in
+                guard !isScrubbingTimeline else { return }
                 let hTranslation = value.translation.width
                 let vTranslation = value.translation.height
                 
@@ -639,6 +642,7 @@ public struct VideoDetailView: View {
             .onEnded { value in
                 guard isScrubbingWithGesture else { return }
                 isScrubbingWithGesture = false
+                guard !isScrubbingTimeline else { return }
                 finishSeeking(at: currentPlaybackSeconds, resumePlaying: wasPlayingBeforeScrub)
             }
     }
@@ -694,7 +698,7 @@ public struct VideoDetailView: View {
     
     private func scheduleControlsAutoHide(delay: Double = 3.5) {
         hideControlsTask?.cancel()
-        guard showControls && isPlaying && !isScrubbingWithGesture else { return }
+        guard showControls && isPlaying && !isScrubbingWithGesture && !isScrubbingTimeline else { return }
         hideControlsTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
@@ -1012,8 +1016,10 @@ public struct VideoDetailView: View {
             let secs = time.seconds
             let dur = current.duration.seconds
             
-            if secs.isFinite && !secs.isNaN {
-                self.currentPlaybackSeconds = secs
+            if !self.isScrubbingWithGesture && !self.isScrubbingTimeline {
+                if secs.isFinite && !secs.isNaN {
+                    self.currentPlaybackSeconds = secs
+                }
             }
             if dur.isFinite && !dur.isNaN && dur > 0 {
                 self.totalDurationSeconds = dur
@@ -1027,7 +1033,7 @@ public struct VideoDetailView: View {
                 }
             }
             
-            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+            if !self.isScrubbingWithGesture && !self.isScrubbingTimeline && secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
             }
         }

@@ -51,6 +51,9 @@ public struct VideoTimelineBar: View {
             GeometryReader { geo in
                 let width = geo.size.width
                 let fraction = progressFraction
+                let knobSize: CGFloat = isScrubbing ? 16 : 10
+                let knobRadius: CGFloat = knobSize / 2
+                let maxOffset = max(0, width - knobSize)
                 
                 ZStack(alignment: .leading) {
                     // Track Background
@@ -66,25 +69,33 @@ public struct VideoTimelineBar: View {
                     // Scrubber Knob
                     Circle()
                         .fill(Color.white)
-                        .frame(width: isScrubbing ? 16 : 10, height: isScrubbing ? 16 : 10)
+                        .frame(width: knobSize, height: knobSize)
                         .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
-                        .offset(x: max(0, min(width - (isScrubbing ? 16 : 10), width * CGFloat(fraction) - (isScrubbing ? 8 : 5))))
+                        .offset(x: max(0, min(maxOffset, width * CGFloat(fraction) - knobRadius)))
                 }
                 .frame(height: geo.size.height)
                 .contentShape(Rectangle())
-                .gesture(
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            guard width > 0, duration > 0 else { return }
                             if !isScrubbing {
                                 isScrubbing = true
                                 onScrubStateChanged(true)
                             }
-                            let newFraction = max(0.0, min(1.0, value.location.x / width))
+                            let newFraction = max(0.0, min(1.0, Double(value.location.x / width)))
                             scrubTargetTime = newFraction * duration
                             onScrubbing?(scrubTargetTime)
                         }
                         .onEnded { value in
-                            let newFraction = max(0.0, min(1.0, value.location.x / width))
+                            guard width > 0, duration > 0 else {
+                                if isScrubbing {
+                                    isScrubbing = false
+                                    onScrubStateChanged(false)
+                                }
+                                return
+                            }
+                            let newFraction = max(0.0, min(1.0, Double(value.location.x / width)))
                             let finalTime = newFraction * duration
                             // Commit seek once when user releases finger
                             onSeek(finalTime)
@@ -93,7 +104,7 @@ public struct VideoTimelineBar: View {
                         }
                 )
             }
-            .frame(height: 20)
+            .frame(height: 36)
             
             // Duration / Remaining Time (Tap to toggle)
             Button {
