@@ -659,7 +659,7 @@ struct MediaGridView: View {
                     }
                     savedCount += 1
                 } catch {
-                    print("⚠️ [Photos] Failed to save \(item.name): \(error)")
+                    AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
                 }
             }
             

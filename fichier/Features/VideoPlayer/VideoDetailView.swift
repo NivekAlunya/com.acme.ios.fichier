@@ -874,7 +874,7 @@ public struct VideoDetailView: View {
             try session.setCategory(.playback, mode: .moviePlayback)
             try session.setActive(true)
         } catch {
-            print("[VideoPlayer] Failed to activate audio session: \(error)")
+            AppLog.player.error("Failed to activate audio session: \(error.localizedDescription)")
         }
         
         // 1. If previously downloaded/cached locally, play immediately from file

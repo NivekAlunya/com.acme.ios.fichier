@@ -17,14 +17,27 @@ nonisolated enum SMBKeychain {
         ]
     }
     
-    static func savePassword(_ password: String, for account: String) {
-        let data = Data(password.utf8)
+    /// Stores the password atomically. The item is only readable while the device is unlocked,
+    /// never leaves this device (no backup / device migration) and is never synced to iCloud Keychain.
+    /// Existing items are upgraded to these attributes on the next save.
+    @discardableResult
+    static func savePassword(_ password: String, for account: String) -> Bool {
         let query = baseQuery(for: account)
-        SecItemDelete(query as CFDictionary)
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(password.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrSynchronizable as String: false
+        ]
         
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        SecItemAdd(addQuery as CFDictionary, nil)
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
+        }
+        
+        if status != errSecSuccess {
+            AppLog.keychain.error("Failed to save password (OSStatus \(status))")
+        }
+        return status == errSecSuccess
     }
     
     static func loadPassword(for account: String) -> String? {
@@ -34,12 +47,19 @@ nonisolated enum SMBKeychain {
         
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        guard status == errSecSuccess, let data = item as? Data else {
+            if status != errSecItemNotFound {
+                AppLog.keychain.error("Failed to load password (OSStatus \(status))")
+            }
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
     
     static func deletePassword(for account: String) {
-        let query = baseQuery(for: account)
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(baseQuery(for: account) as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            AppLog.keychain.error("Failed to delete password (OSStatus \(status))")
+        }
     }
 }

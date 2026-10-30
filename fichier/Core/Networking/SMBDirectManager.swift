@@ -190,14 +190,14 @@ public final class SMBDirectManager {
                 self.pictures = foundPictures
                 self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
                 self.isLoading = false
-                print("✅ [SMB] Share '\(targetShare)' path '\(targetPath)': \(subfolders.count) subfolders, \(foundPictures.count) pictures")
+                AppLog.smb.info("Share '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) pictures")
             } catch is CancellationError {
                 // Superseded by another folder click; silently exit
             } catch {
                 guard !Task.isCancelled, self.activeFolderID == targetID else { return }
                 self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
                 self.isLoading = false
-                print("❌ [SMB] Error scanning folder \(targetShare)/\(targetPath): \(error)")
+                AppLog.smb.error("Error scanning folder \(targetShare, privacy: .private)/\(targetPath, privacy: .private): \(error.localizedDescription)")
             }
         }
         
@@ -210,7 +210,7 @@ public final class SMBDirectManager {
             let (subfolders, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
             self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
         } catch {
-            print("❌ [SMB] Failed to expand tree at \(folder.shareName)/\(folder.path): \(error)")
+            AppLog.smb.error("Failed to expand tree at \(folder.shareName, privacy: .private)/\(folder.path, privacy: .private): \(error.localizedDescription)")
         }
     }
     

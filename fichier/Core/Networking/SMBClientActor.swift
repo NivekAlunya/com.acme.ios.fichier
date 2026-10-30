@@ -224,7 +224,7 @@ actor SMBClientActor {
             return image
         } catch {
             if !Task.isCancelled {
-                print("❌ [SMB] Failed to load thumbnail at \(item.shareName)/\(item.path): \(error)")
+                AppLog.smb.error("Failed to load thumbnail at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
             }
             return nil
         }
@@ -310,7 +310,7 @@ actor SMBClientActor {
             return image
         } catch {
             if !Task.isCancelled {
-                print("❌ [SMB] Failed to load full image at \(item.shareName)/\(item.path): \(error)")
+                AppLog.smb.error("Failed to load full image at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
             }
             return nil
         }
