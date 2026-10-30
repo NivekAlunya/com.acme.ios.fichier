@@ -121,13 +121,12 @@ public struct VideoDetailView: View {
             }
             
             // Custom Controls Overlay (Top HUD, Center Play/Pause, Side Navigation, Bottom Timeline)
-            if showControls {
+            ZStack {
                 VStack {
                     topBar
                     Spacer()
                     bottomControls
                 }
-                .transition(.opacity)
                 
                 // Center Play / Pause Toggle
                 Button {
@@ -140,13 +139,12 @@ public struct VideoDetailView: View {
                         .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
                 }
                 .buttonStyle(.plain)
-                .transition(.scale.combined(with: .opacity))
                 
                 // Side Navigation Arrows
                 if videos.count > 1 {
                     HStack {
                         Button {
-                            withAnimation { goToPrevious() }
+                            goToPrevious()
                         } label: {
                             Image(systemName: "chevron.left.circle.fill")
                                 .font(.system(size: 42))
@@ -159,7 +157,7 @@ public struct VideoDetailView: View {
                         Spacer()
                         
                         Button {
-                            withAnimation { goToNext() }
+                            goToNext()
                         } label: {
                             Image(systemName: "chevron.right.circle.fill")
                                 .font(.system(size: 42))
@@ -169,9 +167,11 @@ public struct VideoDetailView: View {
                         }
                         .padding(.trailing, 18)
                     }
-                    .transition(.opacity)
                 }
             }
+            .opacity(showControls ? 1 : 0)
+            .animation(.easeInOut(duration: 0.35), value: showControls)
+            .allowsHitTesting(showControls)
             
             // Save Toast Banner
             if let message = saveStatusMessage {
@@ -227,7 +227,7 @@ public struct VideoDetailView: View {
         .simultaneousGesture(videoSeekGesture)
         .onTapGesture {
             guard !isScrubbingWithGesture else { return }
-            withAnimation(.easeInOut(duration: 0.25)) {
+            withAnimation(.easeInOut(duration: 0.35)) {
                 showControls.toggle()
             }
             if showControls {
@@ -524,7 +524,7 @@ public struct VideoDetailView: View {
                         isPlaying = false
                     }
                     initialScrubTime = currentPlaybackSeconds
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(.easeInOut(duration: 0.35)) {
                         showControls = true
                     }
                 }
@@ -622,6 +622,9 @@ public struct VideoDetailView: View {
             player.pause()
             isPlaying = false
             hideControlsTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
         } else {
             player.play()
             isPlaying = true
@@ -639,7 +642,9 @@ public struct VideoDetailView: View {
     private func goToNext() {
         guard !videos.isEmpty else { return }
         let nextIndex = (currentIndex + 1) % videos.count
-        currentItem = videos[nextIndex]
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentItem = videos[nextIndex]
+        }
     }
     
     private func playNextVideo() {
@@ -655,7 +660,9 @@ public struct VideoDetailView: View {
     private func goToPrevious() {
         guard !videos.isEmpty else { return }
         let prevIndex = (currentIndex - 1 + videos.count) % videos.count
-        currentItem = videos[prevIndex]
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentItem = videos[prevIndex]
+        }
     }
     
     private func saveToCameraRoll() {
