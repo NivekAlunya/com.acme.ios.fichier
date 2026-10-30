@@ -12,6 +12,11 @@ public final class VideoPlaybackStore {
     public static let shared = VideoPlaybackStore()
     
     public private(set) var records: [String: VideoPlaybackRecord] = [:]
+    
+    /// Latest in-progress positions, updated on every player tick.
+    /// Not observed, so frequent updates never re-render the gallery.
+    @ObservationIgnored private var liveRecords: [String: VideoPlaybackRecord] = [:]
+    @ObservationIgnored private var persistTask: Task<Void, Never>?
     private let storageKey = "SMBVideoPlaybackRecords_v2"
     private let legacyKey = "SMBVideoPlaybackPositions_v1"
     
@@ -62,7 +67,7 @@ public final class VideoPlaybackStore {
     }
     
     public func position(for item: SMBItem) -> Double? {
-        guard let record = records[item.id], !record.isFinished, record.position > 3.0 else { return nil }
+        guard let record = latestRecord(for: item), !record.isFinished, record.position > 3.0 else { return nil }
         // If the saved position is near the end, do not resume at the end
         if record.duration > 0 {
             if record.position >= record.duration - 4.0 || record.position / record.duration >= 0.90 {
@@ -89,22 +94,67 @@ public final class VideoPlaybackStore {
         if duration > 0 && (isNearEnd || isHighPercentage) {
             markFinished(for: item, duration: duration)
         } else if seconds >= 3.0 {
-            records[item.id] = VideoPlaybackRecord(position: seconds, duration: duration, isFinished: false)
-            persist()
+            let updated = VideoPlaybackRecord(position: seconds, duration: duration, isFinished: false)
+            
+            // Cheap, non-observed update on every tick (no UI invalidation)
+            liveRecords[item.id] = updated
+            
+            // Only touch the observed dictionary when the visible badge / progress bar would change
+            if Self.bucket(of: records[item.id]) != Self.bucket(of: updated) {
+                records[item.id] = updated
+            }
+            schedulePersist()
         }
     }
     
     public func markFinished(for item: SMBItem, duration: Double = 0) {
-        let dur = duration > 0 ? duration : (records[item.id]?.duration ?? 0)
+        let existing = latestRecord(for: item)
+        let dur = duration > 0 ? duration : (existing?.duration ?? 0)
         guard dur >= 2.0 else { return }
-        let pos = max(dur, records[item.id]?.position ?? 0)
+        let pos = max(dur, existing?.position ?? 0)
+        liveRecords.removeValue(forKey: item.id)
         records[item.id] = VideoPlaybackRecord(position: pos, duration: max(dur, pos), isFinished: true)
-        persist()
+        flush()
     }
     
     public func clearPosition(for item: SMBItem) {
-        if records.removeValue(forKey: item.id) != nil {
-            persist()
+        let hadLive = liveRecords.removeValue(forKey: item.id) != nil
+        let hadRecord = records.removeValue(forKey: item.id) != nil
+        if hadLive || hadRecord {
+            flush()
+        }
+    }
+    
+    /// Merges the live (non-observed) positions into the observed records and writes everything to disk.
+    /// Call when the player is torn down or the app goes to the background.
+    public func flush() {
+        persistTask?.cancel()
+        persistTask = nil
+        if !liveRecords.isEmpty {
+            records.merge(liveRecords) { _, live in live }
+            liveRecords.removeAll()
+        }
+        persist()
+    }
+    
+    // MARK: - Private
+    
+    private func latestRecord(for item: SMBItem) -> VideoPlaybackRecord? {
+        liveRecords[item.id] ?? records[item.id]
+    }
+    
+    /// Coarse visual state of a record: changes only when the badge or the progress bar would change (5% steps).
+    private static func bucket(of record: VideoPlaybackRecord?) -> Int {
+        guard let record else { return -1 }
+        return record.isFinished ? 100 : Int(record.progress * 20)
+    }
+    
+    private func schedulePersist() {
+        persistTask?.cancel()
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.flush()
         }
     }
     

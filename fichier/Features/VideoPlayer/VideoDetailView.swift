@@ -296,6 +296,17 @@ public struct VideoDetailView: View {
             }
             playNextVideo()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                // Persist the latest playback position right before the app may be suspended
+                if let p = player, let loadedItem = currentlyLoadedItem {
+                    let secs = p.currentTime().seconds
+                    let dur = p.currentItem?.duration.seconds ?? 0
+                    VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+                }
+                VideoPlaybackStore.shared.flush()
+            }
+        }
         .onDisappear {
             guard !isPiPActive && scenePhase == .active else { return }
             tearDownPlayer()
@@ -793,6 +804,7 @@ public struct VideoDetailView: View {
             }
         }
         currentlyLoadedItem = nil
+        VideoPlaybackStore.shared.flush()
         if let token = periodicTimeObserverToken {
             player?.removeTimeObserver(token)
             periodicTimeObserverToken = nil
