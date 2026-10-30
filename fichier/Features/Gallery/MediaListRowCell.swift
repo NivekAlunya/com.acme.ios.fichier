@@ -68,47 +68,47 @@ struct MediaListRowCell: View {
                 if item.isVideo {
                     let playbackStatus = VideoPlaybackStore.shared.status(for: item)
                     
-                    switch playbackStatus {
-                    case .finished:
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.green)
-                            .padding(2)
-                            .background(Color.black.opacity(0.75))
-                            .clipShape(Circle())
-                            .padding(2)
-                            .frame(width: 52, height: 52, alignment: .topLeading)
-                        
-                    case .inProgress(let progress):
-                        if progress > 0 {
-                            GeometryReader { geo in
-                                let barWidth = geo.size.width
-                                ZStack(alignment: .leading) {
-                                    Rectangle()
-                                        .fill(Color.black.opacity(0.4))
-                                        .frame(height: 2.5)
-                                    
-                                    Rectangle()
-                                        .fill(Color.blue)
-                                        .frame(width: max(0, min(barWidth, barWidth * progress)), height: 2.5)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    if case .inProgress(let progress) = playbackStatus, progress > 0 {
+                        GeometryReader { geo in
+                            let barWidth = geo.size.width
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.4))
+                                    .frame(height: 2.5)
+                                
+                                Rectangle()
+                                    .fill(Color.blue)
+                                    .frame(width: max(0, min(barWidth, barWidth * progress)), height: 2.5)
                             }
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                         }
-                        
-                    case .unwatched:
-                        EmptyView()
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     
-                    Image(systemName: "video.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(.white)
-                        .padding(3)
-                        .background(Color.black.opacity(0.75))
-                        .clipShape(Circle())
-                        .padding(2)
-                        .frame(width: 52, height: 52, alignment: .bottomTrailing)
+                    HStack(spacing: 2) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(.white)
+                        
+                        switch playbackStatus {
+                        case .finished:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.green)
+                        case .inProgress:
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.blue)
+                        case .unwatched:
+                            EmptyView()
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(Capsule())
+                    .padding(2)
+                    .frame(width: 52, height: 52, alignment: .bottomTrailing)
                 } else if item.isGIF {
                     Text(.Strings.galleryBadgeGif)
                         .font(.system(size: 7, weight: .bold))
@@ -138,31 +138,6 @@ struct MediaListRowCell: View {
                     if let dateStr = item.formattedDate {
                         Text("•")
                         Text(dateStr)
-                    }
-                    if item.isVideo {
-                        let status = VideoPlaybackStore.shared.status(for: item)
-                        switch status {
-                        case .finished:
-                            Text("•")
-                            HStack(spacing: 3) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 9))
-                                Text(.Strings.galleryBadgeWatched)
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .foregroundColor(.green)
-                        case .inProgress(let progress):
-                            Text("•")
-                            HStack(spacing: 3) {
-                                Image(systemName: "arrow.counterclockwise")
-                                    .font(.system(size: 8, weight: .bold))
-                                Text(progress > 0 ? "\(Int(progress * 100))%" : .Strings.galleryBadgeInProgress)
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .foregroundColor(.blue)
-                        case .unwatched:
-                            EmptyView()
-                        }
                     }
                 }
                 .font(.caption)
