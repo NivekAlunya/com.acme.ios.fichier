@@ -620,6 +620,9 @@ public struct VideoDetailView: View {
             player?.play()
             isPlaying = true
         }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.isBuffering = false
+        }
         scheduleControlsAutoHide()
     }
     
@@ -666,6 +669,9 @@ public struct VideoDetailView: View {
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero)
         currentPlaybackSeconds = targetSeconds
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.isBuffering = false
+        }
     }
     
     private func goToNext() {
@@ -863,9 +869,15 @@ public struct VideoDetailView: View {
             self.monitorTask = Task { @MainActor [weak avPlayer] in
                 while !Task.isCancelled {
                     guard let p = avPlayer else { break }
-                    if p.timeControlStatus == .playing {
-                        self.isBuffering = false
-                        self.isPlaying = true
+                    let isReady = p.timeControlStatus == .playing
+                        || (p.currentItem?.status == .readyToPlay && (p.rate > 0 || p.currentItem?.isPlaybackLikelyToKeepUp == true))
+                        || self.currentPlaybackSeconds > 0.05
+                    
+                    if isReady {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.isBuffering = false
+                        }
+                        self.isPlaying = (p.timeControlStatus == .playing)
                         if let item = p.currentItem {
                             await self.trackManager.loadTracks(for: item)
                         }
@@ -923,6 +935,13 @@ public struct VideoDetailView: View {
                 self.totalDurationSeconds = dur
             }
             self.isPlaying = (p.timeControlStatus == .playing)
+            
+            // If the video is rendering frames or time is advancing, dismiss buffering popup
+            if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    self.isBuffering = false
+                }
+            }
             
             if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
