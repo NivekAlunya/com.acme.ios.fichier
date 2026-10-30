@@ -8,19 +8,19 @@ import AVKit
 
 public struct CustomVideoPlayerView: UIViewRepresentable {
     public let player: AVPlayer
+    public let coordinator: CustomVideoPlayerCoordinator
     public var onPiPStatusChanged: ((Bool) -> Void)?
-    public var onCoordinatorReady: ((CustomVideoPlayerCoordinator) -> Void)?
     public var onTwoFingerTap: (() -> Void)?
     
     public init(
         player: AVPlayer,
+        coordinator: CustomVideoPlayerCoordinator,
         onPiPStatusChanged: ((Bool) -> Void)? = nil,
-        onCoordinatorReady: ((CustomVideoPlayerCoordinator) -> Void)? = nil,
         onTwoFingerTap: (() -> Void)? = nil
     ) {
         self.player = player
+        self.coordinator = coordinator
         self.onPiPStatusChanged = onPiPStatusChanged
-        self.onCoordinatorReady = onCoordinatorReady
         self.onTwoFingerTap = onTwoFingerTap
     }
     
@@ -28,22 +28,21 @@ public struct CustomVideoPlayerView: UIViewRepresentable {
         let view = PlayerUIView()
         view.playerLayer.player = player
         view.onTwoFingerTap = onTwoFingerTap
-        context.coordinator.setupPiP(with: view.playerLayer)
-        context.coordinator.onPiPStatusChanged = onPiPStatusChanged
-        onCoordinatorReady?(context.coordinator)
+        coordinator.setupPiP(with: view.playerLayer)
+        coordinator.onPiPStatusChanged = onPiPStatusChanged
         return view
     }
     
     public func updateUIView(_ uiView: PlayerUIView, context: Context) {
         if uiView.playerLayer.player !== player {
             uiView.playerLayer.player = player
-            context.coordinator.setupPiP(with: uiView.playerLayer)
+            coordinator.setupPiP(with: uiView.playerLayer)
         }
         uiView.onTwoFingerTap = onTwoFingerTap
-        context.coordinator.onPiPStatusChanged = onPiPStatusChanged
+        coordinator.onPiPStatusChanged = onPiPStatusChanged
     }
     
     public func makeCoordinator() -> CustomVideoPlayerCoordinator {
-        CustomVideoPlayerCoordinator()
+        coordinator
     }
 }
