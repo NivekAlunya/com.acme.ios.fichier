@@ -21,12 +21,16 @@ public final class VideoPlaybackStore {
             // Clean up any bogus records where duration < 2.0 or position < 2.0
             var valid: [String: VideoPlaybackRecord] = [:]
             for (id, record) in decoded {
-                if record.isFinished {
-                    if record.duration >= 2.0 || record.position >= 2.0 {
-                        valid[id] = record
+                var rec = record
+                if rec.duration > 0 && (rec.position >= rec.duration - 4.0 || rec.progress >= 0.90) {
+                    rec.isFinished = true
+                }
+                if rec.isFinished {
+                    if rec.duration >= 2.0 || rec.position >= 2.0 {
+                        valid[id] = rec
                     }
-                } else if record.position >= 2.0 {
-                    valid[id] = record
+                } else if rec.position >= 2.0 {
+                    valid[id] = rec
                 }
             }
             self.records = valid
@@ -48,6 +52,9 @@ public final class VideoPlaybackStore {
         if record.isFinished {
             return .finished
         }
+        if record.duration > 0 && (record.position >= record.duration - 4.0 || record.progress >= 0.90) {
+            return .finished
+        }
         if record.position >= 3.0 {
             return .inProgress(progress: record.progress)
         }
@@ -56,6 +63,12 @@ public final class VideoPlaybackStore {
     
     public func position(for item: SMBItem) -> Double? {
         guard let record = records[item.id], !record.isFinished, record.position > 3.0 else { return nil }
+        // If the saved position is near the end, do not resume at the end
+        if record.duration > 0 {
+            if record.position >= record.duration - 4.0 || record.position / record.duration >= 0.90 {
+                return nil
+            }
+        }
         return record.position
     }
     
@@ -69,9 +82,9 @@ public final class VideoPlaybackStore {
         // A video with less than 2 seconds played must never be considered completed or in-progress
         guard seconds >= 2.0 else { return }
         
-        // Only mark finished if watched to completion (>= 95% of duration, or within last 4s for videos > 15s)
-        let isNearEnd = duration > 15.0 ? (seconds >= duration - 4.0) : false
-        let isHighPercentage = duration > 0 ? (seconds / duration >= 0.95) : false
+        // Only mark finished if watched to completion (>= 90% of duration, or within last 4s for videos > 15s)
+        let isNearEnd = duration > 15.0 ? (seconds >= duration - 4.0) : (duration > 0 && seconds >= duration - 1.5)
+        let isHighPercentage = duration > 0 ? (seconds / duration >= 0.90) : false
         
         if duration > 0 && (isNearEnd || isHighPercentage) {
             markFinished(for: item, duration: duration)
@@ -83,8 +96,8 @@ public final class VideoPlaybackStore {
     
     public func markFinished(for item: SMBItem, duration: Double = 0) {
         let dur = duration > 0 ? duration : (records[item.id]?.duration ?? 0)
-        guard dur >= 2.0 else { return }
-        records[item.id] = VideoPlaybackRecord(position: dur, duration: dur, isFinished: true)
+        let pos = max(dur, records[item.id]?.position ?? 0)
+        records[item.id] = VideoPlaybackRecord(position: pos, duration: max(dur, pos), isFinished: true)
         persist()
     }
     

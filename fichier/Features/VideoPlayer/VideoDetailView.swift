@@ -14,6 +14,8 @@ public struct VideoDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var currentItem: SMBItem
+    @State private var currentlyLoadedItem: SMBItem?
+    @State private var playbackStartTime: Date = Date()
     @State private var player: AVPlayer?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
     @State private var isBuffering = true
@@ -270,8 +272,24 @@ public struct VideoDetailView: View {
             guard let item = notification.object as? AVPlayerItem,
                   let current = player?.currentItem,
                   item == current else { return }
+            
+            let targetItem = currentlyLoadedItem ?? currentItem
+            
+            // If the video reached end-of-play within 2.0 seconds of starting playback,
+            // it was likely restored right at the end (or near EOF).
+            // In that case, DO NOT skip to the next video!
+            // Instead, rewind to 0:00 and let the user watch the video from the beginning.
+            if Date().timeIntervalSince(playbackStartTime) < 2.0 {
+                player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                currentPlaybackSeconds = 0
+                VideoPlaybackStore.shared.clearPosition(for: targetItem)
+                player?.play()
+                isPlaying = true
+                return
+            }
+            
             if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
-                VideoPlaybackStore.shared.markFinished(for: currentItem, duration: totalDurationSeconds)
+                VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
             }
             playNextVideo()
         }
@@ -742,13 +760,14 @@ public struct VideoDetailView: View {
     }
     
     private func tearDownPlayer() {
-        if let p = player, let current = p.currentItem {
+        if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
             if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
-                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: currentItem)
+                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
             }
         }
+        currentlyLoadedItem = nil
         if let token = periodicTimeObserverToken {
             player?.removeTimeObserver(token)
             periodicTimeObserverToken = nil
@@ -777,10 +796,11 @@ public struct VideoDetailView: View {
     
     private func restartVideo() {
         guard let player = player else { return }
+        let targetItem = currentlyLoadedItem ?? currentItem
         resumeBannerTask?.cancel()
         player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
         currentPlaybackSeconds = 0
-        VideoPlaybackStore.shared.clearPosition(for: currentItem)
+        VideoPlaybackStore.shared.clearPosition(for: targetItem)
         withAnimation {
             resumedToastMessage = nil
         }
@@ -814,7 +834,9 @@ public struct VideoDetailView: View {
     }
     
     private func setupPlayer(for item: SMBItem) {
+        playbackStartTime = Date()
         tearDownPlayer()
+        currentlyLoadedItem = item
         
         // Show immediate preview frame while video buffers
         Task { @MainActor in
@@ -922,10 +944,15 @@ public struct VideoDetailView: View {
         
         // 1. Resume saved position if available
         if let savedSeconds = VideoPlaybackStore.shared.position(for: item) {
-            let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
-            avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
-            self.currentPlaybackSeconds = savedSeconds
-            showResumeBanner(at: savedSeconds)
+            let knownDuration = avPlayer.currentItem?.duration.seconds ?? 0
+            if knownDuration.isFinite && knownDuration > 0 && (savedSeconds >= knownDuration - 4.0 || savedSeconds / knownDuration >= 0.90) {
+                self.currentPlaybackSeconds = 0
+            } else {
+                let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
+                avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                self.currentPlaybackSeconds = savedSeconds
+                showResumeBanner(at: savedSeconds)
+            }
         } else {
             self.currentPlaybackSeconds = 0
         }
