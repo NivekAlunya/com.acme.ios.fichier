@@ -708,7 +708,7 @@ public struct VideoDetailView: View {
     // MARK: - Auto-Hide Controls
     
     private func scheduleControlsAutoHide(delay: Double = 3.5) {
-        guard showControls && isPlaying && !isScrubbingWithGesture && !isScrubbingTimeline else {
+        guard showControls && isPlaying && !isBuffering && !isScrubbingWithGesture && !isScrubbingTimeline else {
             hideControlsTask?.cancel()
             hideControlsTask = nil
             return
@@ -984,6 +984,11 @@ public struct VideoDetailView: View {
                             self.isBuffering = false
                         }
                         self.isPlaying = (p.timeControlStatus != .paused)
+                        if let item = p.currentItem {
+                            Task { @MainActor in
+                                await self.trackManager.loadTracks(for: item)
+                            }
+                        }
                         self.scheduleControlsAutoHide()
                         break
                     }
