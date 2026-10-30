@@ -345,22 +345,22 @@ public struct VideoDetailView: View {
     // MARK: - Center Tools Toolbar (Previous, 2-line Middle, Next)
     
     private var centerToolsBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             // Previous Button (on leading side, larger)
             if videos.count > 1 {
                 Button {
                     goToPrevious()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 28, height: 38)
+                        .frame(width: 32, height: 42)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: 26)
                     .background(Color.white.opacity(0.3))
             }
             
@@ -369,45 +369,53 @@ public struct VideoDetailView: View {
                 // Line 1: Title displaying more text & Counter/Size
                 HStack(spacing: 6) {
                     Text(currentItem.name)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                        .frame(maxWidth: 220)
+                        .frame(maxWidth: 180)
                     
                     Text("•")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.4))
                     
                     Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
-                        .font(.system(size: 9))
+                        .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.7))
                         .lineLimit(1)
                 }
                 
-                // Line 2: All remaining tools
-                HStack(spacing: 12) {
+                // Line 2: Consolidated & Enlarged Tools (17-18pt icons)
+                HStack(spacing: 14) {
                     // 1. Favorite Button
                     Button {
                         FavoritesManager.shared.toggleFavorite(currentItem)
                     } label: {
                         Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
-                            .font(.system(size: 12))
+                            .font(.system(size: 17, weight: .medium))
                             .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     
                     // 2. Save to Camera Roll
                     Button {
                         saveToCameraRoll()
                     } label: {
                         if isSaving {
-                            ProgressView().scaleEffect(0.6)
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 30, height: 30)
                         } else {
                             Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 12))
+                                .font(.system(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
                         }
                     }
+                    .buttonStyle(.plain)
                     .disabled(isSaving)
                     
                     // 3. ShareLink
@@ -417,38 +425,55 @@ public struct VideoDetailView: View {
                             preview: SharePreview(currentItem.name)
                         ) {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 12))
+                                .font(.system(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                     
-                    // 4. Quick Subtitle Toggle Button
-                    if !trackManager.availableSubtitles.isEmpty {
-                        Button {
-                            if let item = player?.currentItem {
-                                trackManager.toggleSubtitles(in: item)
-                            }
-                        } label: {
-                            Image(systemName: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble")
-                                .font(.system(size: 12))
-                                .foregroundStyle(trackManager.isSubtitlesEnabled ? Color.blue : Color.white)
-                        }
-                    }
+                    // 4. AirPlay Button
+                    AirPlayButtonView()
+                        .frame(width: 22, height: 22)
+                        .frame(width: 30, height: 30)
                     
-                    // 5. Playback Options Menu (Speed, Audio, Subtitles)
+                    // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
                     Menu {
-                        // Playback Speed
-                        Section(.Strings.videoPlayerMenuPlaybackSpeed) {
-                            ForEach(VideoPlaybackRate.allCases) { rate in
+                        // Picture-in-Picture
+                        Button {
+                            pipCoordinator?.togglePiP()
+                        } label: {
+                            Label(
+                                isPiPActive ? "Exit Picture in Picture" : "Picture in Picture",
+                                systemImage: isPiPActive ? "pip.exit" : "pip.enter"
+                            )
+                        }
+                        
+                        // Subtitles
+                        if !trackManager.availableSubtitles.isEmpty {
+                            Section(.Strings.videoPlayerMenuSubtitles) {
                                 Button {
-                                    if let p = player {
-                                        trackManager.setPlaybackRate(rate, for: p)
+                                    if let item = player?.currentItem {
+                                        trackManager.toggleSubtitles(in: item)
                                     }
                                 } label: {
-                                    HStack {
-                                        Text(rate.displayName)
-                                        if trackManager.playbackRate == rate {
-                                            Image(systemName: "checkmark")
+                                    Label(
+                                        trackManager.isSubtitlesEnabled ? "Disable Subtitles" : "Enable Subtitles",
+                                        systemImage: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble"
+                                    )
+                                }
+                                ForEach(trackManager.availableSubtitles) { option in
+                                    Button {
+                                        if let item = player?.currentItem {
+                                            trackManager.selectSubtitle(option: option, in: item)
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(option.displayName)
+                                            if trackManager.selectedSubtitleID == option.id {
+                                                Image(systemName: "checkmark")
+                                            }
                                         }
                                     }
                                 }
@@ -475,20 +500,18 @@ public struct VideoDetailView: View {
                             }
                         }
                         
-                        // Subtitles
-                        if !trackManager.availableSubtitles.isEmpty {
-                            Section(.Strings.videoPlayerMenuSubtitles) {
-                                ForEach(trackManager.availableSubtitles) { option in
-                                    Button {
-                                        if let item = player?.currentItem {
-                                            trackManager.selectSubtitle(option: option, in: item)
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text(option.displayName)
-                                            if trackManager.selectedSubtitleID == option.id {
-                                                Image(systemName: "checkmark")
-                                            }
+                        // Playback Speed
+                        Section(.Strings.videoPlayerMenuPlaybackSpeed) {
+                            ForEach(VideoPlaybackRate.allCases) { rate in
+                                Button {
+                                    if let p = player {
+                                        trackManager.setPlaybackRate(rate, for: p)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(rate.displayName)
+                                        if trackManager.playbackRate == rate {
+                                            Image(systemName: "checkmark")
                                         }
                                     }
                                 }
@@ -496,39 +519,29 @@ public struct VideoDetailView: View {
                         }
                     } label: {
                         Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(trackManager.isSubtitlesEnabled || trackManager.playbackRate != .normal ? Color.blue : Color.white)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
                     }
-                    
-                    // 6. Picture-in-Picture Button
-                    Button {
-                        pipCoordinator?.togglePiP()
-                    } label: {
-                        Image(systemName: isPiPActive ? "pip.exit" : "pip.enter")
-                            .font(.system(size: 12))
-                            .foregroundStyle(isPiPActive ? Color.blue : Color.white)
-                    }
-                    
-                    // 7. AirPlay Button
-                    AirPlayButtonView()
-                        .frame(width: 18, height: 18)
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
             
             // Next Button (on trailing side, larger)
             if videos.count > 1 {
                 Divider()
-                    .frame(height: 24)
+                    .frame(height: 26)
                     .background(Color.white.opacity(0.3))
                 
                 Button {
                     goToNext()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 28, height: 38)
+                        .frame(width: 32, height: 42)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

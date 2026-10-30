@@ -66,7 +66,7 @@ public struct VideoVolumeBar: View {
                         }
                 )
             }
-            .frame(width: 80, height: 20)
+            .frame(width: 60, height: 20)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
