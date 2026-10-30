@@ -739,13 +739,13 @@ public struct VideoDetailView: View {
     
     private func showResumeBanner(at savedSeconds: Double) {
         resumeBannerTask?.cancel()
-        withAnimation {
+        withAnimation(.easeInOut(duration: 0.3)) {
             resumedToastMessage = String(localized: .Strings.videoPlayerResumeToast(formatSeconds(savedSeconds)))
         }
         resumeBannerTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(4.0))
+            try? await Task.sleep(for: .seconds(8.0))
             guard !Task.isCancelled else { return }
-            withAnimation {
+            withAnimation(.easeInOut(duration: 0.4)) {
                 resumedToastMessage = nil
             }
         }
