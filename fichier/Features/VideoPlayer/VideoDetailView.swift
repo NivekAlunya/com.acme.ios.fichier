@@ -34,7 +34,7 @@ public struct VideoDetailView: View {
     @State private var periodicTimeObserverToken: Any?
     @State private var resumeBannerTask: Task<Void, Never>?
     @State private var isPiPActive: Bool = false
-    @State private var pipCoordinator: CustomVideoPlayerCoordinator?
+    @State private var pipCoordinator = CustomVideoPlayerCoordinator()
     @State private var currentPlaybackSeconds: Double = 0
     @State private var totalDurationSeconds: Double = 0
     @State private var isPlaying: Bool = true
@@ -75,11 +75,9 @@ public struct VideoDetailView: View {
             if let player {
                 CustomVideoPlayerView(
                     player: player,
+                    coordinator: pipCoordinator,
                     onPiPStatusChanged: { isActive in
                         self.isPiPActive = isActive
-                    },
-                    onCoordinatorReady: { coordinator in
-                        self.pipCoordinator = coordinator
                     },
                     onTwoFingerTap: {
                         handleTwoFingerTap()
@@ -455,7 +453,7 @@ public struct VideoDetailView: View {
                     Menu {
                         // Picture-in-Picture
                         Button {
-                            pipCoordinator?.togglePiP()
+                            pipCoordinator.togglePiP()
                         } label: {
                             Label(
                                 isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),
@@ -834,6 +832,11 @@ public struct VideoDetailView: View {
         player = nil
         isBuffering = true
         errorMessage = nil
+        
+        // Deactivate audio session in background so other apps' audio can resume
+        Task.detached(priority: .utility) {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
     }
     
     private func restartVideo() {
@@ -885,13 +888,15 @@ public struct VideoDetailView: View {
             self.previewThumbnail = await manager.downloadThumbnail(for: item, maxDimension: 600)
         }
         
-        // Configure audio session synchronously before player initialization
-        let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playback, mode: .moviePlayback)
-            try session.setActive(true)
-        } catch {
-            AppLog.player.error("Failed to activate audio session: \(error.localizedDescription)")
+        // Configure audio session asynchronously off the main thread to prevent UI hangs
+        Task.detached(priority: .userInitiated) {
+            let session = AVAudioSession.sharedInstance()
+            do {
+                try session.setCategory(.playback, mode: .moviePlayback)
+                try session.setActive(true)
+            } catch {
+                AppLog.player.error("Failed to activate audio session: \(error.localizedDescription)")
+            }
         }
         
         // 1. If previously downloaded/cached locally, play immediately from file
