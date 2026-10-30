@@ -54,7 +54,7 @@ public final class VideoTrackManager {
             
             var audioOptions: [VideoTrackOption] = []
             for (idx, option) in audioGroup.options.enumerated() {
-                let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerTrackFallback(Int64(idx + 1))) : option.displayName
+                let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerTrackFallback(idx + 1)) : option.displayName
                 let trackID = "audio_\(idx)_\(name)"
                 let trackOption = VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
                 audioOptions.append(trackOption)
@@ -82,7 +82,7 @@ public final class VideoTrackManager {
             }
             
             for (idx, option) in subGroup.options.enumerated() {
-                let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerSubtitleFallback(Int64(idx + 1))) : option.displayName
+                let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerSubtitleFallback(idx + 1)) : option.displayName
                 let trackID = "sub_\(idx)_\(name)"
                 let trackOption = VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
                 subOptions.append(trackOption)

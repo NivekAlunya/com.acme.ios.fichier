@@ -273,7 +273,7 @@ public struct VideoDetailView: View {
         .task(id: currentItem.id) {
             setupPlayer(for: currentItem)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { notification in
             guard let item = notification.object as? AVPlayerItem,
                   let current = player?.currentItem,
                   item == current else { return }
@@ -1013,29 +1013,31 @@ public struct VideoDetailView: View {
         // 4. Periodic time observer to remember playback progress & update timeline
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
         self.periodicTimeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak avPlayer] time in
-            guard let p = avPlayer, let current = p.currentItem else { return }
-            let secs = time.seconds
-            let dur = current.duration.seconds
-            
-            if !self.isScrubbingWithGesture && !self.isScrubbingTimeline {
-                if secs.isFinite && !secs.isNaN {
-                    self.currentPlaybackSeconds = secs
+            MainActor.assumeIsolated {
+                guard let p = avPlayer, let current = p.currentItem else { return }
+                let secs = time.seconds
+                let dur = current.duration.seconds
+                
+                if !self.isScrubbingWithGesture && !self.isScrubbingTimeline {
+                    if secs.isFinite && !secs.isNaN {
+                        self.currentPlaybackSeconds = secs
+                    }
                 }
-            }
-            if dur.isFinite && !dur.isNaN && dur > 0 {
-                self.totalDurationSeconds = dur
-            }
-            self.isPlaying = (p.timeControlStatus == .playing)
-            
-            // If the video is rendering frames or time is advancing, dismiss buffering popup
-            if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.isBuffering = false
+                if dur.isFinite && !dur.isNaN && dur > 0 {
+                    self.totalDurationSeconds = dur
                 }
-            }
-            
-            if !self.isScrubbingWithGesture && !self.isScrubbingTimeline && secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
-                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
+                self.isPlaying = (p.timeControlStatus == .playing)
+                
+                // If the video is rendering frames or time is advancing, dismiss buffering popup
+                if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.isBuffering = false
+                    }
+                }
+                
+                if !self.isScrubbingWithGesture && !self.isScrubbingTimeline && secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+                    VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
+                }
             }
         }
     }

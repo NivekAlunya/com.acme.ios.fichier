@@ -6,8 +6,8 @@
 import UIKit
 import ImageIO
 
-public enum AnimatedImageDecoder {
-    public static func decode(from data: Data) -> UIImage? {
+nonisolated public enum AnimatedImageDecoder: Sendable {
+    nonisolated public static func decode(from data: Data) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
             return UIImage(data: data)
         }
@@ -38,7 +38,7 @@ public enum AnimatedImageDecoder {
         return UIImage.animatedImage(with: images, duration: totalDuration) ?? UIImage(data: data)
     }
     
-    private static func getFrameDuration(from source: CGImageSource, at index: Int) -> Double {
+    nonisolated private static func getFrameDuration(from source: CGImageSource, at index: Int) -> Double {
         guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] else {
             return 0.1
         }
