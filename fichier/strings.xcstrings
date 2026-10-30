@@ -8904,6 +8904,40 @@
         "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉" } }
       }
     },
+    "gallery_badge_watched": {
+      "comment": "Badge label indicating a video has been completely watched/played",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Gesehen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Played" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Vu" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生済み" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Bekeken" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Obejrzane" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已播放" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已播放" } }
+      }
+    },
+    "gallery_badge_in_progress": {
+      "comment": "Badge label indicating a video playback is partially watched/in progress",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabe läuft" } },
+        "en": { "stringUnit": { "state": "translated", "value": "In Progress" } },
+        "es": { "stringUnit": { "state": "translated", "value": "En curso" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En cours" } },
+        "it": { "stringUnit": { "state": "translated", "value": "In corso" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生中" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Bezig" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "W trakcie" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "A reproduzir" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放中" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放中" } }
+      }
+    },
     "settings_title": {
       "comment": "Title of the settings sheet",
       "extractionState": "manual",

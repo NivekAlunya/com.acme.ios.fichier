@@ -56,8 +56,72 @@ struct MediaThumbnailCell: View {
                 }
                 
                 if item.isVideo {
+                    let playbackStatus = VideoPlaybackStore.shared.status(for: item)
+                    
+                    // Video Status Indicator (Watched vs In Progress)
+                    switch playbackStatus {
+                    case .finished:
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 9))
+                                .foregroundColor(.green)
+                            Text(.Strings.galleryBadgeWatched)
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.65))
+                        .clipShape(Capsule())
+                        .padding(6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        
+                    case .inProgress(let progress):
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.blue)
+                            if progress > 0 {
+                                Text("\(Int(progress * 100))%")
+                                    .font(.system(size: 8, weight: .bold))
+                            } else {
+                                Text(.Strings.galleryBadgeInProgress)
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.65))
+                        .clipShape(Capsule())
+                        .padding(6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        
+                        // Progress bar along the bottom edge of the thumbnail
+                        if progress > 0 {
+                            GeometryReader { geo in
+                                let barWidth = geo.size.width
+                                ZStack(alignment: .leading) {
+                                    Rectangle()
+                                        .fill(Color.black.opacity(0.4))
+                                        .frame(height: 3.5)
+                                    
+                                    Rectangle()
+                                        .fill(Color.blue)
+                                        .frame(width: max(0, min(barWidth, barWidth * progress)), height: 3.5)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                        
+                    case .unwatched:
+                        EmptyView()
+                    }
+                    
+                    // Media Type Badge (Bottom-Trailing)
                     HStack(spacing: 3) {
-                        Image(systemName: VideoPlaybackStore.shared.position(for: item) != nil ? "arrow.counterclockwise" : "video.fill")
+                        Image(systemName: "video.fill")
                             .font(.system(size: 9))
                         Text(.Strings.galleryBadgeVideo)
                             .font(.system(size: 8, weight: .bold))

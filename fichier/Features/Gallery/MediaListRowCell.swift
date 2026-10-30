@@ -66,7 +66,42 @@ struct MediaListRowCell: View {
                 }
                 
                 if item.isVideo {
-                    Image(systemName: VideoPlaybackStore.shared.position(for: item) != nil ? "arrow.counterclockwise" : "video.fill")
+                    let playbackStatus = VideoPlaybackStore.shared.status(for: item)
+                    
+                    switch playbackStatus {
+                    case .finished:
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.green)
+                            .padding(2)
+                            .background(Color.black.opacity(0.75))
+                            .clipShape(Circle())
+                            .padding(2)
+                            .frame(width: 52, height: 52, alignment: .topLeading)
+                        
+                    case .inProgress(let progress):
+                        if progress > 0 {
+                            GeometryReader { geo in
+                                let barWidth = geo.size.width
+                                ZStack(alignment: .leading) {
+                                    Rectangle()
+                                        .fill(Color.black.opacity(0.4))
+                                        .frame(height: 2.5)
+                                    
+                                    Rectangle()
+                                        .fill(Color.blue)
+                                        .frame(width: max(0, min(barWidth, barWidth * progress)), height: 2.5)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        
+                    case .unwatched:
+                        EmptyView()
+                    }
+                    
+                    Image(systemName: "video.fill")
                         .font(.system(size: 9))
                         .foregroundColor(.white)
                         .padding(3)
@@ -103,6 +138,31 @@ struct MediaListRowCell: View {
                     if let dateStr = item.formattedDate {
                         Text("•")
                         Text(dateStr)
+                    }
+                    if item.isVideo {
+                        let status = VideoPlaybackStore.shared.status(for: item)
+                        switch status {
+                        case .finished:
+                            Text("•")
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 9))
+                                Text(.Strings.galleryBadgeWatched)
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundColor(.green)
+                        case .inProgress(let progress):
+                            Text("•")
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 8, weight: .bold))
+                                Text(progress > 0 ? "\(Int(progress * 100))%" : .Strings.galleryBadgeInProgress)
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundColor(.blue)
+                        case .unwatched:
+                            EmptyView()
+                        }
                     }
                 }
                 .font(.caption)

@@ -249,7 +249,7 @@ public struct VideoDetailView: View {
             guard let item = notification.object as? AVPlayerItem,
                   let current = player?.currentItem,
                   item == current else { return }
-            VideoPlaybackStore.shared.clearPosition(for: currentItem)
+            VideoPlaybackStore.shared.markFinished(for: currentItem, duration: totalDurationSeconds)
             playNextVideo()
         }
         .onDisappear {
