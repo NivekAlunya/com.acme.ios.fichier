@@ -85,7 +85,7 @@ struct MediaListRowCell: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     
-                    HStack(spacing: 2) {
+                    HStack(spacing: 3) {
                         Image(systemName: "video.fill")
                             .font(.system(size: 8))
                             .foregroundColor(.white)
@@ -95,10 +95,8 @@ struct MediaListRowCell: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 7, weight: .bold))
                                 .foregroundColor(.green)
-                        case .inProgress:
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 7, weight: .bold))
-                                .foregroundColor(.blue)
+                        case .inProgress(let progress):
+                            VideoProgressRing(progress: progress, size: 7.5, lineWidth: 1.3, ringColor: .blue)
                         case .unwatched:
                             EmptyView()
                         }

@@ -77,7 +77,7 @@ struct MediaThumbnailCell: View {
                     }
                     
                     // Media Type & Playback Status Badge (Bottom-Trailing)
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         Image(systemName: "video.fill")
                             .font(.system(size: 9))
                         Text(.Strings.galleryBadgeVideo)
@@ -88,10 +88,8 @@ struct MediaThumbnailCell: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 8, weight: .bold))
                                 .foregroundColor(.green)
-                        case .inProgress:
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.blue)
+                        case .inProgress(let progress):
+                            VideoProgressRing(progress: progress, size: 9.0, lineWidth: 1.5, ringColor: .blue)
                         case .unwatched:
                             EmptyView()
                         }
