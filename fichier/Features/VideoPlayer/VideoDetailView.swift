@@ -78,6 +78,9 @@ public struct VideoDetailView: View {
                     },
                     onCoordinatorReady: { coordinator in
                         self.pipCoordinator = coordinator
+                    },
+                    onTwoFingerTap: {
+                        handleTwoFingerTap()
                     }
                 )
                 .ignoresSafeArea()
@@ -685,6 +688,11 @@ public struct VideoDetailView: View {
     
     // MARK: - Transport Actions
     
+    private func handleTwoFingerTap() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        togglePlayPause()
+    }
+    
     private func togglePlayPause() {
         guard let player = player else { return }
         if player.timeControlStatus == .playing {
@@ -695,6 +703,10 @@ public struct VideoDetailView: View {
                 showControls = true
             }
         } else {
+            if let current = player.currentItem, currentPlaybackSeconds >= totalDurationSeconds - 0.5 && totalDurationSeconds > 1.0 {
+                player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                currentPlaybackSeconds = 0
+            }
             player.play()
             isPlaying = true
             scheduleControlsAutoHide()
