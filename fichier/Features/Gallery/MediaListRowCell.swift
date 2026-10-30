@@ -66,7 +66,7 @@ struct MediaListRowCell: View {
                 }
                 
                 if item.isVideo {
-                    Image(systemName: "video.fill")
+                    Image(systemName: VideoPlaybackStore.shared.position(for: item) != nil ? "arrow.counterclockwise" : "video.fill")
                         .font(.system(size: 9))
                         .foregroundColor(.white)
                         .padding(3)

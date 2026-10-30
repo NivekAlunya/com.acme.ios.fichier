@@ -57,7 +57,7 @@ struct MediaThumbnailCell: View {
                 
                 if item.isVideo {
                     HStack(spacing: 3) {
-                        Image(systemName: "video.fill")
+                        Image(systemName: VideoPlaybackStore.shared.position(for: item) != nil ? "arrow.counterclockwise" : "video.fill")
                             .font(.system(size: 9))
                         Text(.Strings.galleryBadgeVideo)
                             .font(.system(size: 8, weight: .bold))
