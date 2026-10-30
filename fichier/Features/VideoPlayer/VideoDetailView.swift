@@ -262,29 +262,42 @@ public struct VideoDetailView: View {
     
     private var topBar: some View {
         HStack {
+            // Close Button (Lonely at top leading)
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 16)
+            
             Spacer()
             
-            HStack(spacing: 8) {
-                // 1. Close Button
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(6)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(Circle())
+            // Sound Level Bar at top trailing
+            VideoVolumeBar(volume: $volume, isMuted: $isMuted)
+                .padding(.trailing, 16)
+                .onChange(of: volume) { _, newVol in
+                    player?.volume = Float(newVol)
+                    resetAutoHideTimer()
                 }
-                
-                Divider()
-                    .frame(height: 18)
-                    .background(Color.white.opacity(0.3))
-                
-                // 2. Previous Video
+                .onChange(of: isMuted) { _, muted in
+                    player?.isMuted = muted
+                    resetAutoHideTimer()
+                }
+        }
+        .overlay(alignment: .center) {
+            // Center Tools Capsule
+            HStack(spacing: 8) {
+                // 1. Previous Video
                 if videos.count > 1 {
                     Button {
-                        withAnimation { goToPrevious() }
+                        goToPrevious()
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 12, weight: .bold))
@@ -293,23 +306,23 @@ public struct VideoDetailView: View {
                     }
                 }
                 
-                // 3. Title & Counter
+                // 2. Title & Counter
                 VStack(spacing: 1) {
                     Text(currentItem.name)
                         .font(.caption.bold())
                         .foregroundColor(.white)
                         .lineLimit(1)
-                        .frame(maxWidth: 120)
+                        .frame(maxWidth: 100)
                     
                     Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
                         .font(.system(size: 9))
                         .foregroundColor(.white.opacity(0.7))
                 }
                 
-                // 4. Next Video
+                // 3. Next Video
                 if videos.count > 1 {
                     Button {
-                        withAnimation { goToNext() }
+                        goToNext()
                     } label: {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .bold))
@@ -322,7 +335,7 @@ public struct VideoDetailView: View {
                     .frame(height: 18)
                     .background(Color.white.opacity(0.3))
                 
-                // 5. Favorite Button
+                // 4. Favorite Button
                 Button {
                     FavoritesManager.shared.toggleFavorite(currentItem)
                 } label: {
@@ -332,7 +345,7 @@ public struct VideoDetailView: View {
                         .padding(4)
                 }
                 
-                // 6. Save to Camera Roll
+                // 5. Save to Camera Roll
                 Button {
                     saveToCameraRoll()
                 } label: {
@@ -347,7 +360,7 @@ public struct VideoDetailView: View {
                 }
                 .disabled(isSaving)
                 
-                // 7. ShareLink
+                // 6. ShareLink
                 if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
                     ShareLink(
                         item: MediaCacheManager.shared.localVideoURL(for: currentItem),
@@ -360,7 +373,7 @@ public struct VideoDetailView: View {
                     }
                 }
                 
-                // 8. Quick Subtitle Toggle Button
+                // 7. Quick Subtitle Toggle Button
                 if !trackManager.availableSubtitles.isEmpty {
                     Button {
                         if let item = player?.currentItem {
@@ -374,7 +387,7 @@ public struct VideoDetailView: View {
                     }
                 }
                 
-                // 9. Playback Options Menu (Speed, Audio, Subtitles)
+                // 8. Playback Options Menu (Speed, Audio, Subtitles)
                 Menu {
                     // Playback Speed
                     Section(.Strings.videoPlayerMenuPlaybackSpeed) {
@@ -440,7 +453,7 @@ public struct VideoDetailView: View {
                         .padding(4)
                 }
                 
-                // 10. Picture-in-Picture Button
+                // 9. Picture-in-Picture Button
                 Button {
                     pipCoordinator?.togglePiP()
                 } label: {
@@ -450,7 +463,7 @@ public struct VideoDetailView: View {
                         .padding(4)
                 }
                 
-                // 11. AirPlay Button
+                // 10. AirPlay Button
                 AirPlayButtonView()
                     .frame(width: 22, height: 22)
                     .padding(2)
@@ -462,20 +475,6 @@ public struct VideoDetailView: View {
                     .fill(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
             )
-            
-            Spacer()
-        }
-        .overlay(alignment: .trailing) {
-            VideoVolumeBar(volume: $volume, isMuted: $isMuted)
-                .padding(.trailing, 16)
-                .onChange(of: volume) { _, newVol in
-                    player?.volume = Float(newVol)
-                    resetAutoHideTimer()
-                }
-                .onChange(of: isMuted) { _, muted in
-                    player?.isMuted = muted
-                    resetAutoHideTimer()
-                }
         }
         .padding(.top, 10)
     }
