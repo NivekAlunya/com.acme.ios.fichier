@@ -456,7 +456,7 @@ public struct VideoDetailView: View {
                             pipCoordinator?.togglePiP()
                         } label: {
                             Label(
-                                isPiPActive ? "Exit Picture in Picture" : "Picture in Picture",
+                                isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),
                                 systemImage: isPiPActive ? "pip.exit" : "pip.enter"
                             )
                         }
@@ -470,7 +470,7 @@ public struct VideoDetailView: View {
                                     }
                                 } label: {
                                     Label(
-                                        trackManager.isSubtitlesEnabled ? "Disable Subtitles" : "Enable Subtitles",
+                                        trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
                                         systemImage: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble"
                                     )
                                 }
