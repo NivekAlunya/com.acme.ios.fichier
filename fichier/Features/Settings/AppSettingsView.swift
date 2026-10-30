@@ -136,6 +136,9 @@ struct AppSettingsView: View {
                     .font(.body.bold())
                 }
             }
+            .task {
+                cacheSizeString = await MediaCacheManager.shared.formattedCacheSize()
+            }
         }
     }
     
@@ -150,8 +153,9 @@ struct AppSettingsView: View {
         Task {
             MediaCacheManager.shared.clearAllCache()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            let newSize = await MediaCacheManager.shared.formattedCacheSize()
             await MainActor.run {
-                cacheSizeString = MediaCacheManager.shared.formattedCacheSize()
+                cacheSizeString = newSize
                 isClearingCache = false
             }
         }

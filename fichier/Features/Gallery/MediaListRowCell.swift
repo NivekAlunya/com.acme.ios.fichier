@@ -66,14 +66,47 @@ struct MediaListRowCell: View {
                 }
                 
                 if item.isVideo {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: 9))
-                        .foregroundColor(.white)
-                        .padding(3)
-                        .background(Color.black.opacity(0.75))
-                        .clipShape(Circle())
-                        .padding(2)
-                        .frame(width: 52, height: 52, alignment: .bottomTrailing)
+                    let playbackStatus = VideoPlaybackStore.shared.status(for: item)
+                    
+                    if case .inProgress(let progress) = playbackStatus, progress > 0 {
+                        GeometryReader { geo in
+                            let barWidth = geo.size.width
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.4))
+                                    .frame(height: 2.5)
+                                
+                                Rectangle()
+                                    .fill(Color.blue)
+                                    .frame(width: max(0, min(barWidth, barWidth * progress)), height: 2.5)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    
+                    HStack(spacing: 3) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(.white)
+                        
+                        switch playbackStatus {
+                        case .finished:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 7, weight: .bold))
+                                .foregroundColor(.green)
+                        case .inProgress(let progress):
+                            VideoProgressRing(progress: progress, size: 7.5, lineWidth: 1.3, ringColor: .blue)
+                        case .unwatched:
+                            EmptyView()
+                        }
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.black.opacity(0.75))
+                    .clipShape(Capsule())
+                    .padding(2)
+                    .frame(width: 52, height: 52, alignment: .bottomTrailing)
                 } else if item.isGIF {
                     Text(.Strings.galleryBadgeGif)
                         .font(.system(size: 7, weight: .bold))

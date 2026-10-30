@@ -56,11 +56,43 @@ struct MediaThumbnailCell: View {
                 }
                 
                 if item.isVideo {
-                    HStack(spacing: 3) {
+                    let playbackStatus = VideoPlaybackStore.shared.status(for: item)
+                    
+                    // Progress bar along the bottom edge of the thumbnail
+                    if case .inProgress(let progress) = playbackStatus, progress > 0 {
+                        GeometryReader { geo in
+                            let barWidth = geo.size.width
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.4))
+                                    .frame(height: 3.5)
+                                
+                                Rectangle()
+                                    .fill(Color.blue)
+                                    .frame(width: max(0, min(barWidth, barWidth * progress)), height: 3.5)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    
+                    // Media Type & Playback Status Badge (Bottom-Trailing)
+                    HStack(spacing: 4) {
                         Image(systemName: "video.fill")
                             .font(.system(size: 9))
                         Text(.Strings.galleryBadgeVideo)
                             .font(.system(size: 8, weight: .bold))
+                        
+                        switch playbackStatus {
+                        case .finished:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.green)
+                        case .inProgress(let progress):
+                            VideoProgressRing(progress: progress, size: 9.0, lineWidth: 1.5, ringColor: .blue)
+                        case .unwatched:
+                            EmptyView()
+                        }
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 5)

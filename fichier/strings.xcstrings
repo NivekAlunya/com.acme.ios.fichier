@@ -8785,6 +8785,261 @@
         }
       }
     },
+    "video_player_menu_audio": {
+      "comment": "Section header for audio track selection in video player menu",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Audio" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Audio" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Audio" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Piste audio" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Audio" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オーディオ" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Audio" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Ścieżka dźwiękowa" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Áudio" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "音频" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "音訊" } }
+      }
+    },
+    "video_player_menu_playback_speed": {
+      "comment": "Section header for playback speed selection in video player menu",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabegeschwindigkeit" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Playback Speed" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Velocidad de reproducción" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Vitesse de lecture" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Velocità di riproduzione" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生速度" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Afspeelsnelheid" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Szybkość odtwarzania" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Velocidade de reprodução" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放速度" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放速度" } }
+      }
+    },
+    "video_player_menu_subtitles": {
+      "comment": "Section header for subtitles selection in video player menu",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Untertitel" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Subtitles" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Subtítulos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Sous-titres" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Sottotitoli" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "字幕" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Napisy" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Legendas" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "字幕" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "字幕" } }
+      }
+    },
+    "video_player_menu_title": {
+      "comment": "Title of the playback options menu",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabeoptionen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Playback Options" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Opciones de reproducción" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Options de lecture" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Opzioni di riproduzione" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生オプション" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Afspeelopties" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Opcje odtwarzania" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Opções de reprodução" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放选项" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放選項" } }
+      }
+    },
+    "video_player_restart_button": {
+      "comment": "Button to restart playback from the beginning",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Neu starten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Restart" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Reiniciar" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Recommencer" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Ricomincia" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "最初から再生" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Herstarten" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Od początku" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Reiniciar" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新开始" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "重新開始" } }
+      }
+    },
+    "video_player_resume_toast": {
+      "comment": "Banner message indicating video playback resumed from a previous timestamp",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Fortgesetzt bei %@" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Resumed at %@" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Reanudado en %@" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Repris à %@" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Ripreso alle %@" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%@ から再開しました" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Hervat op %@" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wznowiono od %@" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Retomado às %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已从 %@ 恢复播放" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已從 %@ 繼續播放" } }
+      }
+    },
+    "video_player_subtitles_off": {
+      "comment": "Option to disable subtitles in video player",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Aus" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Off" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Desactivados" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Désactivés" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Disattivati" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "オフ" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Uit" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wyłączone" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Desativado" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉" } }
+      }
+    },
+    "video_player_menu_pip_enter": {
+      "comment": "Menu item to start Picture-in-Picture mode",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Bild-in-Bild" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Imagen dentro de otra" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Image dans l’image" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ピクチャ・イン・ピクチャ" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Beeld-in-beeld" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Obraz w obrazie" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "画中画" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "畫中畫" } }
+      }
+    },
+    "video_player_menu_pip_exit": {
+      "comment": "Menu item to stop Picture-in-Picture mode",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Bild-in-Bild beenden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Exit Picture in Picture" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Salir de imagen dentro de otra" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Quitter Image dans l’image" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Esci da Picture in Picture" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ピクチャ・イン・ピクチャを終了" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Beeld-in-beeld sluiten" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wyjdź z trybu obrazu w obrazie" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Sair de Picture in Picture" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "退出画中画" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "結束畫中畫" } }
+      }
+    },
+    "video_player_menu_subtitles_enable": {
+      "comment": "Menu item to turn on subtitles",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Untertitel aktivieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Enable Subtitles" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Activar subtítulos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Activer les sous-titres" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Attiva sottotitoli" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "字幕を有効にする" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels inschakelen" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Włącz napisy" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Ativar legendas" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用字幕" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用字幕" } }
+      }
+    },
+    "video_player_menu_subtitles_disable": {
+      "comment": "Menu item to turn off subtitles",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Untertitel deaktivieren" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Disable Subtitles" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Desactivar subtítulos" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Désactiver les sous-titres" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Disattiva sottotitoli" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "字幕を無効にする" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels uitschakelen" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wyłącz napisy" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Desativar legendas" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭字幕" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停用字幕" } }
+      }
+    },
+    "video_player_track_fallback": {
+      "comment": "Default display name for unnamed audio track",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Spur %lld" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Track %lld" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Pista %lld" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Piste %lld" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Traccia %lld" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "トラック %lld" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Track %lld" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Ścieżka %lld" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Faixa %lld" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "音轨 %lld" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "音軌 %lld" } }
+      }
+    },
+    "video_player_subtitle_fallback": {
+      "comment": "Default display name for unnamed subtitle track",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Untertitel %lld" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Subtitle %lld" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Subtítulo %lld" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Sous-titre %lld" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Sottotitolo %lld" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitel %lld" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Napisy %lld" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Legenda %lld" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } }
+      }
+    },
+    "gallery_badge_watched": {
+      "comment": "Badge label indicating a video has been completely watched/played",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Gesehen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Played" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Vu" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生済み" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Bekeken" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Obejrzane" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Visto" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已播放" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已播放" } }
+      }
+    },
+    "gallery_badge_in_progress": {
+      "comment": "Badge label indicating a video playback is partially watched/in progress",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabe läuft" } },
+        "en": { "stringUnit": { "state": "translated", "value": "In Progress" } },
+        "es": { "stringUnit": { "state": "translated", "value": "En curso" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "En cours" } },
+        "it": { "stringUnit": { "state": "translated", "value": "In corso" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "再生中" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Bezig" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "W trakcie" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "A reproduzir" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放中" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放中" } }
+      }
+    },
     "settings_title": {
       "comment": "Title of the settings sheet",
       "extractionState": "manual",

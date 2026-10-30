@@ -8,34 +8,31 @@ import AVFoundation
 
 actor ResourceLoadingTaskTracker {
     private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
-    private var cancelledRequests: Set<AVAssetResourceLoadingRequest> = []
     
-    func track(task: Task<Void, Never>, for request: AVAssetResourceLoadingRequest) {
-        if cancelledRequests.contains(request) {
-            cancelledRequests.remove(request)
-            task.cancel()
-            return
+    func runTask(
+        for request: AVAssetResourceLoadingRequest,
+        operation: @Sendable @escaping () async -> Void
+    ) {
+        guard !request.isCancelled else { return }
+        
+        let task = Task { [weak self] in
+            await operation()
+            await self?.remove(for: request)
         }
         activeTasks[request] = task
     }
     
-    func cancelTask(for request: AVAssetResourceLoadingRequest) {
-        if let task = activeTasks.removeValue(forKey: request) {
-            task.cancel()
-        } else {
-            cancelledRequests.insert(request)
-        }
-    }
-    
     func remove(for request: AVAssetResourceLoadingRequest) {
         activeTasks.removeValue(forKey: request)
-        cancelledRequests.remove(request)
+    }
+    
+    func cancelTask(for request: AVAssetResourceLoadingRequest) {
+        activeTasks.removeValue(forKey: request)?.cancel()
     }
     
     func cancelAll() {
         let tasks = Array(activeTasks.values)
         activeTasks.removeAll()
-        cancelledRequests.removeAll()
         tasks.forEach { $0.cancel() }
     }
 }

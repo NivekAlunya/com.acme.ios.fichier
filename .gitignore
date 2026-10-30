@@ -64,3 +64,6 @@ fastlane/test_output
 
 # Misc
 script/
+*.mp4
+.DS_Store
+

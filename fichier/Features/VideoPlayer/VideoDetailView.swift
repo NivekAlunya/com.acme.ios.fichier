@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import OSLog
 
 public struct VideoDetailView: View {
     var manager: SMBDirectManager
@@ -12,7 +13,10 @@ public struct VideoDetailView: View {
     let initialItem: SMBItem
     
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var currentItem: SMBItem
+    @State private var currentlyLoadedItem: SMBItem?
+    @State private var playbackStartTime: Date = Date()
     @State private var player: AVPlayer?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
     @State private var isBuffering = true
@@ -24,14 +28,25 @@ public struct VideoDetailView: View {
     @State private var loadTask: Task<Void, Never>?
     @State private var previewThumbnail: UIImage?
     
-    // Swipe to Seek Gesture State
+    // Playback Enhancements: Resume, Audio/Subtitles/Speed, PiP, AirPlay, Timeline, Volume
+    @State private var trackManager = VideoTrackManager()
+    @State private var resumedToastMessage: String?
+    @State private var periodicTimeObserverToken: Any?
+    @State private var resumeBannerTask: Task<Void, Never>?
+    @State private var isPiPActive: Bool = false
+    @State private var pipCoordinator: CustomVideoPlayerCoordinator?
+    @State private var currentPlaybackSeconds: Double = 0
+    @State private var totalDurationSeconds: Double = 0
+    @State private var isPlaying: Bool = true
+    @State private var volume: Double = 1.0
+    @State private var isMuted: Bool = false
+    @State private var hideControlsTask: Task<Void, Never>?
+    
+    // Swipe for Seeking Gesture State
     @State private var isScrubbingWithGesture: Bool = false
-    @State private var scrubDeltaSeconds: Double = 0
-    @State private var initialScrubTimeSeconds: Double = 0
-    @State private var scrubTargetTimeSeconds: Double = 0
-    @State private var videoDurationSeconds: Double = 0
+    @State private var isScrubbingTimeline: Bool = false
+    @State private var initialScrubTime: Double = 0
     @State private var wasPlayingBeforeScrub: Bool = false
-    @State private var scrubDismissTask: Task<Void, Never>?
     @State private var isSeekingFrame: Bool = false
     @State private var pendingSeekSeconds: Double? = nil
     @State private var lastSeekTime: Date = Date.distantPast
@@ -56,10 +71,21 @@ public struct VideoDetailView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            // Video Player or Instant Preview Thumbnail
+            // Custom Video Player (Native UI disabled, custom controls enabled)
             if let player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
+                CustomVideoPlayerView(
+                    player: player,
+                    onPiPStatusChanged: { isActive in
+                        self.isPiPActive = isActive
+                    },
+                    onCoordinatorReady: { coordinator in
+                        self.pipCoordinator = coordinator
+                    },
+                    onTwoFingerTap: {
+                        handleTwoFingerTap()
+                    }
+                )
+                .ignoresSafeArea()
             } else if let previewThumbnail {
                 Image(uiImage: previewThumbnail)
                     .resizable()
@@ -80,6 +106,7 @@ public struct VideoDetailView: View {
                 .padding(20)
                 .background(.ultraThinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                .transition(.opacity)
             }
             
             // Error Message
@@ -101,19 +128,55 @@ public struct VideoDetailView: View {
                 }
             }
             
-            // Overlay Controls
-            if showControls {
+            // Active Subtitle Text Overlay
+            if !trackManager.currentSubtitleText.isEmpty && trackManager.isSubtitlesEnabled {
+                VStack {
+                    Spacer()
+                    Text(trackManager.currentSubtitleText)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.75))
+                        .cornerRadius(6)
+                        .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
+                        .padding(.horizontal, 32)
+                        .padding(.bottom, showControls ? 68 : 24)
+                        .allowsHitTesting(false)
+                        .animation(.easeInOut(duration: 0.2), value: showControls)
+                }
+                .transition(.opacity)
+            }
+            
+            // Custom Controls Overlay (Top HUD, Center Play/Pause, Side Navigation, Bottom Timeline)
+            ZStack {
                 VStack {
                     topBar
                     Spacer()
+                    bottomControls
                 }
-                .transition(.opacity)
                 
-                // Side Navigation Arrows (Vertically Centered - Avoids overlapping bottom player timeline)
+                // Center Play / Pause Toggle
+                if !isBuffering && errorMessage == nil {
+                    Button {
+                        togglePlayPause()
+                    } label: {
+                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 64))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.opacity)
+                }
+                
+                // Side Navigation Arrows
                 if videos.count > 1 {
                     HStack {
                         Button {
-                            withAnimation { goToPrevious() }
+                            goToPrevious()
                         } label: {
                             Image(systemName: "chevron.left.circle.fill")
                                 .font(.system(size: 42))
@@ -126,7 +189,7 @@ public struct VideoDetailView: View {
                         Spacer()
                         
                         Button {
-                            withAnimation { goToNext() }
+                            goToNext()
                         } label: {
                             Image(systemName: "chevron.right.circle.fill")
                                 .font(.system(size: 42))
@@ -136,9 +199,12 @@ public struct VideoDetailView: View {
                         }
                         .padding(.trailing, 18)
                     }
-                    .transition(.opacity)
                 }
             }
+            .opacity(showControls ? 1 : 0)
+            .animation(.easeInOut(duration: 0.35), value: showControls)
+            .animation(.easeInOut(duration: 0.25), value: isBuffering)
+            .allowsHitTesting(showControls)
             
             // Save Toast Banner
             if let message = saveStatusMessage {
@@ -159,154 +225,539 @@ public struct VideoDetailView: View {
                 }
             }
             
-            // Swipe to Seek HUD Indicator
-            if isScrubbingWithGesture {
-                seekHUDOverlay
+            // Resume Playback Toast Banner
+            if let message = resumedToastMessage {
+                VStack {
+                    Spacer().frame(height: 70)
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.counterclockwise.circle.fill")
+                            .foregroundColor(.blue)
+                        Text(message)
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                        Button {
+                            restartVideo()
+                        } label: {
+                            Text(.Strings.videoPlayerRestartButton)
+                                .font(.caption.bold())
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(Color.blue))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(.ultraThinMaterial))
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    Spacer()
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: isBuffering)
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .contentShape(Rectangle())
         .simultaneousGesture(videoSeekGesture)
         .onTapGesture {
-            guard !isScrubbingWithGesture else { return }
-            withAnimation(.easeInOut(duration: 0.2)) {
+            guard !isScrubbingWithGesture && !isScrubbingTimeline else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
                 showControls.toggle()
+            }
+            if showControls {
+                scheduleControlsAutoHide()
+            } else {
+                hideControlsTask?.cancel()
             }
         }
         .task(id: currentItem.id) {
             setupPlayer(for: currentItem)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { notification in
-            guard !isScrubbingWithGesture else { return }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { notification in
             guard let item = notification.object as? AVPlayerItem,
                   let current = player?.currentItem,
                   item == current else { return }
+            
+            let targetItem = currentlyLoadedItem ?? currentItem
+            
+            // If the video reached end-of-play within 2.0 seconds of starting playback,
+            // it was likely restored right at the end (or near EOF).
+            // In that case, DO NOT skip to the next video!
+            // Instead, rewind to 0:00 and let the user watch the video from the beginning.
+            if Date().timeIntervalSince(playbackStartTime) < 2.0 {
+                player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                currentPlaybackSeconds = 0
+                VideoPlaybackStore.shared.clearPosition(for: targetItem)
+                player?.play()
+                isPlaying = true
+                return
+            }
+            
+            if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
+                VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
+            }
             playNextVideo()
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                // Persist the latest playback position right before the app may be suspended
+                if let p = player, let loadedItem = currentlyLoadedItem {
+                    let secs = p.currentTime().seconds
+                    let dur = p.currentItem?.duration.seconds ?? 0
+                    VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+                }
+                VideoPlaybackStore.shared.flush()
+            }
+        }
         .onDisappear {
+            guard !isPiPActive && scenePhase == .active else { return }
             tearDownPlayer()
         }
     }
     
-    // Floating Centered Top HUD Capsule (Safely avoids top-left PiP and top-right AirPlay)
+    // MARK: - Top Bar
+    
     private var topBar: some View {
         HStack {
-            Spacer()
-            
-            HStack(spacing: 10) {
-                // 1. Close Button (Centered capsule avoids top-left PiP button!)
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(7)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(Circle())
-                }
-                
-                Divider()
-                    .frame(height: 18)
-                    .background(Color.white.opacity(0.3))
-                
-                // 2. Previous Video
-                if videos.count > 1 {
-                    Button {
-                        withAnimation { goToPrevious() }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                    }
-                }
-                
-                // 3. Title & Counter
-                VStack(spacing: 1) {
-                    Text(currentItem.name)
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .frame(maxWidth: 140)
-                    
-                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                // 4. Next Video
-                if videos.count > 1 {
-                    Button {
-                        withAnimation { goToNext() }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                    }
-                }
-                
-                Divider()
-                    .frame(height: 18)
-                    .background(Color.white.opacity(0.3))
-                
-                // 5. Favorite Button
-                Button {
-                    FavoritesManager.shared.toggleFavorite(currentItem)
-                } label: {
-                    Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
-                        .font(.system(size: 14))
-                        .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
-                        .padding(5)
-                }
-                
-                // 6. Save to Camera Roll
-                Button {
-                    saveToCameraRoll()
-                } label: {
-                    if isSaving {
-                        ProgressView().scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                    }
-                }
-                .disabled(isSaving)
-                
-                // 7. ShareLink
-                if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
-                    ShareLink(
-                        item: MediaCacheManager.shared.localVideoURL(for: currentItem),
-                        preview: SharePreview(currentItem.name)
-                    ) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                    }
-                }
+            // Close Button (Lonely at top leading)
+            Button {
+                tearDownPlayer()
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
-            .background(
-                Capsule()
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
-            )
+            .buttonStyle(.plain)
+            .padding(.leading, 16)
             
             Spacer()
+            
+            // Sound Level Bar at top trailing
+            VideoVolumeBar(volume: $volume, isMuted: $isMuted)
+                .padding(.trailing, 16)
+                .onChange(of: volume) { _, newVol in
+                    player?.volume = Float(newVol)
+                    resetAutoHideTimer()
+                }
+                .onChange(of: isMuted) { _, muted in
+                    player?.isMuted = muted
+                    resetAutoHideTimer()
+                }
+        }
+        .overlay(alignment: .center) {
+            centerToolsBar
         }
         .padding(.top, 10)
+    }
+    
+    // MARK: - Center Tools Toolbar (Previous, 2-line Middle, Next)
+    
+    private var centerToolsBar: some View {
+        HStack(spacing: 6) {
+            // Previous Button (on leading side, larger)
+            if videos.count > 1 {
+                Button {
+                    goToPrevious()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 42)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                
+                Divider()
+                    .frame(height: 26)
+                    .background(Color.white.opacity(0.3))
+            }
+            
+            // Middle: 2 Lines (Line 1: Title, Line 2: Tools)
+            VStack(spacing: 4) {
+                // Line 1: Title displaying more text & Counter/Size
+                HStack(spacing: 6) {
+                    Text(currentItem.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 180)
+                    
+                    Text("•")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.4))
+                    
+                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+                
+                // Line 2: Consolidated & Enlarged Tools (17-18pt icons)
+                HStack(spacing: 14) {
+                    // 1. Favorite Button
+                    Button {
+                        FavoritesManager.shared.toggleFavorite(currentItem)
+                    } label: {
+                        Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    // 2. Save to Camera Roll
+                    Button {
+                        saveToCameraRoll()
+                    } label: {
+                        if isSaving {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 30, height: 30)
+                        } else {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSaving)
+                    
+                    // 3. ShareLink
+                    if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
+                        ShareLink(
+                            item: MediaCacheManager.shared.localVideoURL(for: currentItem),
+                            preview: SharePreview(currentItem.name)
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    // 4. AirPlay Button
+                    AirPlayButtonView()
+                        .frame(width: 22, height: 22)
+                        .frame(width: 30, height: 30)
+                    
+                    // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
+                    Menu {
+                        // Picture-in-Picture
+                        Button {
+                            pipCoordinator?.togglePiP()
+                        } label: {
+                            Label(
+                                isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),
+                                systemImage: isPiPActive ? "pip.exit" : "pip.enter"
+                            )
+                        }
+                        
+                        // Subtitles
+                        if !trackManager.availableSubtitles.isEmpty {
+                            Section(.Strings.videoPlayerMenuSubtitles) {
+                                Button {
+                                    if let item = player?.currentItem {
+                                        trackManager.toggleSubtitles(in: item)
+                                    }
+                                } label: {
+                                    Label(
+                                        trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
+                                        systemImage: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble"
+                                    )
+                                }
+                                ForEach(trackManager.availableSubtitles) { option in
+                                    Button {
+                                        if let item = player?.currentItem {
+                                            trackManager.selectSubtitle(option: option, in: item)
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(option.displayName)
+                                            if trackManager.selectedSubtitleID == option.id {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Audio Tracks
+                        if trackManager.availableAudios.count > 1 {
+                            Section(.Strings.videoPlayerMenuAudio) {
+                                ForEach(trackManager.availableAudios) { option in
+                                    Button {
+                                        if let item = player?.currentItem {
+                                            trackManager.selectAudio(option: option, in: item)
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(option.displayName)
+                                            if trackManager.selectedAudioID == option.id {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Playback Speed
+                        Section(.Strings.videoPlayerMenuPlaybackSpeed) {
+                            ForEach(VideoPlaybackRate.allCases) { rate in
+                                Button {
+                                    if let p = player {
+                                        trackManager.setPlaybackRate(rate, for: p)
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(rate.displayName)
+                                        if trackManager.playbackRate == rate {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(trackManager.isSubtitlesEnabled || trackManager.playbackRate != .normal ? Color.blue : Color.white)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 6)
+            
+            // Next Button (on trailing side, larger)
+            if videos.count > 1 {
+                Divider()
+                    .frame(height: 26)
+                    .background(Color.white.opacity(0.3))
+                
+                Button {
+                    goToNext()
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 42)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+        )
+    }
+    
+    // MARK: - Bottom Controls (Compact Timeline Bar)
+    
+    private var bottomControls: some View {
+        VideoTimelineBar(
+            currentTime: currentPlaybackSeconds,
+            duration: totalDurationSeconds,
+            onSeek: { targetSeconds in
+                finishSeeking(at: targetSeconds, resumePlaying: wasPlayingBeforeScrub)
+            },
+            onScrubbing: { targetSeconds in
+                currentPlaybackSeconds = targetSeconds
+                requestLiveFrameSeek(to: targetSeconds)
+            },
+            onScrubStateChanged: { isScrubbing in
+                isScrubbingTimeline = isScrubbing
+                if isScrubbing {
+                    hideControlsTask?.cancel()
+                    wasPlayingBeforeScrub = (player?.timeControlStatus == .playing)
+                    if wasPlayingBeforeScrub {
+                        player?.pause()
+                        isPlaying = false
+                    }
+                } else {
+                    scheduleControlsAutoHide()
+                }
+            }
+        )
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+    }
+    
+    // MARK: - Swipe for Seeking (Controls timeline bar without popup HUD)
+    
+    private var videoSeekGesture: some Gesture {
+        DragGesture(minimumDistance: 15)
+            .onChanged { value in
+                guard !isScrubbingTimeline else { return }
+                let hTranslation = value.translation.width
+                let vTranslation = value.translation.height
+                
+                guard abs(hTranslation) > abs(vTranslation) else { return }
+                guard let player = player else { return }
+                
+                if !isScrubbingWithGesture {
+                    isScrubbingWithGesture = true
+                    hideControlsTask?.cancel()
+                    wasPlayingBeforeScrub = (player.timeControlStatus == .playing)
+                    if wasPlayingBeforeScrub {
+                        player.pause()
+                        isPlaying = false
+                    }
+                    initialScrubTime = currentPlaybackSeconds
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        showControls = true
+                    }
+                }
+                
+                let sensitivity: Double
+                if totalDurationSeconds > 3600 {
+                    sensitivity = 2.0
+                } else if totalDurationSeconds > 600 {
+                    sensitivity = 1.0
+                } else {
+                    sensitivity = 0.5
+                }
+                
+                let delta = Double(hTranslation) * sensitivity
+                let target = max(0, min(totalDurationSeconds > 0 ? totalDurationSeconds : initialScrubTime + delta, initialScrubTime + delta))
+                currentPlaybackSeconds = target
+                requestLiveFrameSeek(to: target)
+            }
+            .onEnded { value in
+                guard isScrubbingWithGesture else { return }
+                isScrubbingWithGesture = false
+                guard !isScrubbingTimeline else { return }
+                finishSeeking(at: currentPlaybackSeconds, resumePlaying: wasPlayingBeforeScrub)
+            }
+    }
+    
+    // MARK: - Live Frame Seeking While Scrubbing
+    
+    private func requestLiveFrameSeek(to targetSeconds: Double) {
+        guard let player = player else { return }
+        
+        guard !isSeekingFrame else {
+            pendingSeekSeconds = targetSeconds
+            return
+        }
+        
+        let now = Date()
+        if now.timeIntervalSince(lastSeekTime) < 0.06 {
+            pendingSeekSeconds = targetSeconds
+            return
+        }
+        
+        isSeekingFrame = true
+        lastSeekTime = now
+        
+        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
+        let tolerance = CMTime(seconds: 1.0, preferredTimescale: 600)
+        
+        player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
+            Task { @MainActor in
+                self.isSeekingFrame = false
+                if let nextTarget = self.pendingSeekSeconds {
+                    self.pendingSeekSeconds = nil
+                    self.requestLiveFrameSeek(to: nextTarget)
+                }
+            }
+        }
+    }
+    
+    private func finishSeeking(at targetSeconds: Double, resumePlaying: Bool) {
+        pendingSeekSeconds = nil
+        isSeekingFrame = false
+        seekTo(targetSeconds)
+        if resumePlaying {
+            player?.play()
+            isPlaying = true
+        }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.isBuffering = false
+        }
+        scheduleControlsAutoHide()
+    }
+    
+    // MARK: - Auto-Hide Controls
+    
+    private func scheduleControlsAutoHide(delay: Double = 3.5) {
+        hideControlsTask?.cancel()
+        guard showControls && isPlaying && !isScrubbingWithGesture && !isScrubbingTimeline else { return }
+        hideControlsTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showControls = false
+            }
+        }
+    }
+    
+    private func resetAutoHideTimer() {
+        if showControls && isPlaying {
+            scheduleControlsAutoHide()
+        }
+    }
+    
+    // MARK: - Transport Actions
+    
+    private func handleTwoFingerTap() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        togglePlayPause()
+    }
+    
+    private func togglePlayPause() {
+        guard let player = player else { return }
+        if player.timeControlStatus == .playing {
+            player.pause()
+            isPlaying = false
+            hideControlsTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+        } else {
+            if totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 {
+                player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                currentPlaybackSeconds = 0
+            }
+            player.play()
+            isPlaying = true
+            scheduleControlsAutoHide()
+        }
+    }
+    
+    private func seekTo(_ targetSeconds: Double) {
+        guard let player = player else { return }
+        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
+        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentPlaybackSeconds = targetSeconds
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.isBuffering = false
+        }
     }
     
     private func goToNext() {
         guard !videos.isEmpty else { return }
         let nextIndex = (currentIndex + 1) % videos.count
-        currentItem = videos[nextIndex]
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentItem = videos[nextIndex]
+        }
     }
     
     private func playNextVideo() {
@@ -322,7 +773,9 @@ public struct VideoDetailView: View {
     private func goToPrevious() {
         guard !videos.isEmpty else { return }
         let prevIndex = (currentIndex - 1 + videos.count) % videos.count
-        currentItem = videos[prevIndex]
+        withAnimation(.easeInOut(duration: 0.3)) {
+            currentItem = videos[prevIndex]
+        }
     }
     
     private func saveToCameraRoll() {
@@ -348,247 +801,64 @@ public struct VideoDetailView: View {
     }
     
     private func tearDownPlayer() {
-        scrubDismissTask?.cancel()
-        scrubDismissTask = nil
-        isScrubbingWithGesture = false
-        scrubDeltaSeconds = 0
-        isSeekingFrame = false
-        pendingSeekSeconds = nil
+        if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
+            let secs = p.currentTime().seconds
+            let dur = current.duration.seconds
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+            }
+        }
+        currentlyLoadedItem = nil
+        VideoPlaybackStore.shared.flush()
+        if let token = periodicTimeObserverToken {
+            player?.removeTimeObserver(token)
+            periodicTimeObserverToken = nil
+        }
+        resumeBannerTask?.cancel()
+        resumeBannerTask = nil
+        resumedToastMessage = nil
+        trackManager.reset()
+        
+        hideControlsTask?.cancel()
+        hideControlsTask = nil
         loadTask?.cancel()
         loadTask = nil
         monitorTask?.cancel()
         monitorTask = nil
         loaderDelegate?.cancelAll()
         loaderDelegate = nil
+        isScrubbingWithGesture = false
+        isSeekingFrame = false
+        pendingSeekSeconds = nil
         player?.pause()
         player = nil
         isBuffering = true
         errorMessage = nil
     }
     
-    // MARK: - Swipe to Seek (Backward / Forward)
-    
-    private var seekHUDOverlay: some View {
-        VStack(spacing: 8) {
-            // Direction Icon & Time Offset
-            HStack(spacing: 8) {
-                Image(systemName: scrubDeltaSeconds >= 0 ? "goforward" : "gobackward")
-                    .font(.system(size: 26, weight: .bold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.white)
-                
-                Text(formatDeltaSeconds(scrubDeltaSeconds))
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-            
-            // Target Timestamp & Total Duration
-            HStack(spacing: 4) {
-                Text(formatSeconds(scrubTargetTimeSeconds))
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.white)
-                
-                if videoDurationSeconds > 0 {
-                    Text("/ \(formatSeconds(videoDurationSeconds))")
-                        .font(.system(size: 14, weight: .regular, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.65))
-                }
-            }
-            
-            // Mini Progress Bar
-            if videoDurationSeconds > 0 {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.25))
-                            .frame(height: 4)
-                        
-                        let progress = max(0.0, min(1.0, scrubTargetTimeSeconds / videoDurationSeconds))
-                        Capsule()
-                            .fill(Color.white)
-                            .frame(width: geo.size.width * CGFloat(progress), height: 4)
-                    }
-                }
-                .frame(width: 130, height: 4)
-                .padding(.top, 2)
-            }
-        }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.45), radius: 16, y: 6)
-        )
-        .transition(.scale(scale: 0.88).combined(with: .opacity))
-    }
-    
-    private var videoSeekGesture: some Gesture {
-        DragGesture(minimumDistance: 15)
-            .onChanged { value in
-                let hTranslation = value.translation.width
-                let vTranslation = value.translation.height
-                
-                // Only handle horizontal swipes
-                guard abs(hTranslation) > abs(vTranslation) else { return }
-                guard let player = player else { return }
-                
-                scrubDismissTask?.cancel()
-                scrubDismissTask = nil
-                
-                if !isScrubbingWithGesture {
-                    isScrubbingWithGesture = true
-                    wasPlayingBeforeScrub = (player.timeControlStatus == .playing)
-                    if wasPlayingBeforeScrub {
-                        player.pause()
-                    }
-                    
-                    let current = player.currentTime().seconds
-                    initialScrubTimeSeconds = (current.isFinite && !current.isNaN) ? max(0, current) : 0
-                    
-                    let dur = player.currentItem?.duration.seconds ?? 0
-                    videoDurationSeconds = (dur.isFinite && !dur.isNaN && dur > 0) ? dur : 0
-                }
-                
-                // Scaled sensitivity based on video length
-                let sensitivity: Double
-                if videoDurationSeconds > 3600 {
-                    sensitivity = 2.0   // Movies (> 1 hr): ~10 min for a full swipe
-                } else if videoDurationSeconds > 600 {
-                    sensitivity = 1.0   // Medium videos (10-60 min): ~5 min for a full swipe
-                } else {
-                    sensitivity = 0.75  // Short clips (< 10 min): 30s per 40pt
-                }
-                
-                let rawDelta = Double(hTranslation) * sensitivity
-                scrubDeltaSeconds = round(rawDelta)
-                
-                let target = initialScrubTimeSeconds + scrubDeltaSeconds
-                if videoDurationSeconds > 0 {
-                    scrubTargetTimeSeconds = max(0, min(videoDurationSeconds, target))
-                } else {
-                    scrubTargetTimeSeconds = max(0, target)
-                }
-                
-                // Live frame rendering while sliding/swiping
-                requestLiveFrameSeek(to: scrubTargetTimeSeconds)
-            }
-            .onEnded { value in
-                guard isScrubbingWithGesture else { return }
-                guard let player = player else {
-                    isScrubbingWithGesture = false
-                    return
-                }
-                
-                pendingSeekSeconds = nil
-                isSeekingFrame = false
-                
-                let hTranslation = value.translation.width
-                let vTranslation = value.translation.height
-                
-                if abs(hTranslation) > abs(vTranslation) && abs(hTranslation) >= 15 {
-                    var finalDelta = scrubDeltaSeconds
-                    
-                    // Large minimum step on quick flick / swipe: at least 30s
-                    let minFlickStep: Double = (videoDurationSeconds > 0 && videoDurationSeconds < 60) ? 10.0 : 30.0
-                    let predictedH = value.predictedEndTranslation.width
-                    if abs(hTranslation) < 60 && abs(predictedH) >= 80 {
-                        finalDelta = predictedH > 0 ? max(minFlickStep, scrubDeltaSeconds) : min(-minFlickStep, scrubDeltaSeconds)
-                        scrubDeltaSeconds = finalDelta
-                        let target = initialScrubTimeSeconds + finalDelta
-                        if videoDurationSeconds > 0 {
-                            scrubTargetTimeSeconds = max(0, min(videoDurationSeconds, target))
-                        } else {
-                            scrubTargetTimeSeconds = max(0, target)
-                        }
-                    }
-                    
-                    let targetCM = CMTime(seconds: scrubTargetTimeSeconds, preferredTimescale: 600)
-                    player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-                        Task { @MainActor in
-                            if wasPlayingBeforeScrub {
-                                player.play()
-                            }
-                        }
-                    }
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                } else {
-                    let targetCM = CMTime(seconds: scrubTargetTimeSeconds, preferredTimescale: 600)
-                    player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
-                        Task { @MainActor in
-                            if wasPlayingBeforeScrub {
-                                player.play()
-                            }
-                        }
-                    }
-                }
-                
-                // Keep HUD visible briefly to confirm seek position, then fade out
-                scrubDismissTask = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(500))
-                    guard !Task.isCancelled else { return }
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        isScrubbingWithGesture = false
-                        scrubDeltaSeconds = 0
-                    }
-                }
-            }
-    }
-    
-    // MARK: - Live Frame Seeking During Gesture
-    
-    private func requestLiveFrameSeek(to targetSeconds: Double) {
+    private func restartVideo() {
         guard let player = player else { return }
-        
-        // If an async seek is currently in flight, record this as the pending target
-        guard !isSeekingFrame else {
-            pendingSeekSeconds = targetSeconds
-            return
-        }
-        
-        // Throttle slightly (at least 60ms between calls) to prevent flooding decoder / network
-        let now = Date()
-        if now.timeIntervalSince(lastSeekTime) < 0.06 {
-            pendingSeekSeconds = targetSeconds
-            return
-        }
-        
-        isSeekingFrame = true
-        lastSeekTime = now
-        
-        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
-        // Keyframe tolerance during interactive scrubbing for instant visual frame response
-        let tolerance = CMTime(seconds: 1.0, preferredTimescale: 600)
-        
-        player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
-            Task { @MainActor in
-                self.isSeekingFrame = false
-                if let nextTarget = self.pendingSeekSeconds {
-                    self.pendingSeekSeconds = nil
-                    self.requestLiveFrameSeek(to: nextTarget)
-                }
-            }
+        let targetItem = currentlyLoadedItem ?? currentItem
+        resumeBannerTask?.cancel()
+        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        currentPlaybackSeconds = 0
+        VideoPlaybackStore.shared.clearPosition(for: targetItem)
+        withAnimation {
+            resumedToastMessage = nil
         }
     }
     
-    private func formatDeltaSeconds(_ delta: Double) -> String {
-        let sign = delta >= 0 ? "+" : "-"
-        let absSecs = Int(abs(delta))
-        if absSecs >= 3600 {
-            let hours = absSecs / 3600
-            let mins = (absSecs % 3600) / 60
-            let secs = absSecs % 60
-            return String(format: "%@%dh %02dm %02ds", sign, hours, mins, secs)
-        } else if absSecs >= 60 {
-            let mins = absSecs / 60
-            let secs = absSecs % 60
-            if secs == 0 {
-                return "\(sign)\(mins)m"
-            } else {
-                return String(format: "%@%dm %02ds", sign, mins, secs)
+    private func showResumeBanner(at savedSeconds: Double) {
+        resumeBannerTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.3)) {
+            resumedToastMessage = String(localized: .Strings.videoPlayerResumeToast(formatSeconds(savedSeconds)))
+        }
+        resumeBannerTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8.0))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.4)) {
+                resumedToastMessage = nil
             }
-        } else {
-            return "\(sign)\(absSecs)s"
         }
     }
     
@@ -606,20 +876,22 @@ public struct VideoDetailView: View {
     }
     
     private func setupPlayer(for item: SMBItem) {
+        playbackStartTime = Date()
         tearDownPlayer()
+        currentlyLoadedItem = item
         
         // Show immediate preview frame while video buffers
         Task { @MainActor in
             self.previewThumbnail = await manager.downloadThumbnail(for: item, maxDimension: 600)
         }
         
-        // Configure audio session asynchronously off the main thread to prevent UI hangs
-        Task.detached(priority: .userInitiated) {
-            let session = AVAudioSession.sharedInstance()
-            if session.category != .playback {
-                try? session.setCategory(.playback, mode: .moviePlayback)
-            }
-            try? session.setActive(true)
+        // Configure audio session synchronously before player initialization
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playback, mode: .moviePlayback)
+            try session.setActive(true)
+        } catch {
+            AppLog.player.error("Failed to activate audio session: \(error.localizedDescription)")
         }
         
         // 1. If previously downloaded/cached locally, play immediately from file
@@ -628,7 +900,9 @@ public struct VideoDetailView: View {
             let avPlayer = AVPlayer(url: localURL)
             self.player = avPlayer
             self.isBuffering = false
+            configurePlayer(avPlayer, for: item)
             avPlayer.play()
+            self.scheduleControlsAutoHide()
             return
         }
         
@@ -639,6 +913,7 @@ public struct VideoDetailView: View {
                 let realSize = await manager.fetchFileSize(for: item)
                 if realSize > 0 {
                     validItem = SMBItem(
+                        connectionID: item.connectionID,
                         name: item.name,
                         shareName: item.shareName,
                         path: item.path,
@@ -670,6 +945,7 @@ public struct VideoDetailView: View {
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             self.player = avPlayer
+            configurePlayer(avPlayer, for: validItem)
             avPlayer.play()
             
             // Monitor playback readiness
@@ -677,8 +953,19 @@ public struct VideoDetailView: View {
             self.monitorTask = Task { @MainActor [weak avPlayer] in
                 while !Task.isCancelled {
                     guard let p = avPlayer else { break }
-                    if p.timeControlStatus == .playing {
-                        self.isBuffering = false
+                    let isReady = p.timeControlStatus == .playing
+                        || (p.currentItem?.status == .readyToPlay && (p.rate > 0 || p.currentItem?.isPlaybackLikelyToKeepUp == true))
+                        || self.currentPlaybackSeconds > 0.05
+                    
+                    if isReady {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.isBuffering = false
+                        }
+                        self.isPlaying = (p.timeControlStatus == .playing)
+                        if let item = p.currentItem {
+                            await self.trackManager.loadTracks(for: item)
+                        }
+                        self.scheduleControlsAutoHide()
                         break
                     }
                     if let err = p.currentItem?.error {
@@ -687,6 +974,69 @@ public struct VideoDetailView: View {
                         break
                     }
                     try? await Task.sleep(for: .milliseconds(150))
+                }
+            }
+        }
+    }
+    
+    private func configurePlayer(_ avPlayer: AVPlayer, for item: SMBItem) {
+        // Sync volume & mute state
+        self.volume = Double(avPlayer.volume)
+        self.isMuted = avPlayer.isMuted
+        self.isPlaying = true
+        
+        // 1. Resume saved position if available
+        if let savedSeconds = VideoPlaybackStore.shared.position(for: item) {
+            let knownDuration = avPlayer.currentItem?.duration.seconds ?? 0
+            if knownDuration.isFinite && knownDuration > 0 && (savedSeconds >= knownDuration - 4.0 || savedSeconds / knownDuration >= 0.90) {
+                self.currentPlaybackSeconds = 0
+            } else {
+                let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
+                avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                self.currentPlaybackSeconds = savedSeconds
+                showResumeBanner(at: savedSeconds)
+            }
+        } else {
+            self.currentPlaybackSeconds = 0
+        }
+        
+        // 2. Set playback rate
+        trackManager.setPlaybackRate(trackManager.playbackRate, for: avPlayer)
+        
+        // 3. Load media tracks (audio / subtitles)
+        if let currentItem = avPlayer.currentItem {
+            Task { @MainActor in
+                await trackManager.loadTracks(for: currentItem)
+            }
+        }
+        
+        // 4. Periodic time observer to remember playback progress & update timeline
+        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        self.periodicTimeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak avPlayer] time in
+            MainActor.assumeIsolated {
+                guard let p = avPlayer, let current = p.currentItem else { return }
+                let secs = time.seconds
+                let dur = current.duration.seconds
+                
+                if !self.isScrubbingWithGesture && !self.isScrubbingTimeline {
+                    if secs.isFinite && !secs.isNaN {
+                        self.currentPlaybackSeconds = secs
+                    }
+                }
+                if dur.isFinite && !dur.isNaN && dur > 0 {
+                    self.totalDurationSeconds = dur
+                }
+                self.isPlaying = (p.timeControlStatus == .playing)
+                
+                // If the video is rendering frames or time is advancing, dismiss buffering popup
+                if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.isBuffering = false
+                    }
+                }
+                
+                if !self.isScrubbingWithGesture && !self.isScrubbingTimeline && secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+                    VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: item)
                 }
             }
         }

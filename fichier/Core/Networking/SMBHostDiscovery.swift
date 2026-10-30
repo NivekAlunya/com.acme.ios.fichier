@@ -8,6 +8,7 @@
 import Foundation
 import Network
 import Observation
+import OSLog
 
 @Observable
 @MainActor
@@ -40,9 +41,9 @@ public final class SMBHostDiscovery {
             MainActor.assumeIsolated {
                 switch state {
                 case .ready:
-                    print("📡 [Bonjour] SMB Browser is active and scanning (IPv4)...")
+                    AppLog.discovery.info("SMB browser is active and scanning (IPv4)")
                 case .failed(let error):
-                    print("❌ [Bonjour] Scan failed: \(error)")
+                    AppLog.discovery.error("Scan failed: \(error.localizedDescription)")
                     self.errorMessage = String(localized: .Strings.networkingErrorDiscoveryFailed(error.localizedDescription))
                     self.isScanning = false
                 case .cancelled:
@@ -74,7 +75,7 @@ public final class SMBHostDiscovery {
         
         for result in results {
             if case let .service(name, _, _, _) = result.endpoint {
-                print("💻 [Bonjour] Found SMB Host: \(name)")
+                AppLog.discovery.debug("Found SMB host: \(name, privacy: .private)")
                 let host = DiscoveredHost(name: name, endpoint: result.endpoint)
                 hosts.append(host)
                 
@@ -117,7 +118,7 @@ public final class SMBHostDiscovery {
                     }
                     
                     if let validHost = ipv4String {
-                        print("✅ [Bonjour] Resolved \(host.name) -> IPv4: \(validHost)")
+                        AppLog.discovery.debug("Resolved \(host.name, privacy: .private) -> IPv4: \(validHost, privacy: .private)")
                         Task { @MainActor in
                             self.updateResolvedHost(for: host.name, resolvedHost: validHost)
                         }

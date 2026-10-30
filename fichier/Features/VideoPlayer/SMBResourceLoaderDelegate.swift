@@ -58,47 +58,41 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         
         let targetEnd = startOffset + Int64(safeLength)
         let tracker = self.taskTracker
-        
-        let task = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                Task {
-                    await tracker.remove(for: loadingRequest)
-                }
-            }
-            do {
-                var currentOffset = startOffset
-                let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
-                
-                while currentOffset < targetEnd {
-                    if Task.isCancelled || loadingRequest.isCancelled { return }
-                    
-                    let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
-                    let chunk = try await self.worker.fetchMediaRange(
-                        for: self.item,
-                        offset: currentOffset,
-                        length: bytesToRead
-                    )
-                    
-                    if Task.isCancelled || loadingRequest.isCancelled { return }
-                    if chunk.isEmpty { break }
-                    
-                    dataRequest.respond(with: chunk)
-                    currentOffset += Int64(chunk.count)
-                }
-                
-                if !loadingRequest.isCancelled && !Task.isCancelled {
-                    loadingRequest.finishLoading()
-                }
-            } catch {
-                if !loadingRequest.isCancelled && !Task.isCancelled {
-                    loadingRequest.finishLoading(with: error)
-                }
-            }
-        }
+        let worker = self.worker
+        let item = self.item
         
         Task {
-            await tracker.track(task: task, for: loadingRequest)
+            await tracker.runTask(for: loadingRequest) {
+                do {
+                    var currentOffset = startOffset
+                    let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
+                    
+                    while currentOffset < targetEnd {
+                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        
+                        let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
+                        let chunk = try await worker.fetchMediaRange(
+                            for: item,
+                            offset: currentOffset,
+                            length: bytesToRead
+                        )
+                        
+                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        if chunk.isEmpty { break }
+                        
+                        dataRequest.respond(with: chunk)
+                        currentOffset += Int64(chunk.count)
+                    }
+                    
+                    if !loadingRequest.isCancelled && !Task.isCancelled {
+                        loadingRequest.finishLoading()
+                    }
+                } catch {
+                    if !loadingRequest.isCancelled && !Task.isCancelled {
+                        loadingRequest.finishLoading(with: error)
+                    }
+                }
+            }
         }
         
         return true
