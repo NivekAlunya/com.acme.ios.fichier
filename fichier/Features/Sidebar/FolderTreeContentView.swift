@@ -78,6 +78,9 @@ public struct FolderTreeContentView: View {
     }
     
     private var navigationTitle: String {
+        if let location = manager.currentLocation {
+            return location.name
+        }
         if let remote = manager.savedConnections.first(where: { manager.currentConnectionID == $0.id }) {
             return remote.displayName
         }

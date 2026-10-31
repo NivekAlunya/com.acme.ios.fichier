@@ -30,8 +30,8 @@ struct SidebarFolderTreeView: View {
     }
     
     private var sectionHeaderTitle: String {
-        if let remote = manager.savedConnections.first(where: { manager.currentConnectionID == $0.id }) {
-            return "\(remote.displayName) (\(manager.folderTree.count))"
+        if manager.currentLocation?.kind == .localFolder || manager.currentLocation?.kind == .iCloudFolder {
+            return String(localized: .Strings.gallerySectionSubfoldersCount(manager.folderTree.count))
         }
         return String(localized: .Strings.sidebarSectionServerShares(manager.folderTree.count))
     }

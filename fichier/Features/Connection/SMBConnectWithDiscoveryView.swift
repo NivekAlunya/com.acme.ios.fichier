@@ -14,7 +14,6 @@ struct SMBConnectWithDiscoveryView: View {
     @State private var selectedHostname = ""
     @State private var username = ""
     @State private var password = ""
-    @State private var showingSettings = false
     
     var body: some View {
         NavigationStack {
@@ -158,22 +157,11 @@ struct SMBConnectWithDiscoveryView: View {
                     }
                     .accessibilityLabel(.Strings.commonCancel)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: "gearshape")
-                    }
-                    .accessibilityLabel(.Strings.settingsTitle)
-                }
             }
             .onChange(of: smbManager.isConnected) { _, isConnected in
                 if isConnected {
                     dismiss()
                 }
-            }
-            .sheet(isPresented: $showingSettings) {
-                AppSettingsView()
             }
             .onAppear {
                 discovery.startDiscovery()

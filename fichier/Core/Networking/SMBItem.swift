@@ -21,6 +21,7 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
     public let size: Int64
     public let modifiedDate: Date?
     public var children: [SMBItem]?
+    public let localURL: URL?
     
     public init(
         connectionID: String = "",
@@ -30,7 +31,8 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
         isDirectory: Bool,
         size: Int64 = 0,
         modifiedDate: Date? = nil,
-        children: [SMBItem]? = nil
+        children: [SMBItem]? = nil,
+        localURL: URL? = nil
     ) {
         self.connectionID = connectionID
         self.name = name
@@ -40,6 +42,7 @@ nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
         self.size = size
         self.modifiedDate = modifiedDate
         self.children = children
+        self.localURL = localURL
     }
     
     public var formattedSize: String {
