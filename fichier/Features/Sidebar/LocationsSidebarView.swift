@@ -160,7 +160,9 @@ public struct LocationsSidebarView: View {
             if manager.isConnected {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(.Strings.connectionButtonDisconnect, role: .destructive) {
-                        manager.disconnect()
+                        Task {
+                            await manager.disconnect()
+                        }
                     }
                 }
             }

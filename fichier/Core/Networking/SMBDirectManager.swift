@@ -132,10 +132,28 @@ public final class SMBDirectManager {
     public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
         savedFolderLocations.removeAll { $0.id == location.id }
         if currentLocation?.folderLocation?.id == location.id {
-            disconnect()
+            Task {
+                await disconnect()
+            }
         }
         if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
             UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
+        }
+    }
+    
+    private func updateBookmarkData(_ bookmarkData: Data, for folderLocation: SavedFolderLocation) {
+        if let index = savedFolderLocations.firstIndex(where: { $0.id == folderLocation.id }) {
+            let updated = SavedFolderLocation(
+                id: folderLocation.id,
+                name: folderLocation.name,
+                bookmarkData: bookmarkData,
+                isICloud: folderLocation.isICloud,
+                dateAdded: folderLocation.dateAdded
+            )
+            savedFolderLocations[index] = updated
+            if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
+                UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
+            }
         }
     }
     
@@ -164,14 +182,17 @@ public final class SMBDirectManager {
             
         case .localFolder, .iCloudFolder:
             guard let folderLoc = location.folderLocation else { return }
-            disconnect()
+            await disconnect()
             isLoading = true
             errorMessage = nil
             currentLocation = location
             currentConnectionID = location.id
             
             do {
-                let rootItem = try await localWorker.activateLocation(folderLoc)
+                let (rootItem, updatedBookmark) = try await localWorker.activateLocation(folderLoc)
+                if let newBookmark = updatedBookmark {
+                    updateBookmarkData(newBookmark, for: folderLoc)
+                }
                 self.folderTree = [rootItem]
                 self.isConnected = true
                 self.isLoading = false
@@ -247,7 +268,10 @@ public final class SMBDirectManager {
         if let folderLoc = currentLocation?.folderLocation {
             isLoading = true
             do {
-                let rootItem = try await localWorker.activateLocation(folderLoc)
+                let (rootItem, updatedBookmark) = try await localWorker.activateLocation(folderLoc)
+                if let newBookmark = updatedBookmark {
+                    updateBookmarkData(newBookmark, for: folderLoc)
+                }
                 self.folderTree = [rootItem]
                 self.isLoading = false
                 if let current = selectedFolder {
@@ -459,9 +483,9 @@ public final class SMBDirectManager {
                 let realSize = await fetchFileSize(for: item)
                 if realSize > 0 {
                     validItem = MediaItem(
-                        connectionID: item.connectionID,
+                        locationID: item.locationID,
                         name: item.name,
-                        shareName: item.shareName,
+                        rootName: item.rootName,
                         path: item.path,
                         isDirectory: item.isDirectory,
                         size: realSize,
@@ -537,8 +561,8 @@ public final class SMBDirectManager {
     }
     
     public func fetchFileSize(for item: MediaItem) async -> Int64 {
-        if let size = (try? item.localURL?.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
-            return Int64(size)
+        if item.localURL != nil {
+            return await localWorker.fetchFileSize(for: item)
         }
         return await worker.fetchFileSize(for: item)
     }
@@ -577,7 +601,7 @@ public final class SMBDirectManager {
     
     // MARK: - Disconnect
     
-    public func disconnect() {
+    public func disconnect() async {
         loadFolderTask?.cancel()
         loadFolderTask = nil
         activeFolderID = nil
@@ -591,10 +615,8 @@ public final class SMBDirectManager {
         selectedFolder = nil
         pictures = []
         
-        Task {
-            await localWorker.deactivateCurrentLocation()
-            await worker.setActiveFolder(id: nil)
-            await worker.disconnect()
-        }
+        await localWorker.deactivateCurrentLocation()
+        await worker.setActiveFolder(id: nil)
+        await worker.disconnect()
     }
 }

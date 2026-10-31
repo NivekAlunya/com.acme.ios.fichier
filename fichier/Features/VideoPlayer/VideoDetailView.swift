@@ -1045,9 +1045,9 @@ public struct VideoDetailView: View {
                 let realSize = await manager.fetchFileSize(for: item)
                 if realSize > 0 {
                     validItem = MediaItem(
-                        connectionID: item.connectionID,
+                        locationID: item.locationID,
                         name: item.name,
-                        shareName: item.shareName,
+                        rootName: item.rootName,
                         path: item.path,
                         isDirectory: item.isDirectory,
                         size: realSize,

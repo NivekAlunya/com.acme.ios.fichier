@@ -40,13 +40,11 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         size: Int64 = 0,
         modifiedDate: Date? = nil,
         children: [MediaItem]? = nil,
-        localURL: URL? = nil,
-        shareName: String? = nil,
-        connectionID: String? = nil
+        localURL: URL? = nil
     ) {
-        self.locationID = connectionID ?? locationID
+        self.locationID = locationID
         self.name = name
-        self.rootName = shareName ?? rootName
+        self.rootName = rootName
         self.path = path
         self.isDirectory = isDirectory
         self.size = size

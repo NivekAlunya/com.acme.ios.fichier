@@ -67,9 +67,9 @@ actor SMBClientActor {
         let items = shares
             .map { share in
                 MediaItem(
-                    connectionID: connectionID,
+                    locationID: connectionID,
                     name: share.name,
-                    shareName: share.name,
+                    rootName: share.name,
                     path: "/",
                     isDirectory: true,
                     size: 0,
@@ -93,9 +93,9 @@ actor SMBClientActor {
         return shares
             .map { share in
                 MediaItem(
-                    connectionID: connID,
+                    locationID: connID,
                     name: share.name,
-                    shareName: share.name,
+                    rootName: share.name,
                     path: "/",
                     isDirectory: true,
                     size: 0,
@@ -150,9 +150,9 @@ actor SMBClientActor {
             
             if resourceType == .directory {
                 folders.append(MediaItem(
-                    connectionID: connID,
+                    locationID: connID,
                     name: name,
-                    shareName: shareName,
+                    rootName: shareName,
                     path: entryPath,
                     isDirectory: true,
                     size: 0,
@@ -164,9 +164,9 @@ actor SMBClientActor {
                 if supportedMediaExtensions.contains(ext) {
                     let size = Self.extractFileSize(from: entry)
                     pictures.append(MediaItem(
-                        connectionID: connID,
+                        locationID: connID,
                         name: name,
-                        shareName: shareName,
+                        rootName: shareName,
                         path: entryPath,
                         isDirectory: false,
                         size: size,

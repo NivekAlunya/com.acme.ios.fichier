@@ -28,7 +28,7 @@ public actor LocalStorageActor {
     
     // MARK: - Security-Scoped Bookmark Resolution & Activation
     
-    public func activateLocation(_ location: SavedFolderLocation) throws -> MediaItem {
+    public func activateLocation(_ location: SavedFolderLocation) throws -> (rootItem: MediaItem, updatedBookmark: Data?) {
         deactivateCurrentLocation()
         
         var isStale = false
@@ -50,12 +50,21 @@ public actor LocalStorageActor {
         activeSecurityScopedURL = resolvedURL
         activeLocationID = location.id
         
+        var updatedBookmark: Data? = nil
+        if isStale {
+            updatedBookmark = try? resolvedURL.bookmarkData(
+                options: .minimalBookmark,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        }
+        
         let resourceValues = try? resolvedURL.resourceValues(forKeys: [.contentModificationDateKey])
         
-        return MediaItem(
-            connectionID: location.id,
+        let rootItem = MediaItem(
+            locationID: location.id,
             name: location.name,
-            shareName: location.name,
+            rootName: location.name,
             path: "",
             isDirectory: true,
             size: 0,
@@ -63,6 +72,8 @@ public actor LocalStorageActor {
             children: nil,
             localURL: resolvedURL
         )
+        
+        return (rootItem, updatedBookmark)
     }
     
     public func deactivateCurrentLocation() {
@@ -186,11 +197,30 @@ public actor LocalStorageActor {
         }
     }
     
-    // MARK: - Full Image
+    // MARK: - Full Image (Memory Safe with Target Downsampling)
     
-    public func fetchImage(for item: MediaItem) -> UIImage? {
+    public func fetchImage(for item: MediaItem, maxPixelSize: CGFloat = 2048) -> UIImage? {
         guard let url = item.localURL else { return nil }
-        return UIImage(contentsOfFile: url.path)
+        
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return UIImage(contentsOfFile: url.path)
+        }
+        return UIImage(cgImage: cgImage)
+    }
+    
+    // MARK: - File Size Query (Offloaded from MainActor)
+    
+    public func fetchFileSize(for item: MediaItem) -> Int64 {
+        guard let url = item.localURL else { return 0 }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+        return Int64(size ?? 0)
     }
     
     // MARK: - Metadata Extraction
