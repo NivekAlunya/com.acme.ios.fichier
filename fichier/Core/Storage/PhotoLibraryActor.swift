@@ -8,7 +8,7 @@ import Photos
 import AVFoundation
 
 public actor PhotoLibraryActor {
-    private let imageManager = PHCachingImageManager()
+    private lazy var imageManager = PHCachingImageManager()
     
     private var exportDirectory: URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fichier_video_exports", isDirectory: true)
@@ -183,7 +183,7 @@ public actor PhotoLibraryActor {
         options.isSynchronous = false
         
         var streamIterator = AsyncStream<UIImage?> { continuation in
-            imageManager.requestImage(
+            let requestID = imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
                 contentMode: .aspectFill,
@@ -196,6 +196,13 @@ public actor PhotoLibraryActor {
                 if !isDegraded || isCancelled || error != nil {
                     continuation.yield(image)
                     continuation.finish()
+                }
+            }
+            continuation.onTermination = { @Sendable [weak self] termination in
+                if case .cancelled = termination {
+                    Task {
+                        await self?.cancelImageRequest(requestID)
+                    }
                 }
             }
         }.makeAsyncIterator()
@@ -218,7 +225,7 @@ public actor PhotoLibraryActor {
         options.isSynchronous = false
         
         var streamIterator = AsyncStream<UIImage?> { continuation in
-            imageManager.requestImage(
+            let requestID = imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
                 contentMode: .aspectFit,
@@ -233,9 +240,20 @@ public actor PhotoLibraryActor {
                     continuation.finish()
                 }
             }
+            continuation.onTermination = { @Sendable [weak self] termination in
+                if case .cancelled = termination {
+                    Task {
+                        await self?.cancelImageRequest(requestID)
+                    }
+                }
+            }
         }.makeAsyncIterator()
         
         return await streamIterator.next() ?? nil
+    }
+    
+    private func cancelImageRequest(_ requestID: PHImageRequestID) {
+        imageManager.cancelImageRequest(requestID)
     }
     
     // MARK: - Video Playback URL (Safe Temporary Directory with Eviction)

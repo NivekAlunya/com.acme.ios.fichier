@@ -9,11 +9,13 @@ import AVFoundation
 nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
     private let worker: SMBClientActor
     private let item: MediaItem
+    private let chunkSize: Int
     private let taskTracker = ResourceLoadingTaskTracker()
     
-    init(worker: SMBClientActor, item: MediaItem) {
+    init(worker: SMBClientActor, item: MediaItem, chunkSize: Int = 1024 * 1024) {
         self.worker = worker
         self.item = item
+        self.chunkSize = chunkSize
         super.init()
     }
     
@@ -60,15 +62,20 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         let tracker = self.taskTracker
         let worker = self.worker
         let item = self.item
+        let chunkSize = self.chunkSize
         
         Task {
             await tracker.runTask(for: loadingRequest) {
                 do {
                     var currentOffset = startOffset
-                    let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
                     
                     while currentOffset < targetEnd {
-                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        if Task.isCancelled || loadingRequest.isCancelled {
+                            if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+                                loadingRequest.finishLoading(with: URLError(.cancelled))
+                            }
+                            return
+                        }
                         
                         let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
                         let chunk = try await worker.fetchMediaRange(
@@ -77,18 +84,27 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                             length: bytesToRead
                         )
                         
-                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        if Task.isCancelled || loadingRequest.isCancelled {
+                            if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+                                loadingRequest.finishLoading(with: URLError(.cancelled))
+                            }
+                            return
+                        }
                         if chunk.isEmpty { break }
                         
                         dataRequest.respond(with: chunk)
                         currentOffset += Int64(chunk.count)
                     }
                     
-                    if !loadingRequest.isCancelled && !Task.isCancelled {
-                        loadingRequest.finishLoading()
+                    if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+                        if Task.isCancelled {
+                            loadingRequest.finishLoading(with: URLError(.cancelled))
+                        } else {
+                            loadingRequest.finishLoading()
+                        }
                     }
                 } catch {
-                    if !loadingRequest.isCancelled && !Task.isCancelled {
+                    if !loadingRequest.isCancelled && !loadingRequest.isFinished {
                         loadingRequest.finishLoading(with: error)
                     }
                 }

@@ -83,10 +83,23 @@ nonisolated public final class MediaCacheManager: Sendable {
         return nil
     }
     
+    public func getThumbnailAsync(for key: String, fallbackKey: String? = nil) async -> UIImage? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            guard !Task.isCancelled else { return nil }
+            return self.getThumbnail(for: key, fallbackKey: fallbackKey)
+        }.value
+    }
+    
     public func saveThumbnail(_ image: UIImage, for key: String) {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
         guard let data = image.jpegData(compressionQuality: 0.82) else { return }
         try? data.write(to: fileURL, options: .atomic)
+    }
+    
+    public func saveThumbnailAsync(_ image: UIImage, for key: String) {
+        Task.detached(priority: .utility) { [self] in
+            self.saveThumbnail(image, for: key)
+        }
     }
     
     // MARK: - Video Disk Cache

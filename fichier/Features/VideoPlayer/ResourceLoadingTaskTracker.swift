@@ -8,14 +8,22 @@ import AVFoundation
 
 actor ResourceLoadingTaskTracker {
     private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
+    private var cancelledRequests: Set<AVAssetResourceLoadingRequest> = []
+    private var isStopped = false
     
     func runTask(
         for request: AVAssetResourceLoadingRequest,
         operation: @Sendable @escaping () async -> Void
     ) {
+        if isStopped || cancelledRequests.remove(request) != nil {
+            if !request.isCancelled && !request.isFinished {
+                request.finishLoading(with: URLError(.cancelled))
+            }
+            return
+        }
         guard !request.isCancelled else { return }
         
-        let task = Task { [weak self] in
+        let task = Task.detached(priority: .userInitiated) { [weak self] in
             await operation()
             await self?.remove(for: request)
         }
@@ -24,15 +32,22 @@ actor ResourceLoadingTaskTracker {
     
     func remove(for request: AVAssetResourceLoadingRequest) {
         activeTasks.removeValue(forKey: request)
+        cancelledRequests.remove(request)
     }
     
     func cancelTask(for request: AVAssetResourceLoadingRequest) {
-        activeTasks.removeValue(forKey: request)?.cancel()
+        if let task = activeTasks.removeValue(forKey: request) {
+            task.cancel()
+        } else if !isStopped {
+            cancelledRequests.insert(request)
+        }
     }
     
     func cancelAll() {
+        isStopped = true
         let tasks = Array(activeTasks.values)
         activeTasks.removeAll()
+        cancelledRequests.removeAll()
         tasks.forEach { $0.cancel() }
     }
 }

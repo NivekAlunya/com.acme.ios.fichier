@@ -22,6 +22,7 @@ public final class VideoTrackManager {
     private var legibleGroup: AVMediaSelectionGroup?
     private var legibleOutput: AVPlayerItemLegibleOutput?
     private var subtitleDelegate: VideoSubtitleDelegate?
+    private weak var loadedPlayerItem: AVPlayerItem?
     
     public init() {}
     
@@ -30,6 +31,10 @@ public final class VideoTrackManager {
     }
     
     public func reset() {
+        if let output = legibleOutput {
+            loadedPlayerItem?.remove(output)
+        }
+        loadedPlayerItem = nil
         availableAudios.removeAll()
         selectedAudioID = nil
         availableSubtitles.removeAll()
@@ -39,16 +44,18 @@ public final class VideoTrackManager {
         legibleGroup = nil
         legibleOutput = nil
         subtitleDelegate = nil
-        playbackRate = .normal
     }
     
     public func loadTracks(for playerItem: AVPlayerItem) async {
+        guard loadedPlayerItem !== playerItem else { return }
         reset()
+        loadedPlayerItem = playerItem
         
         let asset = playerItem.asset
         
         // 1. Audio Tracks
         if let audioGroup = try? await asset.loadMediaSelectionGroup(for: .audible) {
+            guard !Task.isCancelled, loadedPlayerItem === playerItem else { return }
             self.audibleGroup = audioGroup
             let currentSelection = playerItem.currentMediaSelection.selectedMediaOption(in: audioGroup)
             
@@ -68,6 +75,7 @@ public final class VideoTrackManager {
         
         // 2. Subtitles Tracks
         if let subGroup = try? await asset.loadMediaSelectionGroup(for: .legible) {
+            guard !Task.isCancelled, loadedPlayerItem === playerItem else { return }
             self.legibleGroup = subGroup
             let currentSelection = playerItem.currentMediaSelection.selectedMediaOption(in: subGroup)
             

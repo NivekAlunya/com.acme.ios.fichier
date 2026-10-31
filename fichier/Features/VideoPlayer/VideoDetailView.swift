@@ -20,6 +20,7 @@ public struct VideoDetailView: View {
     @State private var currentlyLoadedItem: MediaItem?
     @State private var playbackStartTime: Date = Date()
     @State private var player: AVPlayer?
+    @State private var currentAsset: AVURLAsset?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
     @State private var isBuffering = true
     @State private var errorMessage: String?
@@ -28,7 +29,8 @@ public struct VideoDetailView: View {
     @State private var saveStatusMessage: String?
     @State private var monitorTask: Task<Void, Never>?
     @State private var loadTask: Task<Void, Never>?
-    @State private var previewThumbnail: UIImage?
+    @State private var saveTask: Task<Void, Never>?
+    @State private var shareableVideoURL: URL?
     
     // Playback Enhancements: Resume, Audio/Subtitles/Speed, PiP, AirPlay, Timeline, Volume
     @State private var trackManager = VideoTrackManager()
@@ -52,6 +54,9 @@ public struct VideoDetailView: View {
     @State private var isSeekingFrame: Bool = false
     @State private var pendingSeekSeconds: Double? = nil
     @State private var lastSeekTime: Date = Date.distantPast
+    @State private var seekGeneration: Int = 0
+    @State private var stationarySeekTask: Task<Void, Never>?
+    @State private var throttleSeekTask: Task<Void, Never>?
     
     public init(
         manager: SMBDirectManager,
@@ -86,11 +91,6 @@ public struct VideoDetailView: View {
                     }
                 )
                 .ignoresSafeArea()
-            } else if let previewThumbnail {
-                Image(uiImage: previewThumbnail)
-                    .resizable()
-                    .scaledToFit()
-                    .ignoresSafeArea()
             }
             
             // Buffering Spinner
@@ -274,6 +274,15 @@ public struct VideoDetailView: View {
             }
             playNextVideo()
         }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.failedToPlayToEndTimeNotification)) { notification in
+            guard let item = notification.object as? AVPlayerItem,
+                  let current = player?.currentItem,
+                  item == current else { return }
+            if let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
+                self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(error.localizedDescription))
+                self.isBuffering = false
+            }
+        }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 // Persist the latest playback position right before the app may be suspended
@@ -286,8 +295,8 @@ public struct VideoDetailView: View {
             }
         }
         .onDisappear {
-            guard !isPiPActive && scenePhase == .active else { return }
-            tearDownPlayer()
+            guard !isPiPActive else { return }
+            tearDownPlayer(deactivateAudioSession: true)
         }
     }
     
@@ -305,7 +314,7 @@ public struct VideoDetailView: View {
     
     private var closeButton: some View {
         Button {
-            tearDownPlayer()
+            tearDownPlayer(deactivateAudioSession: true)
             dismiss()
         } label: {
             Image(systemName: "xmark")
@@ -335,7 +344,7 @@ public struct VideoDetailView: View {
     
     // MARK: - Title & Item Counter Capsule
     
-    private var titleCapsule: some View {
+    private var titleTextContent: some View {
         HStack(spacing: 6) {
             Text(currentItem.name)
                 .font(.system(size: 12, weight: .semibold))
@@ -353,9 +362,13 @@ public struct VideoDetailView: View {
                 .foregroundColor(.white.opacity(0.7))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Capsule().fill(.ultraThinMaterial))
+    }
+    
+    private var titleCapsule: some View {
+        titleTextContent
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(.ultraThinMaterial))
     }
     
     // MARK: - Navigation Buttons & Dividers
@@ -522,9 +535,9 @@ public struct VideoDetailView: View {
             }
             
             // 3. ShareLink
-            if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
+            if let shareableVideoURL {
                 ShareLink(
-                    item: MediaCacheManager.shared.localVideoURL(for: currentItem),
+                    item: shareableVideoURL,
                     preview: SharePreview(currentItem.name)
                 ) {
                     Image(systemName: "square.and.arrow.up")
@@ -538,7 +551,6 @@ public struct VideoDetailView: View {
             
             // 4. AirPlay Button
             AirPlayButtonView()
-                .frame(width: 22, height: 22)
                 .frame(width: 30, height: 30)
             
             // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
@@ -652,26 +664,7 @@ public struct VideoDetailView: View {
             
             // Middle: 2 Lines (Line 1: Title, Line 2: Tools)
             VStack(spacing: 4) {
-                // Line 1: Title displaying more text & Counter/Size
-                HStack(spacing: 6) {
-                    Text(currentItem.name)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: 180)
-                    
-                    Text("•")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.4))
-                    
-                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.7))
-                        .lineLimit(1)
-                }
-                
-                // Line 2: Consolidated & Enlarged Tools
+                titleTextContent
                 actionToolsIcons(spacing: 14)
             }
             .padding(.horizontal, 6)
@@ -730,11 +723,10 @@ public struct VideoDetailView: View {
                 guard !isScrubbingTimeline else { return }
                 let hTranslation = value.translation.width
                 let vTranslation = value.translation.height
-                
-                guard abs(hTranslation) > abs(vTranslation) else { return }
                 guard let player = player else { return }
                 
                 if !isScrubbingWithGesture {
+                    guard abs(hTranslation) > abs(vTranslation) else { return }
                     isScrubbingWithGesture = true
                     hideControlsTask?.cancel()
                     wasPlayingBeforeScrub = (player.timeControlStatus == .playing)
@@ -758,7 +750,8 @@ public struct VideoDetailView: View {
                 }
                 
                 let delta = Double(hTranslation) * sensitivity
-                let target = max(0, min(totalDurationSeconds > 0 ? totalDurationSeconds : initialScrubTime + delta, initialScrubTime + delta))
+                let maxTarget = (totalDurationSeconds.isFinite && !totalDurationSeconds.isNaN && totalDurationSeconds > 0) ? totalDurationSeconds : Double.greatestFiniteMagnitude
+                let target = max(0, min(maxTarget, initialScrubTime + delta))
                 currentPlaybackSeconds = target
                 requestLiveFrameSeek(to: target)
             }
@@ -773,39 +766,107 @@ public struct VideoDetailView: View {
     // MARK: - Live Frame Seeking While Scrubbing
     
     private func requestLiveFrameSeek(to targetSeconds: Double) {
-        guard let player = player else { return }
         
-        guard !isSeekingFrame else {
+        // 1. Reset stationary debounce timer on any movement.
+        // When the user stops moving their finger (holding stationary without lifting),
+        // after 75ms this task triggers an exact zero-tolerance seek to display the exact frame.
+        stationarySeekTask?.cancel()
+        stationarySeekTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(75))
+            guard !Task.isCancelled else { return }
+            performStationaryExactSeek(to: targetSeconds)
+        }
+        
+        // 2. If a seek is already in flight, buffer the latest target.
+        if isSeekingFrame {
             pendingSeekSeconds = targetSeconds
             return
         }
         
+        // 3. Throttle live intermediate seeks during movement (~50ms) to avoid choking the decoder
         let now = Date()
-        if now.timeIntervalSince(lastSeekTime) < 0.06 {
+        let elapsed = now.timeIntervalSince(lastSeekTime)
+        let minInterval: TimeInterval = 0.05
+        
+        if elapsed < minInterval {
             pendingSeekSeconds = targetSeconds
+            if throttleSeekTask == nil {
+                let remaining = max(0.01, minInterval - elapsed)
+                throttleSeekTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(Int(remaining * 1000)))
+                    guard !Task.isCancelled else { return }
+                    self.throttleSeekTask = nil
+                    if let next = self.pendingSeekSeconds, !self.isSeekingFrame {
+                        self.pendingSeekSeconds = nil
+                        self.executeLiveSeek(to: next, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+                    }
+                }
+            }
             return
         }
         
+        // 4. Dispatch live seek with tight tolerance for responsive visual feedback while moving
+        executeLiveSeek(to: targetSeconds, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+    }
+    
+    private func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime) {
+        guard let player = player else { return }
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
+        
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
         isSeekingFrame = true
-        lastSeekTime = now
+        lastSeekTime = Date()
         
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
-        let tolerance = CMTime(seconds: 1.0, preferredTimescale: 600)
-        
         player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
             Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
                 self.isSeekingFrame = false
                 if let nextTarget = self.pendingSeekSeconds {
                     self.pendingSeekSeconds = nil
-                    self.requestLiveFrameSeek(to: nextTarget)
+                    self.executeLiveSeek(to: nextTarget, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+                }
+            }
+        }
+    }
+    
+    private func performStationaryExactSeek(to targetSeconds: Double) {
+        guard let player = player else { return }
+        
+        // Finger has stopped moving! Cancel any throttled intermediate seeks.
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
+        pendingSeekSeconds = nil
+        
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
+        isSeekingFrame = true
+        lastSeekTime = Date()
+        
+        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
+        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                self.isSeekingFrame = false
+                if let nextTarget = self.pendingSeekSeconds {
+                    self.pendingSeekSeconds = nil
+                    self.executeLiveSeek(to: nextTarget, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
                 }
             }
         }
     }
     
     private func finishSeeking(at targetSeconds: Double, resumePlaying: Bool) {
+        stationarySeekTask?.cancel()
+        stationarySeekTask = nil
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
         pendingSeekSeconds = nil
         isSeekingFrame = false
+        seekGeneration += 1
+        
         seekTo(targetSeconds)
         if resumePlaying {
             player?.play()
@@ -906,27 +967,33 @@ public struct VideoDetailView: View {
     
     private func saveToCameraRoll() {
         isSaving = true
-        Task {
+        saveTask?.cancel()
+        saveTask = Task { @MainActor in
             do {
                 let localURL = try await manager.fetchVideoURL(for: currentItem)
+                guard !Task.isCancelled else { return }
+                self.shareableVideoURL = localURL
                 try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+                guard !Task.isCancelled else { return }
                 withAnimation {
                     saveStatusMessage = String(localized: .Strings.videoPlayerSavedToPhotos)
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 withAnimation {
                     saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
                 }
             }
             isSaving = false
             try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
             withAnimation {
                 saveStatusMessage = nil
             }
         }
     }
     
-    private func tearDownPlayer() {
+    private func tearDownPlayer(deactivateAudioSession: Bool = false) {
         if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
@@ -935,6 +1002,7 @@ public struct VideoDetailView: View {
             }
         }
         currentlyLoadedItem = nil
+        shareableVideoURL = nil
         VideoPlaybackStore.shared.flush()
         if let token = periodicTimeObserverToken {
             player?.removeTimeObserver(token)
@@ -947,23 +1015,34 @@ public struct VideoDetailView: View {
         
         hideControlsTask?.cancel()
         hideControlsTask = nil
+        stationarySeekTask?.cancel()
+        stationarySeekTask = nil
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
         loadTask?.cancel()
         loadTask = nil
         monitorTask?.cancel()
         monitorTask = nil
+        saveTask?.cancel()
+        saveTask = nil
         loaderDelegate?.cancelAll()
         loaderDelegate = nil
+        currentAsset?.resourceLoader.setDelegate(nil, queue: nil)
+        currentAsset = nil
         isScrubbingWithGesture = false
+        isScrubbingTimeline = false
         isSeekingFrame = false
         pendingSeekSeconds = nil
+        seekGeneration += 1
         player?.pause()
         player = nil
         isBuffering = true
         errorMessage = nil
         
-        // Deactivate audio session in background so other apps' audio can resume
-        Task.detached(priority: .utility) {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if deactivateAudioSession {
+            Task.detached(priority: .utility) {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
     }
     
@@ -1008,14 +1087,9 @@ public struct VideoDetailView: View {
     
     private func setupPlayer(for item: MediaItem) {
         playbackStartTime = Date()
-        tearDownPlayer()
+        tearDownPlayer(deactivateAudioSession: false)
         currentlyLoadedItem = item
         showControls = true
-        
-        // Show immediate preview frame while video buffers
-        Task { @MainActor in
-            self.previewThumbnail = await manager.downloadThumbnail(for: item, maxDimension: 600)
-        }
         
         // Configure audio session asynchronously off the main thread to prevent UI hangs
         Task.detached(priority: .userInitiated) {
@@ -1028,20 +1102,39 @@ public struct VideoDetailView: View {
             }
         }
         
-        // 1. If previously downloaded/cached locally, play immediately from file
-        if MediaCacheManager.shared.hasCachedVideo(for: item) {
-            let localURL = MediaCacheManager.shared.localVideoURL(for: item)
+        // 1. If local file or previously downloaded/cached locally, play immediately from file
+        if let localURL = item.localURL ?? (MediaCacheManager.shared.hasCachedVideo(for: item) ? MediaCacheManager.shared.localVideoURL(for: item) : nil) {
+            self.shareableVideoURL = localURL
             let avPlayer = AVPlayer(url: localURL)
             self.player = avPlayer
             self.isBuffering = false
-            configurePlayer(avPlayer, for: item)
+            configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
             avPlayer.play()
             self.scheduleControlsAutoHide()
             return
         }
         
-        // 2. Progressive On-Demand Stream via SMBResourceLoaderDelegate
+        // 2. Apple Photos Library Video or Progressive On-Demand SMB Stream
         loadTask = Task { @MainActor in
+            if item.phAssetIdentifier != nil {
+                do {
+                    let videoURL = try await manager.fetchVideoURL(for: item)
+                    guard !Task.isCancelled else { return }
+                    self.shareableVideoURL = videoURL
+                    let avPlayer = AVPlayer(url: videoURL)
+                    self.player = avPlayer
+                    self.isBuffering = false
+                    configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
+                    avPlayer.play()
+                    self.scheduleControlsAutoHide()
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(error.localizedDescription))
+                    self.isBuffering = false
+                }
+                return
+            }
+            
             var validItem = item
             if validItem.size <= 0 {
                 let realSize = await manager.fetchFileSize(for: item)
@@ -1069,6 +1162,7 @@ public struct VideoDetailView: View {
             }
             
             let asset = AVURLAsset(url: streamURL)
+            self.currentAsset = asset
             let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem)
             self.loaderDelegate = delegate
             
@@ -1079,7 +1173,7 @@ public struct VideoDetailView: View {
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             self.player = avPlayer
-            configurePlayer(avPlayer, for: validItem)
+            configurePlayer(avPlayer, for: validItem, loadTracksImmediately: false)
             avPlayer.play()
             
             // Monitor playback readiness
@@ -1087,8 +1181,9 @@ public struct VideoDetailView: View {
             self.monitorTask = Task { @MainActor [weak avPlayer] in
                 while !Task.isCancelled {
                     guard let p = avPlayer else { break }
+                    let currentItem = p.currentItem
                     let isReady = p.timeControlStatus == .playing
-                        || (p.currentItem?.status == .readyToPlay && (p.rate > 0 || p.currentItem?.isPlaybackLikelyToKeepUp == true))
+                        || (currentItem?.status == .readyToPlay && (p.rate > 0 || currentItem?.isPlaybackLikelyToKeepUp == true))
                         || self.currentPlaybackSeconds > 0.05
                     
                     if isReady {
@@ -1096,16 +1191,17 @@ public struct VideoDetailView: View {
                             self.isBuffering = false
                         }
                         self.isPlaying = (p.timeControlStatus != .paused)
-                        if let item = p.currentItem {
-                            Task { @MainActor in
-                                await self.trackManager.loadTracks(for: item)
-                            }
+                        if let item = currentItem {
+                            await self.trackManager.loadTracks(for: item)
                         }
                         self.scheduleControlsAutoHide()
                         break
                     }
-                    if let err = p.currentItem?.error {
-                        self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(err.localizedDescription))
+                    
+                    let playbackError = p.error ?? currentItem?.error
+                    if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
+                        let desc = playbackError?.localizedDescription ?? "Playback error"
+                        self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(desc))
                         self.isBuffering = false
                         break
                     }
@@ -1115,7 +1211,7 @@ public struct VideoDetailView: View {
         }
     }
     
-    private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem) {
+    private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem, loadTracksImmediately: Bool) {
         // Sync volume & mute state
         self.volume = Double(avPlayer.volume)
         self.isMuted = avPlayer.isMuted
@@ -1139,8 +1235,8 @@ public struct VideoDetailView: View {
         // 2. Set playback rate
         trackManager.setPlaybackRate(trackManager.playbackRate, for: avPlayer)
         
-        // 3. Load media tracks (audio / subtitles)
-        if let currentItem = avPlayer.currentItem {
+        // 3. Load media tracks (audio / subtitles) immediately for local files
+        if loadTracksImmediately, let currentItem = avPlayer.currentItem {
             Task { @MainActor in
                 await trackManager.loadTracks(for: currentItem)
             }

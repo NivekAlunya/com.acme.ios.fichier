@@ -4,6 +4,8 @@
 
 Built with modern **SwiftUI** and structured around **Swift Concurrency**, *fichier* allows direct on-the-fly streaming of large media files without requiring full downloads or third-party cloud servers.
 
+> 📖 **Full Feature Specification**: For a detailed breakdown of all capabilities, see [FEATURES.md](FEATURES.md).
+
 ---
 
 ## 🌟 Key Features

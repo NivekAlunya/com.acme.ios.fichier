@@ -17,7 +17,7 @@ actor SMBClientActor {
     private var currentConnectionID: String = ""
     private var currentShareName: String?
     private var activeFolderID: String?
-    private let thumbnailCache = NSCache<NSString, UIImage>()
+    nonisolated(unsafe) private let thumbnailCache = NSCache<NSString, UIImage>()
     private let fullImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 12
@@ -28,11 +28,11 @@ actor SMBClientActor {
         self.activeFolderID = id
     }
     
-    func getCachedThumbnail(forKey key: NSString) -> UIImage? {
+    nonisolated func getCachedThumbnail(forKey key: NSString) -> UIImage? {
         thumbnailCache.object(forKey: key)
     }
     
-    func cacheThumbnail(_ image: UIImage, forKey key: NSString) {
+    nonisolated func cacheThumbnail(_ image: UIImage, forKey key: NSString) {
         thumbnailCache.setObject(image, forKey: key)
     }
     
@@ -231,7 +231,9 @@ actor SMBClientActor {
             if item.isVideo { return nil }
             
             // Photo Thumbnail Handling
-            let data = try await client.contents(atPath: item.path)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil
@@ -313,17 +315,23 @@ actor SMBClientActor {
     
     /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads)
     func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
+        try Task.checkCancellation()
         let client = try await ensureConnected(to: item.shareName)
+        try Task.checkCancellation()
         let end = offset + Int64(length)
         let range: Range<Int64> = offset..<end
-        return try await client.contents(atPath: item.path, range: range)
+        return try await client.contents(atPath: item.path, range: range) { _, _ in
+            !Task.isCancelled
+        }
     }
     
     /// Queries the remote file size directly if item.size was 0
     func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.size > 0 { return item.size }
+        if Task.isCancelled { return 0 }
         do {
             let client = try await ensureConnected(to: item.shareName)
+            if Task.isCancelled { return 0 }
             let attrs = try await client.attributesOfItem(atPath: item.path)
             return Self.extractFileSize(from: attrs)
         } catch {
