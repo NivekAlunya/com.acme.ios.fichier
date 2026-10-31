@@ -15,6 +15,7 @@ public struct VideoDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var currentItem: SMBItem
     @State private var currentlyLoadedItem: SMBItem?
     @State private var playbackStartTime: Date = Date()
@@ -296,44 +297,316 @@ public struct VideoDetailView: View {
         horizontalSizeClass == .regular
     }
     
-    private var topBar: some View {
-        HStack {
-            // Close Button (Lonely at top leading)
+    private var isCompactPortrait: Bool {
+        horizontalSizeClass == .compact && verticalSizeClass == .regular
+    }
+    
+    // MARK: - Close Button
+    
+    private var closeButton: some View {
+        Button {
+            tearDownPlayer()
+            dismiss()
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(.ultraThinMaterial)
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Sound Volume Bar
+    
+    private var volumeBar: some View {
+        VideoVolumeBar(volume: $volume, isMuted: $isMuted)
+            .onChange(of: volume) { _, newVol in
+                player?.volume = Float(newVol)
+                resetAutoHideTimer()
+            }
+            .onChange(of: isMuted) { _, muted in
+                player?.isMuted = muted
+                resetAutoHideTimer()
+            }
+    }
+    
+    // MARK: - Title & Item Counter Capsule
+    
+    private var titleCapsule: some View {
+        HStack(spacing: 6) {
+            Text(currentItem.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 180)
+            
+            Text("•")
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.4))
+            
+            Text(.Strings.commonItemCounterAndSize(currentIndex + 1, videos.count, currentItem.formattedSize))
+                .font(.system(size: 10))
+                .foregroundColor(.white.opacity(0.7))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(.ultraThinMaterial))
+    }
+    
+    // MARK: - Navigation Buttons & Dividers
+    
+    private var previousButton: some View {
+        Button {
+            goToPrevious()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var nextButton: some View {
+        Button {
+            goToNext()
+        } label: {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    
+    private var toolsDivider: some View {
+        Divider()
+            .frame(height: 22)
+            .background(Color.white.opacity(0.3))
+    }
+    
+    // MARK: - Playback Options Menu
+    
+    private var playbackOptionsMenu: some View {
+        Menu {
+            // Picture-in-Picture
             Button {
-                tearDownPlayer()
-                dismiss()
+                pipCoordinator.togglePiP()
             } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                Label(
+                    isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),
+                    systemImage: isPiPActive ? "pip.exit" : "pip.enter"
+                )
+            }
+            
+            // Subtitles
+            if !trackManager.availableSubtitles.isEmpty {
+                Section(.Strings.videoPlayerMenuSubtitles) {
+                    Button {
+                        if let item = player?.currentItem {
+                            trackManager.toggleSubtitles(in: item)
+                        }
+                    } label: {
+                        Label(
+                            trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
+                            systemImage: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble"
+                        )
+                    }
+                    ForEach(trackManager.availableSubtitles) { option in
+                        Button {
+                            if let item = player?.currentItem {
+                                trackManager.selectSubtitle(option: option, in: item)
+                            }
+                        } label: {
+                            HStack {
+                                Text(option.displayName)
+                                if trackManager.selectedSubtitleID == option.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Audio Tracks
+            if trackManager.availableAudios.count > 1 {
+                Section(.Strings.videoPlayerMenuAudio) {
+                    ForEach(trackManager.availableAudios) { option in
+                        Button {
+                            if let item = player?.currentItem {
+                                trackManager.selectAudio(option: option, in: item)
+                            }
+                        } label: {
+                            HStack {
+                                Text(option.displayName)
+                                if trackManager.selectedAudioID == option.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Playback Speed
+            Section(.Strings.videoPlayerMenuPlaybackSpeed) {
+                ForEach(VideoPlaybackRate.allCases) { rate in
+                    Button {
+                        if let p = player {
+                            trackManager.setPlaybackRate(rate, for: p)
+                        }
+                    } label: {
+                        HStack {
+                            Text(rate.displayName)
+                            if trackManager.playbackRate == rate {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(trackManager.isSubtitlesEnabled || trackManager.playbackRate != .normal ? Color.blue : Color.white)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - Action Tools Icons
+    
+    @ViewBuilder
+    private func actionToolsIcons(spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            // 1. Favorite Button
+            Button {
+                FavoritesManager.shared.toggleFavorite(currentItem)
+            } label: {
+                Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.leading, 16)
             
-            Spacer()
+            // 2. Save to Camera Roll
+            Button {
+                saveToCameraRoll()
+            } label: {
+                if isSaving {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 30, height: 30)
+                } else {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(isSaving)
             
-            // Sound Level Bar at top trailing
-            VideoVolumeBar(volume: $volume, isMuted: $isMuted)
-                .padding(.trailing, 16)
-                .onChange(of: volume) { _, newVol in
-                    player?.volume = Float(newVol)
-                    resetAutoHideTimer()
+            // 3. ShareLink
+            if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
+                ShareLink(
+                    item: MediaCacheManager.shared.localVideoURL(for: currentItem),
+                    preview: SharePreview(currentItem.name)
+                ) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
                 }
-                .onChange(of: isMuted) { _, muted in
-                    player?.isMuted = muted
-                    resetAutoHideTimer()
+                .buttonStyle(.plain)
+            }
+            
+            // 4. AirPlay Button
+            AirPlayButtonView()
+                .frame(width: 22, height: 22)
+                .frame(width: 30, height: 30)
+            
+            // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
+            playbackOptionsMenu
+        }
+    }
+    
+    // MARK: - Top Bar (Responsive for Compact Portrait vs Regular/Landscape)
+    
+    private var topBar: some View {
+        Group {
+            if isCompactPortrait {
+                // Two-tier stacked layout for compact portrait (iPhone Portrait, ~375–393pt)
+                VStack(spacing: 8) {
+                    // Row 1: Close Button + Centered Title Capsule + Volume Bar
+                    HStack(spacing: 8) {
+                        closeButton
+                        
+                        Spacer(minLength: 4)
+                        
+                        titleCapsule
+                        
+                        Spacer(minLength: 4)
+                        
+                        volumeBar
+                    }
+                    .padding(.horizontal, 16)
+                    
+                    // Row 2: Centered Floating Action Pill
+                    HStack(spacing: 6) {
+                        if videos.count > 1 {
+                            previousButton
+                            toolsDivider
+                        }
+                        
+                        actionToolsIcons(spacing: 12)
+                        
+                        if videos.count > 1 {
+                            toolsDivider
+                            nextButton
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(.ultraThinMaterial)
+                            .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
+                    )
                 }
+                .padding(.top, 10)
+            } else {
+                // Regular / Landscape layout: single row with centered overlay
+                HStack {
+                    closeButton
+                        .padding(.leading, 16)
+                    
+                    Spacer()
+                    
+                    volumeBar
+                        .padding(.trailing, 16)
+                }
+                .frame(minHeight: isRegular ? 84 : 64)
+                .overlay(alignment: .center) {
+                    centerToolsBar
+                        .padding(.top, isRegular ? 20 : 0)
+                }
+                .padding(.top, isRegular ? 20 : 10)
+            }
         }
-        .frame(minHeight: isRegular ? 84 : 64)
-        .overlay(alignment: .center) {
-            centerToolsBar
-                .padding(.top, isRegular ? 20 : 0)
-        }
-        .padding(.top, isRegular ? 20 : 10)
     }
     
     // MARK: - Resume Playback Toast (Stacked below topBar)
@@ -365,26 +638,14 @@ public struct VideoDetailView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
     
-    // MARK: - Center Tools Toolbar (Previous, 2-line Middle, Next)
+    // MARK: - Center Tools Toolbar (Regular / Landscape Single-Row Overlay)
     
     private var centerToolsBar: some View {
         HStack(spacing: 6) {
             // Previous Button (on leading side, larger)
             if videos.count > 1 {
-                Button {
-                    goToPrevious()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 42)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                
-                Divider()
-                    .frame(height: 26)
-                    .background(Color.white.opacity(0.3))
+                previousButton
+                toolsDivider
             }
             
             // Middle: 2 Lines (Line 1: Title, Line 2: Tools)
@@ -408,166 +669,15 @@ public struct VideoDetailView: View {
                         .lineLimit(1)
                 }
                 
-                // Line 2: Consolidated & Enlarged Tools (17-18pt icons)
-                HStack(spacing: 14) {
-                    // 1. Favorite Button
-                    Button {
-                        FavoritesManager.shared.toggleFavorite(currentItem)
-                    } label: {
-                        Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    // 2. Save to Camera Roll
-                    Button {
-                        saveToCameraRoll()
-                    } label: {
-                        if isSaving {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 30, height: 30)
-                        } else {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .contentShape(Rectangle())
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isSaving)
-                    
-                    // 3. ShareLink
-                    if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {
-                        ShareLink(
-                            item: MediaCacheManager.shared.localVideoURL(for: currentItem),
-                            preview: SharePreview(currentItem.name)
-                        ) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 17, weight: .medium))
-                                .foregroundStyle(.white)
-                                .frame(width: 30, height: 30)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    // 4. AirPlay Button
-                    AirPlayButtonView()
-                        .frame(width: 22, height: 22)
-                        .frame(width: 30, height: 30)
-                    
-                    // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
-                    Menu {
-                        // Picture-in-Picture
-                        Button {
-                            pipCoordinator.togglePiP()
-                        } label: {
-                            Label(
-                                isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),
-                                systemImage: isPiPActive ? "pip.exit" : "pip.enter"
-                            )
-                        }
-                        
-                        // Subtitles
-                        if !trackManager.availableSubtitles.isEmpty {
-                            Section(.Strings.videoPlayerMenuSubtitles) {
-                                Button {
-                                    if let item = player?.currentItem {
-                                        trackManager.toggleSubtitles(in: item)
-                                    }
-                                } label: {
-                                    Label(
-                                        trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
-                                        systemImage: trackManager.isSubtitlesEnabled ? "captions.bubble.fill" : "captions.bubble"
-                                    )
-                                }
-                                ForEach(trackManager.availableSubtitles) { option in
-                                    Button {
-                                        if let item = player?.currentItem {
-                                            trackManager.selectSubtitle(option: option, in: item)
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text(option.displayName)
-                                            if trackManager.selectedSubtitleID == option.id {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Audio Tracks
-                        if trackManager.availableAudios.count > 1 {
-                            Section(.Strings.videoPlayerMenuAudio) {
-                                ForEach(trackManager.availableAudios) { option in
-                                    Button {
-                                        if let item = player?.currentItem {
-                                            trackManager.selectAudio(option: option, in: item)
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text(option.displayName)
-                                            if trackManager.selectedAudioID == option.id {
-                                                Image(systemName: "checkmark")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Playback Speed
-                        Section(.Strings.videoPlayerMenuPlaybackSpeed) {
-                            ForEach(VideoPlaybackRate.allCases) { rate in
-                                Button {
-                                    if let p = player {
-                                        trackManager.setPlaybackRate(rate, for: p)
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text(rate.displayName)
-                                        if trackManager.playbackRate == rate {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(trackManager.isSubtitlesEnabled || trackManager.playbackRate != .normal ? Color.blue : Color.white)
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
+                // Line 2: Consolidated & Enlarged Tools
+                actionToolsIcons(spacing: 14)
             }
             .padding(.horizontal, 6)
             
             // Next Button (on trailing side, larger)
             if videos.count > 1 {
-                Divider()
-                    .frame(height: 26)
-                    .background(Color.white.opacity(0.3))
-                
-                Button {
-                    goToNext()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 42)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                toolsDivider
+                nextButton
             }
         }
         .padding(.horizontal, 8)

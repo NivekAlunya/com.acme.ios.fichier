@@ -1369,74 +1369,74 @@
         }
       }
     },
-    "connection_title_mac_mini_photos": {
+    "connection_title_connect_to_server": {
       "comment": "Navigation title on the SMB connection screen",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac mini Fotos"
+            "value": "Mit Server verbinden"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac mini Photos"
+            "value": "Connect to Server"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fotos del Mac mini"
+            "value": "Conectarse al servidor"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Photos Mac mini"
+            "value": "Connexion au serveur"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Foto Mac mini"
+            "value": "Connetti al server"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac miniの写真"
+            "value": "サーバへ接続"
           }
         },
         "nl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac mini Foto’s"
+            "value": "Verbind met server"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zdjęcia z Maca mini"
+            "value": "Połącz z serwerem"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fotografias do Mac mini"
+            "value": "Ligar ao servidor"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac mini 照片"
+            "value": "连接服务器"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mac mini 照片"
+            "value": "連接伺服器"
           }
         }
       }
@@ -10424,6 +10424,210 @@
             "value": "版本"
           }
         }
+      }
+    },
+    "sidebar_title_remotes": {
+      "comment": "Navigation title for the Remotes sidebar column",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Server" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Remotes" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Servidores" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Serveurs distants" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Server remoti" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リモート" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Servers" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Serwery" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Servidores remotos" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远程服务器" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "遠端伺服器" } }
+      }
+    },
+    "sidebar_section_remotes": {
+      "comment": "Section header for saved remote servers in sidebar",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Server" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Remotes" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Servidores" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Serveurs distants" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Server remoti" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "リモート" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Servers" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Serwery" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Servidores remotos" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远程服务器" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "遠端伺服器" } }
+      }
+    },
+    "sidebar_button_add_remote": {
+      "comment": "Button label and accessibility label to add a remote server",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Server hinzufügen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Add Server" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Añadir servidor" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Ajouter un serveur" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Aggiungi server" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "サーバを追加" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Voeg server toe" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Dodaj serwer" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Adicionar servidor" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加服务器" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "新增伺服器" } }
+      }
+    },
+    "sidebar_no_saved_remotes_title": {
+      "comment": "Title when no saved remote servers exist",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine gespeicherten Server" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Saved Servers" } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay servidores guardados" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun serveur enregistré" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Nessun server salvato" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "保存されたサーバはありません" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Geen opgeslagen servers" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Brak zapisanych serwerów" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhum servidor guardado" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无已保存的服务器" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無已儲存的伺服器" } }
+      }
+    },
+    "sidebar_no_saved_remotes_description": {
+      "comment": "Description when no saved servers exist",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Tippen Sie auf +, um einen lokalen SMB-Dateiserver zu finden oder zu verbinden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Tap + to discover or connect to a local SMB file server." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Toca + para descubrir o conectarte a un servidor SMB local." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Appuyez sur + pour découvrir ou vous connecter à un serveur SMB local." } },
+        "it": { "stringUnit": { "state": "translated", "value": "Tocca + per rilevare o connetterti a un server SMB locale." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "+ をタップしてローカルSMBファイルサーバを検出または接続します。" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Tik op + om een lokale SMB-bestandsserver te ontdekken of ermee te verbinden." } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Stuknij +, aby wykryć lub połączyć się z lokalnym serwerem SMB." } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Toque em + para detetar ou ligar a um servidor de ficheiros SMB local." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "点击 + 发现或连接本地 SMB 文件服务器。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "點一下 + 探索或連接本地 SMB 檔案伺服器。" } }
+      }
+    },
+    "sidebar_no_connected_remote_title": {
+      "comment": "Title when no server is currently connected",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kein Server verbunden" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Server Connected" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ningún servidor conectado" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun serveur connecté" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Nessun server connesso" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "サーバ未接続" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Geen server verbonden" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Brak połączonego serwera" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhum servidor ligado" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未连接服务器" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未連接伺服器" } }
+      }
+    },
+    "sidebar_no_connected_remote_description": {
+      "comment": "Description when no server is connected",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie einen Server aus der Seitenleiste oder fügen Sie einen neuen hinzu." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Select a server from the sidebar or add a new one to browse shared folders." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Selecciona un servidor de la barra lateral o añade uno nuevo." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Sélectionnez un serveur dans la barre latérale ou ajoutez-en un pour parcourir les dossiers partagés." } },
+        "it": { "stringUnit": { "state": "translated", "value": "Seleziona un server dalla barra laterale o aggiungine uno nuovo." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "サイドバーからサーバを選択するか新規追加して共有フォルダを表示します。" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Selecteer een server in de navigatiekolom of voeg een nieuwe toe." } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wybierz serwer z paska bocznego lub dodaj nowy, aby przeglądać foldery." } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Selecione um servidor na barra lateral ou adicione um novo." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从侧边栏选择服务器或添加新服务器以浏览共享文件夹。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從側邊欄選擇伺服器或新增伺服器以瀏覽共享檔案夾。" } }
+      }
+    },
+    "sidebar_loading_shares": {
+      "comment": "Text displayed while shares are being fetched",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Freigaben werden geladen..." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Loading shares..." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Cargando recursos compartidos..." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Chargement des partages..." } },
+        "it": { "stringUnit": { "state": "translated", "value": "Caricamento condivisioni..." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "共有を読み込み中..." } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Delen laden..." } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wczytywanie udziałów..." } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "A carregar partilhas..." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在加载共享..." } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "正在載入共享..." } }
+      }
+    },
+    "sidebar_no_shares_description": {
+      "comment": "Description when no shares are available on connected server",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Keine freigegebenen Ordner auf diesem Server verfügbar." } },
+        "en": { "stringUnit": { "state": "translated", "value": "No shared folders are available on this server." } },
+        "es": { "stringUnit": { "state": "translated", "value": "No hay carpetas compartidas disponibles en este servidor." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun dossier partagé n'est disponible sur ce serveur." } },
+        "it": { "stringUnit": { "state": "translated", "value": "Nessuna cartella condivisa disponibile su questo server." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "このサーバで利用可能な共有フォルダはありません。" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Geen gedeelde mappen beschikbaar op deze server." } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Brak dostępnych folderów współdzielonych na tym serwerze." } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhuma pasta partilhada disponível neste servidor." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此服务器上没有可用的共享文件夹。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此伺服器上沒有可用的共享檔案夾。" } }
+      }
+    },
+    "gallery_no_folder_selected_title": {
+      "comment": "Title when no folder is selected in splitview detail",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Kein Ordner ausgewählt" } },
+        "en": { "stringUnit": { "state": "translated", "value": "No Folder Selected" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Ninguna carpeta seleccionada" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Aucun dossier sélectionné" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Nessuna cartella selezionata" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "フォルダが選択されていません" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Geen map geselecteerd" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Nie wybrano folderu" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhuma pasta selecionada" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未选择文件夹" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未選擇檔案夾" } }
+      }
+    },
+    "gallery_no_folder_selected_description": {
+      "comment": "Description when no folder is selected in splitview detail",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie einen Ordner aus, um Fotos und Videos anzuzeigen." } },
+        "en": { "stringUnit": { "state": "translated", "value": "Choose a folder from the tree to view its photos and videos." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Elige una carpeta del árbol para ver sus fotos y vídeos." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez un dossier dans l'arborescence pour afficher ses photos et vidéos." } },
+        "it": { "stringUnit": { "state": "translated", "value": "Scegli una cartella dalla struttura per visualizzare foto e video." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ツリーからフォルダを選択して写真やビデオを表示します。" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Kies een map in de structuur om de foto’s en video’s te bekijken." } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Wybierz folder z drzewa, aby wyświetlić zdjęcia i wideo." } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Escolha uma pasta na árvore para ver as respetivas fotografias e vídeos." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从目录树中选择一个文件夹以查看其照片和视频。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從目錄樹中選擇一個檔案夾以檢視其相片和影片。" } }
+      }
+    },
+    "connection_field_server_name": {
+      "comment": "Placeholder for optional server name / hostname input field",
+      "extractionState": "manual",
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Servername (Optional)" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Server Name (Optional)" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Nombre del servidor (Opcional)" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Nom du serveur (Optionnel)" } },
+        "it": { "stringUnit": { "state": "translated", "value": "Nome del server (Opzionale)" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "サーバ名（任意）" } },
+        "nl": { "stringUnit": { "state": "translated", "value": "Servernaam (optioneel)" } },
+        "pl": { "stringUnit": { "state": "translated", "value": "Nazwa serwera (opcjonalnie)" } },
+        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nome do servidor (Opcional)" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "服务器名称（可选）" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "伺服器名稱（選填）" } }
       }
     }
   },
