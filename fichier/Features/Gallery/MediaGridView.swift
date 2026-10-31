@@ -134,6 +134,7 @@ struct MediaGridView: View {
                     isAllFavorites: !selectedItems.isEmpty && selectedItems.allSatisfy { FavoritesManager.shared.isFavorite($0) },
                     isProcessing: isBatchProcessing,
                     progressMessage: batchProgressMessage,
+                    showSaveToPhotos: manager.currentLocation?.kind != .photos,
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
                     onShare: { batchShare() }

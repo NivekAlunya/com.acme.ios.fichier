@@ -13,6 +13,35 @@ nonisolated public struct StorageLocation: Identifiable, Hashable, Sendable {
     public let smbConnection: SavedSMBConnection?
     public let folderLocation: SavedFolderLocation?
     
+    public static let photosLocationID = "photos::library"
+    
+    nonisolated public static var photos: StorageLocation {
+        StorageLocation(
+            id: photosLocationID,
+            name: String(localized: .Strings.sidebarLocationPhotos),
+            subtitle: String(localized: .Strings.sidebarLocationPhotoLibrary),
+            kind: .photos,
+            smbConnection: nil,
+            folderLocation: nil
+        )
+    }
+    
+    nonisolated public init(
+        id: String,
+        name: String,
+        subtitle: String?,
+        kind: StorageLocationKind,
+        smbConnection: SavedSMBConnection? = nil,
+        folderLocation: SavedFolderLocation? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.subtitle = subtitle
+        self.kind = kind
+        self.smbConnection = smbConnection
+        self.folderLocation = folderLocation
+    }
+    
     nonisolated public init(smb: SavedSMBConnection) {
         self.id = "smb::\(smb.id)"
         self.name = smb.displayName
@@ -44,6 +73,8 @@ nonisolated public struct StorageLocation: Identifiable, Hashable, Sendable {
             #endif
         case .iCloudFolder:
             return "icloud.fill"
+        case .photos:
+            return "photo.on.rectangle.angled"
         }
     }
     
@@ -56,6 +87,8 @@ nonisolated public struct StorageLocation: Identifiable, Hashable, Sendable {
             return .orange
         case .iCloudFolder:
             return .teal
+        case .photos:
+            return .pink
         }
     }
 }

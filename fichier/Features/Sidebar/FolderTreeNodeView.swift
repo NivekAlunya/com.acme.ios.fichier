@@ -31,6 +31,37 @@ struct FolderTreeNodeView: View {
         manager.selectedFolder?.id == node.id
     }
     
+    private var nodeIconName: String {
+        if let customIcon = node.folderIconName {
+            if customIcon == "rectangle.stack" && isSelected {
+                return "rectangle.stack.fill"
+            }
+            return customIcon
+        }
+        
+        if level == 0 {
+            if manager.currentLocation?.kind == .photos {
+                return "photo.on.rectangle.angled"
+            } else if manager.currentLocation?.kind == .iCloudFolder {
+                return "icloud.fill"
+            } else if manager.currentLocation?.kind == .localFolder {
+                return "folder.fill"
+            }
+            return "externaldrive.fill.badge.wifi"
+        }
+        return isSelected ? "folder.fill" : "folder"
+    }
+    
+    private var nodeIconColor: Color {
+        if node.folderIconName == "heart.fill" {
+            return .pink
+        }
+        if node.locationID == StorageLocation.photosLocationID {
+            return isSelected ? .pink : .secondary
+        }
+        return isSelected ? .blue : .accentColor
+    }
+    
     var body: some View {
         HStack(spacing: 6) {
             if level > 0 {
@@ -63,8 +94,8 @@ struct FolderTreeNodeView: View {
                 onSelectFolder(node)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: level == 0 ? "externaldrive.fill.badge.wifi" : (isSelected ? "folder.fill" : "folder"))
-                        .foregroundColor(isSelected ? .blue : .accentColor)
+                    Image(systemName: nodeIconName)
+                        .foregroundColor(nodeIconColor)
                     
                     Text(node.name)
                         .fontWeight(isSelected ? .semibold : .regular)

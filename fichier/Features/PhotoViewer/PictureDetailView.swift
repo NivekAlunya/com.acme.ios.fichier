@@ -315,20 +315,22 @@ public struct PictureDetailView: View {
                         .padding(5)
                 }
                 
-                // 8. Save to Camera Roll
-                Button {
-                    saveToCameraRoll()
-                } label: {
-                    if isSaving {
-                        ProgressView().scaleEffect(0.7)
-                    } else {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .padding(5)
+                if !currentItem.isPhotoAsset {
+                    // 8. Save to Camera Roll
+                    Button {
+                        saveToCameraRoll()
+                    } label: {
+                        if isSaving {
+                            ProgressView().scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.white)
+                                .padding(5)
+                        }
                     }
+                    .disabled(currentImage == nil || isSaving)
                 }
-                .disabled(currentImage == nil || isSaving)
                 
                 // 9. ShareLink
                 if let img = currentImage {

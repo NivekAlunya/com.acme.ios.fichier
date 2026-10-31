@@ -30,6 +30,9 @@ struct SidebarFolderTreeView: View {
     }
     
     private var sectionHeaderTitle: String {
+        if manager.currentLocation?.kind == .photos {
+            return String(localized: .Strings.sidebarLocationPhotos)
+        }
         if manager.currentLocation?.kind == .localFolder || manager.currentLocation?.kind == .iCloudFolder {
             return String(localized: .Strings.gallerySectionSubfoldersCount(manager.folderTree.count))
         }

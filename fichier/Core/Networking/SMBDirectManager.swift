@@ -45,6 +45,7 @@ public final class SMBDirectManager {
     private let worker = SMBClientActor()
     nonisolated var clientActor: SMBClientActor { worker }
     private let localWorker = LocalStorageActor()
+    private let photosWorker = PhotoLibraryActor()
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
     private let savedFolderLocationsKey = "SavedFolderLocations_v1"
@@ -101,7 +102,7 @@ public final class SMBDirectManager {
     // MARK: - Saved Folder Locations Persistence (Local & iCloud Drive)
     
     public var allLocations: [StorageLocation] {
-        var list: [StorageLocation] = []
+        var list: [StorageLocation] = [StorageLocation.photos]
         for folder in savedFolderLocations {
             list.append(StorageLocation(folder: folder))
         }
@@ -167,6 +168,8 @@ public final class SMBDirectManager {
             if let folder = location.folderLocation {
                 removeSavedFolderLocation(folder)
             }
+        case .photos:
+            break
         }
     }
     
@@ -197,6 +200,32 @@ public final class SMBDirectManager {
                 self.isConnected = true
                 self.isLoading = false
                 await selectAndLoadFolder(rootItem)
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+            
+        case .photos:
+            await disconnect()
+            isLoading = true
+            errorMessage = nil
+            currentLocation = location
+            currentConnectionID = location.id
+            
+            do {
+                let rootItem = try await photosWorker.activateLocation()
+                let (albums, _) = try await photosWorker.listContents(at: rootItem)
+                var rootWithChildren = rootItem
+                rootWithChildren.children = albums.isEmpty ? nil : albums
+                self.folderTree = [rootWithChildren]
+                self.isConnected = true
+                self.isLoading = false
+                
+                if let firstAlbum = albums.first {
+                    await selectAndLoadFolder(firstAlbum)
+                } else {
+                    await selectAndLoadFolder(rootWithChildren)
+                }
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
@@ -265,6 +294,27 @@ public final class SMBDirectManager {
     
     public func refreshSharesAndFolders() async {
         errorMessage = nil
+        if currentLocation?.kind == .photos {
+            isLoading = true
+            do {
+                let rootItem = try await photosWorker.activateLocation()
+                let (albums, _) = try await photosWorker.listContents(at: rootItem)
+                var rootWithChildren = rootItem
+                rootWithChildren.children = albums.isEmpty ? nil : albums
+                self.folderTree = [rootWithChildren]
+                self.isLoading = false
+                if let current = selectedFolder {
+                    await selectAndLoadFolder(current)
+                } else if let firstAlbum = albums.first {
+                    await selectAndLoadFolder(firstAlbum)
+                }
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+            return
+        }
+        
         if let folderLoc = currentLocation?.folderLocation {
             isLoading = true
             do {
@@ -326,8 +376,9 @@ public final class SMBDirectManager {
         let targetPath = folder.path
         let targetName = folder.name
         let isLocal = folder.localURL != nil
+        let isPhotos = folder.locationID == StorageLocation.photosLocationID
         
-        let task = Task { [weak self, worker, localWorker] in
+        let task = Task { [weak self, worker, localWorker, photosWorker] in
             guard let self else { return }
             do {
                 try Task.checkCancellation()
@@ -336,6 +387,10 @@ public final class SMBDirectManager {
                 
                 if isLocal {
                     let (subs, media) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
+                    subfolders = subs
+                    foundPictures = media
+                } else if isPhotos {
+                    let (subs, media) = try await photosWorker.listContents(at: folder)
                     subfolders = subs
                     foundPictures = media
                 } else {
@@ -372,6 +427,9 @@ public final class SMBDirectManager {
             if folder.localURL != nil {
                 let (subs, _) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
                 subfolders = subs
+            } else if folder.locationID == StorageLocation.photosLocationID {
+                let (subs, _) = try await photosWorker.listContents(at: folder)
+                subfolders = subs
             } else {
                 let (subs, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
                 subfolders = subs
@@ -398,6 +456,19 @@ public final class SMBDirectManager {
     
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
+        
+        // Photos Library asset thumbnail
+        if item.phAssetIdentifier != nil {
+            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+            if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
+                return cached
+            }
+            if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
+                await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                return thumb
+            }
+            return nil
+        }
         
         // Local or iCloud Drive file thumbnail
         if item.localURL != nil {
@@ -554,6 +625,9 @@ public final class SMBDirectManager {
     
     public func downloadImage(for item: MediaItem) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
+        if item.phAssetIdentifier != nil {
+            return await photosWorker.fetchImage(for: item)
+        }
         if item.localURL != nil {
             return await localWorker.fetchImage(for: item)
         }
@@ -561,6 +635,9 @@ public final class SMBDirectManager {
     }
     
     public func fetchFileSize(for item: MediaItem) async -> Int64 {
+        if item.phAssetIdentifier != nil {
+            return await photosWorker.fetchFileSize(for: item)
+        }
         if item.localURL != nil {
             return await localWorker.fetchFileSize(for: item)
         }
@@ -569,6 +646,9 @@ public final class SMBDirectManager {
     
     public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
+        if item.phAssetIdentifier != nil {
+            return await photosWorker.fetchMetadata(for: item)
+        }
         if item.localURL != nil {
             return await localWorker.fetchMetadata(for: item)
         }
@@ -582,6 +662,9 @@ public final class SMBDirectManager {
     }
     
     public func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        if item.phAssetIdentifier != nil {
+            return try await photosWorker.fetchVideoURL(for: item)
+        }
         if let localURL = item.localURL {
             return localURL
         }
