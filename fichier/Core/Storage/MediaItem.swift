@@ -1,45 +1,56 @@
 //
-//  SMBItem.swift
+//  MediaItem.swift
 //  fichier
 //
 
 import Foundation
 
-nonisolated public struct SMBItem: Identifiable, Hashable, Sendable {
+nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     public var id: String {
-        if connectionID.isEmpty {
-            return "\(shareName)::\(path)"
+        if locationID.isEmpty {
+            return "\(rootName)::\(path)"
         } else {
-            return "\(connectionID)|\(shareName)::\(path)"
+            return "\(locationID)|\(rootName)::\(path)"
         }
     }
-    public let connectionID: String
+    public let locationID: String
     public let name: String
-    public let shareName: String
+    public let rootName: String
     public let path: String
     public let isDirectory: Bool
     public let size: Int64
     public let modifiedDate: Date?
-    public var children: [SMBItem]?
+    public var children: [MediaItem]?
+    public let localURL: URL?
+    
+    public var shareName: String {
+        rootName
+    }
+    
+    public var connectionID: String {
+        locationID
+    }
     
     public init(
-        connectionID: String = "",
+        locationID: String = "",
         name: String,
-        shareName: String,
+        rootName: String = "",
         path: String,
         isDirectory: Bool,
         size: Int64 = 0,
         modifiedDate: Date? = nil,
-        children: [SMBItem]? = nil
+        children: [MediaItem]? = nil,
+        localURL: URL? = nil
     ) {
-        self.connectionID = connectionID
+        self.locationID = locationID
         self.name = name
-        self.shareName = shareName
+        self.rootName = rootName
         self.path = path
         self.isDirectory = isDirectory
         self.size = size
         self.modifiedDate = modifiedDate
         self.children = children
+        self.localURL = localURL
     }
     
     public var formattedSize: String {

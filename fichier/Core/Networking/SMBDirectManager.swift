@@ -19,17 +19,23 @@ public final class SMBDirectManager {
     // Saved validated server connections
     public var savedConnections: [SavedSMBConnection] = []
     
+    // Saved local and iCloud Drive folder locations
+    public var savedFolderLocations: [SavedFolderLocation] = []
+    
+    // Currently active location (SMB or Local/iCloud Folder)
+    public var currentLocation: StorageLocation?
+    
     // Root tree of shared folders for Sidebar Tree
-    public var folderTree: [SMBItem] = []
+    public var folderTree: [MediaItem] = []
     
     // Subfolders of the currently selected folder
-    public var currentFolders: [SMBItem] = []
+    public var currentFolders: [MediaItem] = []
     
     // Currently selected folder in the SplitView
-    public var selectedFolder: SMBItem?
+    public var selectedFolder: MediaItem?
     
     // Pictures in the currently selected folder
-    public var pictures: [SMBItem] = []
+    public var pictures: [MediaItem] = []
     
     // Tracks current active folder to cancel out-of-order thumbnail requests
     public private(set) var activeFolderID: String?
@@ -38,11 +44,14 @@ public final class SMBDirectManager {
     
     private let worker = SMBClientActor()
     nonisolated var clientActor: SMBClientActor { worker }
+    private let localWorker = LocalStorageActor()
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
+    private let savedFolderLocationsKey = "SavedFolderLocations_v1"
     
     public init() {
         loadSavedConnections()
+        loadSavedFolderLocations()
     }
     
     // MARK: - Saved Connections Persistence
@@ -89,6 +98,112 @@ public final class SMBDirectManager {
         }
     }
     
+    // MARK: - Saved Folder Locations Persistence (Local & iCloud Drive)
+    
+    public var allLocations: [StorageLocation] {
+        var list: [StorageLocation] = []
+        for folder in savedFolderLocations {
+            list.append(StorageLocation(folder: folder))
+        }
+        for conn in savedConnections {
+            list.append(StorageLocation(smb: conn))
+        }
+        return list
+    }
+    
+    public func loadSavedFolderLocations() {
+        guard let data = UserDefaults.standard.data(forKey: savedFolderLocationsKey),
+              let decoded = try? JSONDecoder().decode([SavedFolderLocation].self, from: data) else {
+            savedFolderLocations = []
+            return
+        }
+        savedFolderLocations = decoded.sorted { $0.dateAdded > $1.dateAdded }
+    }
+    
+    public func addSavedFolderLocation(_ location: SavedFolderLocation) {
+        var updated = savedFolderLocations.filter { $0.id != location.id }
+        updated.insert(location, at: 0)
+        savedFolderLocations = updated
+        if let encoded = try? JSONEncoder().encode(updated) {
+            UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
+        }
+    }
+    
+    public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
+        savedFolderLocations.removeAll { $0.id == location.id }
+        if currentLocation?.folderLocation?.id == location.id {
+            Task {
+                await disconnect()
+            }
+        }
+        if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
+            UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
+        }
+    }
+    
+    private func updateBookmarkData(_ bookmarkData: Data, for folderLocation: SavedFolderLocation) {
+        if let index = savedFolderLocations.firstIndex(where: { $0.id == folderLocation.id }) {
+            let updated = SavedFolderLocation(
+                id: folderLocation.id,
+                name: folderLocation.name,
+                bookmarkData: bookmarkData,
+                isICloud: folderLocation.isICloud,
+                dateAdded: folderLocation.dateAdded
+            )
+            savedFolderLocations[index] = updated
+            if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
+                UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
+            }
+        }
+    }
+    
+    public func removeLocation(_ location: StorageLocation) {
+        switch location.kind {
+        case .smb:
+            if let smb = location.smbConnection {
+                removeSavedConnection(smb)
+            }
+        case .localFolder, .iCloudFolder:
+            if let folder = location.folderLocation {
+                removeSavedFolderLocation(folder)
+            }
+        }
+    }
+    
+    // MARK: - Select Unified Location
+    
+    public func selectLocation(_ location: StorageLocation) async {
+        switch location.kind {
+        case .smb:
+            guard let conn = location.smbConnection else { return }
+            currentLocation = location
+            let pass = password(for: conn)
+            await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
+            
+        case .localFolder, .iCloudFolder:
+            guard let folderLoc = location.folderLocation else { return }
+            await disconnect()
+            isLoading = true
+            errorMessage = nil
+            currentLocation = location
+            currentConnectionID = location.id
+            
+            do {
+                let (rootItem, updatedBookmark) = try await localWorker.activateLocation(folderLoc)
+                if let newBookmark = updatedBookmark {
+                    updateBookmarkData(newBookmark, for: folderLoc)
+                }
+                self.folderTree = [rootItem]
+                self.isConnected = true
+                self.isLoading = false
+                await selectAndLoadFolder(rootItem)
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+        }
+    }
+    
     // MARK: - Connect to Mac mini & List All Shares Automatically
     
     public func connect(host: String, user: String, pass: String, hostname: String? = nil) async {
@@ -127,6 +242,9 @@ public final class SMBDirectManager {
             
             // Connection verified! Save server credentials for future use
             saveValidatedConnection(host: cleanHost, user: user, pass: pass, hostname: hostname)
+            if let saved = savedConnections.first(where: { $0.id == "\(user)@\(cleanHost)" }) {
+                self.currentLocation = StorageLocation(smb: saved)
+            }
             
             self.folderTree = discoveredShares
             self.isConnected = true
@@ -147,6 +265,27 @@ public final class SMBDirectManager {
     
     public func refreshSharesAndFolders() async {
         errorMessage = nil
+        if let folderLoc = currentLocation?.folderLocation {
+            isLoading = true
+            do {
+                let (rootItem, updatedBookmark) = try await localWorker.activateLocation(folderLoc)
+                if let newBookmark = updatedBookmark {
+                    updateBookmarkData(newBookmark, for: folderLoc)
+                }
+                self.folderTree = [rootItem]
+                self.isLoading = false
+                if let current = selectedFolder {
+                    await selectAndLoadFolder(current)
+                } else {
+                    await selectAndLoadFolder(rootItem)
+                }
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.isLoading = false
+            }
+            return
+        }
+        
         do {
             let refreshedShares = try await worker.refreshShares()
             self.folderTree = refreshedShares
@@ -163,7 +302,7 @@ public final class SMBDirectManager {
     
     // MARK: - Select Folder & Load Both Subfolders + Pictures
     
-    public func selectAndLoadFolder(_ folder: SMBItem) async {
+    public func selectAndLoadFolder(_ folder: MediaItem) async {
         // 1. Cancel previous folder scan task immediately
         loadFolderTask?.cancel()
         
@@ -186,12 +325,25 @@ public final class SMBDirectManager {
         let targetShare = folder.shareName
         let targetPath = folder.path
         let targetName = folder.name
+        let isLocal = folder.localURL != nil
         
-        let task = Task { [weak self, worker] in
+        let task = Task { [weak self, worker, localWorker] in
             guard let self else { return }
             do {
                 try Task.checkCancellation()
-                let (subfolders, foundPictures) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
+                let subfolders: [MediaItem]
+                let foundPictures: [MediaItem]
+                
+                if isLocal {
+                    let (subs, media) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
+                    subfolders = subs
+                    foundPictures = media
+                } else {
+                    let (subs, media) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
+                    subfolders = subs
+                    foundPictures = media
+                }
+                
                 try Task.checkCancellation()
                 
                 guard !Task.isCancelled, self.activeFolderID == targetID else { return }
@@ -199,7 +351,7 @@ public final class SMBDirectManager {
                 self.pictures = foundPictures
                 self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
                 self.isLoading = false
-                AppLog.smb.info("Share '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) pictures")
+                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) items")
             } catch is CancellationError {
                 // Superseded by another folder click; silently exit
             } catch {
@@ -214,16 +366,23 @@ public final class SMBDirectManager {
         await task.value
     }
     
-    public func loadSubfoldersForTree(at folder: SMBItem) async {
+    public func loadSubfoldersForTree(at folder: MediaItem) async {
         do {
-            let (subfolders, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
+            let subfolders: [MediaItem]
+            if folder.localURL != nil {
+                let (subs, _) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
+                subfolders = subs
+            } else {
+                let (subs, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
+                subfolders = subs
+            }
             self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
         } catch {
             AppLog.smb.error("Failed to expand tree at \(folder.shareName, privacy: .private)/\(folder.path, privacy: .private): \(error.localizedDescription)")
         }
     }
     
-    private func updateTreeNodes(in nodes: [SMBItem], targetID: String, children: [SMBItem]) -> [SMBItem] {
+    private func updateTreeNodes(in nodes: [MediaItem], targetID: String, children: [MediaItem]) -> [MediaItem] {
         nodes.map { node in
             var updated = node
             if node.id == targetID {
@@ -237,8 +396,22 @@ public final class SMBDirectManager {
     
     // MARK: - Download Picture / Thumbnail
     
-    public func downloadThumbnail(for item: SMBItem, maxDimension: CGFloat = 260) async -> UIImage? {
+    public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
+        
+        // Local or iCloud Drive file thumbnail
+        if item.localURL != nil {
+            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+            if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
+                return cached
+            }
+            if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
+                await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                return thumb
+            }
+            return nil
+        }
+        
         let currentActive = activeFolderID
         // Early discard if folder already changed
         if let current = selectedFolder, item.shareName != current.shareName || !item.path.hasPrefix(current.path) {
@@ -299,7 +472,7 @@ public final class SMBDirectManager {
     }
     
     /// Streams minimal byte slices on demand using the same progressive loader as the player to extract a keyframe
-    private func streamVideoThumbnail(for item: SMBItem, maxDimension: CGFloat) async -> UIImage? {
+    private func streamVideoThumbnail(for item: MediaItem, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
         return await videoThumbnailLimiter.withPermit {
@@ -309,10 +482,10 @@ public final class SMBDirectManager {
             if validItem.size <= 0 {
                 let realSize = await fetchFileSize(for: item)
                 if realSize > 0 {
-                    validItem = SMBItem(
-                        connectionID: item.connectionID,
+                    validItem = MediaItem(
+                        locationID: item.locationID,
                         name: item.name,
-                        shareName: item.shareName,
+                        rootName: item.rootName,
                         path: item.path,
                         isDirectory: item.isDirectory,
                         size: realSize,
@@ -379,28 +552,40 @@ public final class SMBDirectManager {
         }
     }
     
-    public func downloadImage(for item: SMBItem) async -> UIImage? {
+    public func downloadImage(for item: MediaItem) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
+        if item.localURL != nil {
+            return await localWorker.fetchImage(for: item)
+        }
         return await worker.fetchFullImage(for: item)
     }
     
-    public func fetchFileSize(for item: SMBItem) async -> Int64 {
-        await worker.fetchFileSize(for: item)
+    public func fetchFileSize(for item: MediaItem) async -> Int64 {
+        if item.localURL != nil {
+            return await localWorker.fetchFileSize(for: item)
+        }
+        return await worker.fetchFileSize(for: item)
     }
     
-    public func fetchMetadata(for item: SMBItem) async -> PictureEXIFData? {
+    public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
+        if item.localURL != nil {
+            return await localWorker.fetchMetadata(for: item)
+        }
         return await worker.fetchMetadata(for: item)
     }
     
     // MARK: - Video Support & Disk Cache (Tier 3)
     
-    nonisolated public func fetchMediaRange(for item: SMBItem, offset: Int64, length: Int) async throws -> Data {
+    nonisolated public func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
         try await worker.fetchMediaRange(for: item, offset: offset, length: length)
     }
     
-    public func fetchVideoURL(for item: SMBItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        try await worker.fetchVideoURL(for: item, progress: progress)
+    public func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        if let localURL = item.localURL {
+            return localURL
+        }
+        return try await worker.fetchVideoURL(for: item, progress: progress)
     }
     
     public var mediaCacheSize: String {
@@ -416,11 +601,12 @@ public final class SMBDirectManager {
     
     // MARK: - Disconnect
     
-    public func disconnect() {
+    public func disconnect() async {
         loadFolderTask?.cancel()
         loadFolderTask = nil
         activeFolderID = nil
         currentConnectionID = ""
+        currentLocation = nil
         
         isConnected = false
         isLoading = false
@@ -429,9 +615,8 @@ public final class SMBDirectManager {
         selectedFolder = nil
         pictures = []
         
-        Task {
-            await worker.setActiveFolder(id: nil)
-            await worker.disconnect()
-        }
+        await localWorker.deactivateCurrentLocation()
+        await worker.setActiveFolder(id: nil)
+        await worker.disconnect()
     }
 }

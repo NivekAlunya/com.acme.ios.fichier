@@ -8789,255 +8789,1080 @@
       "comment": "Section header for audio track selection in video player menu",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Audio" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Audio" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Audio" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Piste audio" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Audio" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "オーディオ" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Audio" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Ścieżka dźwiękowa" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Áudio" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "音频" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "音訊" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piste audio"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オーディオ"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ścieżka dźwiękowa"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Áudio"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音訊"
+          }
+        }
       }
     },
     "video_player_menu_playback_speed": {
       "comment": "Section header for playback speed selection in video player menu",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabegeschwindigkeit" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Playback Speed" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Velocidad de reproducción" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Vitesse de lecture" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Velocità di riproduzione" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "再生速度" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Afspeelsnelheid" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Szybkość odtwarzania" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Velocidade de reprodução" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放速度" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放速度" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabegeschwindigkeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback Speed"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velocidad de reproducción"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vitesse de lecture"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velocità di riproduzione"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再生速度"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afspeelsnelheid"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Szybkość odtwarzania"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velocidade de reprodução"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放速度"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放速度"
+          }
+        }
       }
     },
     "video_player_menu_subtitles": {
       "comment": "Section header for subtitles selection in video player menu",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Untertitel" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Subtitles" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Subtítulos" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Sous-titres" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Sottotitoli" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "字幕" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Napisy" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Legendas" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "字幕" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "字幕" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtítulos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titres"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sottotitoli"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ondertitels"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Napisy"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legendas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕"
+          }
+        }
       }
     },
     "video_player_menu_title": {
       "comment": "Title of the playback options menu",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabeoptionen" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Playback Options" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Opciones de reproducción" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Options de lecture" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Opzioni di riproduzione" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "再生オプション" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Afspeelopties" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Opcje odtwarzania" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Opções de reprodução" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放选项" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放選項" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeoptionen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback Options"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opciones de reproducción"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options de lecture"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opzioni di riproduzione"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再生オプション"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afspeelopties"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcje odtwarzania"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opções de reprodução"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放选项"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放選項"
+          }
+        }
       }
     },
     "video_player_restart_button": {
       "comment": "Button to restart playback from the beginning",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Neu starten" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Restart" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Reiniciar" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Recommencer" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Ricomincia" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "最初から再生" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Herstarten" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Od początku" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Reiniciar" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "重新开始" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "重新開始" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recommencer"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ricomincia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初から再生"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herstarten"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Od początku"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiniciar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新开始"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新開始"
+          }
+        }
       }
     },
     "video_player_resume_toast": {
       "comment": "Banner message indicating video playback resumed from a previous timestamp",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Fortgesetzt bei %@" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Resumed at %@" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Reanudado en %@" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Repris à %@" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Ripreso alle %@" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "%@ から再開しました" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Hervat op %@" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wznowiono od %@" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Retomado às %@" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已从 %@ 恢复播放" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已從 %@ 繼續播放" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortgesetzt bei %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resumed at %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reanudado en %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repris à %@"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ripreso alle %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ から再開しました"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hervat op %@"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wznowiono od %@"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retomado às %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已从 %@ 恢复播放"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已從 %@ 繼續播放"
+          }
+        }
       }
     },
     "video_player_subtitles_off": {
       "comment": "Option to disable subtitles in video player",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Aus" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Off" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Desactivados" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Désactivés" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Disattivati" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "オフ" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Uit" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wyłączone" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Desativado" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "關閉" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivés"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disattivati"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフ"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uit"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wyłączone"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativado"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
+          }
+        }
       }
     },
     "video_player_menu_pip_enter": {
       "comment": "Menu item to start Picture-in-Picture mode",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Bild-in-Bild" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Imagen dentro de otra" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Image dans l’image" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ピクチャ・イン・ピクチャ" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Beeld-in-beeld" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Obraz w obrazie" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Picture in Picture" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "画中画" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "畫中畫" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild-in-Bild"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture in Picture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imagen dentro de otra"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image dans l’image"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture in Picture"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ピクチャ・イン・ピクチャ"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beeld-in-beeld"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obraz w obrazie"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Picture in Picture"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画中画"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "畫中畫"
+          }
+        }
       }
     },
     "video_player_menu_pip_exit": {
       "comment": "Menu item to stop Picture-in-Picture mode",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Bild-in-Bild beenden" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Exit Picture in Picture" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Salir de imagen dentro de otra" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Quitter Image dans l’image" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Esci da Picture in Picture" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ピクチャ・イン・ピクチャを終了" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Beeld-in-beeld sluiten" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wyjdź z trybu obrazu w obrazie" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Sair de Picture in Picture" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "退出画中画" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "結束畫中畫" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild-in-Bild beenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit Picture in Picture"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salir de imagen dentro de otra"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitter Image dans l’image"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esci da Picture in Picture"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ピクチャ・イン・ピクチャを終了"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beeld-in-beeld sluiten"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wyjdź z trybu obrazu w obrazie"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sair de Picture in Picture"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出画中画"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束畫中畫"
+          }
+        }
       }
     },
     "video_player_menu_subtitles_enable": {
       "comment": "Menu item to turn on subtitles",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Untertitel aktivieren" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Enable Subtitles" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Activar subtítulos" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Activer les sous-titres" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Attiva sottotitoli" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "字幕を有効にする" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels inschakelen" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Włącz napisy" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Ativar legendas" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "启用字幕" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "啟用字幕" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitel aktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable Subtitles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar subtítulos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer les sous-titres"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attiva sottotitoli"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕を有効にする"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ondertitels inschakelen"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Włącz napisy"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ativar legendas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用字幕"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟用字幕"
+          }
+        }
       }
     },
     "video_player_menu_subtitles_disable": {
       "comment": "Menu item to turn off subtitles",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Untertitel deaktivieren" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Disable Subtitles" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Desactivar subtítulos" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Désactiver les sous-titres" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Disattiva sottotitoli" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "字幕を無効にする" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitels uitschakelen" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wyłącz napisy" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Desativar legendas" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "关闭字幕" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "停用字幕" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitel deaktivieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disable Subtitles"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivar subtítulos"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver les sous-titres"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disattiva sottotitoli"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕を無効にする"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ondertitels uitschakelen"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wyłącz napisy"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativar legendas"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭字幕"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停用字幕"
+          }
+        }
       }
     },
     "video_player_track_fallback": {
       "comment": "Default display name for unnamed audio track",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Spur %lld" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Track %lld" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Pista %lld" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Piste %lld" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Traccia %lld" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "トラック %lld" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Track %lld" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Ścieżka %lld" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Faixa %lld" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "音轨 %lld" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "音軌 %lld" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spur %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pista %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piste %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traccia %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トラック %lld"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track %lld"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ścieżka %lld"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faixa %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音轨 %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音軌 %lld"
+          }
+        }
       }
     },
     "video_player_subtitle_fallback": {
       "comment": "Default display name for unnamed subtitle track",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Untertitel %lld" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Subtitle %lld" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Subtítulo %lld" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Sous-titre %lld" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Sottotitolo %lld" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Ondertitel %lld" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Napisy %lld" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Legenda %lld" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "字幕 %lld" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untertitel %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtitle %lld"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subtítulo %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sous-titre %lld"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sottotitolo %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕 %lld"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ondertitel %lld"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Napisy %lld"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legenda %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕 %lld"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字幕 %lld"
+          }
+        }
       }
     },
     "gallery_badge_watched": {
       "comment": "Badge label indicating a video has been completely watched/played",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Gesehen" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Played" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Visto" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Vu" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Visto" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "再生済み" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Bekeken" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Obejrzane" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Visto" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已播放" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "已播放" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesehen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Played"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visto"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vu"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visto"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再生済み"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekeken"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obejrzane"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visto"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已播放"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已播放"
+          }
+        }
       }
     },
     "gallery_badge_in_progress": {
       "comment": "Badge label indicating a video playback is partially watched/in progress",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Wiedergabe läuft" } },
-        "en": { "stringUnit": { "state": "translated", "value": "In Progress" } },
-        "es": { "stringUnit": { "state": "translated", "value": "En curso" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "En cours" } },
-        "it": { "stringUnit": { "state": "translated", "value": "In corso" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "再生中" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Bezig" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "W trakcie" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "A reproduzir" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "播放中" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "播放中" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe läuft"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Progress"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En curso"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En cours"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In corso"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再生中"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezig"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "W trakcie"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A reproduzir"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放中"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "播放中"
+          }
+        }
       }
     },
     "settings_title": {
@@ -10430,204 +11255,1656 @@
       "comment": "Navigation title for the Remotes sidebar column",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Server" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Remotes" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Servidores" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Serveurs distants" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Server remoti" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "リモート" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Servers" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Serwery" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Servidores remotos" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远程服务器" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "遠端伺服器" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remotes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveurs distants"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server remoti"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモート"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servers"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serwery"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores remotos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "远程服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "遠端伺服器"
+          }
+        }
       }
     },
     "sidebar_section_remotes": {
       "comment": "Section header for saved remote servers in sidebar",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Server" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Remotes" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Servidores" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Serveurs distants" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Server remoti" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "リモート" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Servers" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Serwery" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Servidores remotos" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "远程服务器" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "遠端伺服器" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remotes"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveurs distants"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server remoti"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモート"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servers"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serwery"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidores remotos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "远程服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "遠端伺服器"
+          }
+        }
       }
     },
     "sidebar_button_add_remote": {
       "comment": "Button label and accessibility label to add a remote server",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Server hinzufügen" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Add Server" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Añadir servidor" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Ajouter un serveur" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Aggiungi server" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "サーバを追加" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Voeg server toe" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Dodaj serwer" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Adicionar servidor" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "添加服务器" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "新增伺服器" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Server"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir servidor"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un serveur"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi server"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバを追加"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voeg server toe"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dodaj serwer"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar servidor"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增伺服器"
+          }
+        }
       }
     },
     "sidebar_no_saved_remotes_title": {
       "comment": "Title when no saved remote servers exist",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Keine gespeicherten Server" } },
-        "en": { "stringUnit": { "state": "translated", "value": "No Saved Servers" } },
-        "es": { "stringUnit": { "state": "translated", "value": "No hay servidores guardados" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Aucun serveur enregistré" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Nessun server salvato" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "保存されたサーバはありません" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Geen opgeslagen servers" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Brak zapisanych serwerów" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhum servidor guardado" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "无已保存的服务器" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "無已儲存的伺服器" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine gespeicherten Server"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Saved Servers"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay servidores guardados"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun serveur enregistré"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun server salvato"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存されたサーバはありません"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geen opgeslagen servers"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brak zapisanych serwerów"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum servidor guardado"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无已保存的服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無已儲存的伺服器"
+          }
+        }
       }
     },
     "sidebar_no_saved_remotes_description": {
       "comment": "Description when no saved servers exist",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Tippen Sie auf +, um einen lokalen SMB-Dateiserver zu finden oder zu verbinden." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Tap + to discover or connect to a local SMB file server." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Toca + para descubrir o conectarte a un servidor SMB local." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Appuyez sur + pour découvrir ou vous connecter à un serveur SMB local." } },
-        "it": { "stringUnit": { "state": "translated", "value": "Tocca + per rilevare o connetterti a un server SMB locale." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "+ をタップしてローカルSMBファイルサーバを検出または接続します。" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Tik op + om een lokale SMB-bestandsserver te ontdekken of ermee te verbinden." } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Stuknij +, aby wykryć lub połączyć się z lokalnym serwerem SMB." } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Toque em + para detetar ou ligar a um servidor de ficheiros SMB local." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "点击 + 发现或连接本地 SMB 文件服务器。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "點一下 + 探索或連接本地 SMB 檔案伺服器。" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippen Sie auf +, um einen lokalen SMB-Dateiserver zu finden oder zu verbinden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap + to discover or connect to a local SMB file server."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toca + para descubrir o conectarte a un servidor SMB local."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuyez sur + pour découvrir ou vous connecter à un serveur SMB local."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tocca + per rilevare o connetterti a un server SMB locale."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ をタップしてローカルSMBファイルサーバを検出または接続します。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tik op + om een lokale SMB-bestandsserver te ontdekken of ermee te verbinden."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stuknij +, aby wykryć lub połączyć się z lokalnym serwerem SMB."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toque em + para detetar ou ligar a um servidor de ficheiros SMB local."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击 + 发现或连接本地 SMB 文件服务器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "點一下 + 探索或連接本地 SMB 檔案伺服器。"
+          }
+        }
       }
     },
     "sidebar_no_connected_remote_title": {
       "comment": "Title when no server is currently connected",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Kein Server verbunden" } },
-        "en": { "stringUnit": { "state": "translated", "value": "No Server Connected" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Ningún servidor conectado" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Aucun serveur connecté" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Nessun server connesso" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "サーバ未接続" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Geen server verbonden" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Brak połączonego serwera" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhum servidor ligado" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未连接服务器" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未連接伺服器" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Server verbunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Server Connected"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ningún servidor conectado"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun serveur connecté"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessun server connesso"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバ未接続"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geen server verbonden"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brak połączonego serwera"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhum servidor ligado"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未连接服务器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未連接伺服器"
+          }
+        }
       }
     },
     "sidebar_no_connected_remote_description": {
       "comment": "Description when no server is connected",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie einen Server aus der Seitenleiste oder fügen Sie einen neuen hinzu." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Select a server from the sidebar or add a new one to browse shared folders." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Selecciona un servidor de la barra lateral o añade uno nuevo." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Sélectionnez un serveur dans la barre latérale ou ajoutez-en un pour parcourir les dossiers partagés." } },
-        "it": { "stringUnit": { "state": "translated", "value": "Seleziona un server dalla barra laterale o aggiungine uno nuovo." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "サイドバーからサーバを選択するか新規追加して共有フォルダを表示します。" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Selecteer een server in de navigatiekolom of voeg een nieuwe toe." } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wybierz serwer z paska bocznego lub dodaj nowy, aby przeglądać foldery." } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Selecione um servidor na barra lateral ou adicione um novo." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从侧边栏选择服务器或添加新服务器以浏览共享文件夹。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從側邊欄選擇伺服器或新增伺服器以瀏覽共享檔案夾。" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie einen Server aus der Seitenleiste oder fügen Sie einen neuen hinzu."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a server from the sidebar or add a new one to browse shared folders."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecciona un servidor de la barra lateral o añade uno nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sélectionnez un serveur dans la barre latérale ou ajoutez-en un pour parcourir les dossiers partagés."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seleziona un server dalla barra laterale o aggiungine uno nuovo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サイドバーからサーバを選択するか新規追加して共有フォルダを表示します。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecteer een server in de navigatiekolom of voeg een nieuwe toe."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wybierz serwer z paska bocznego lub dodaj nowy, aby przeglądać foldery."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecione um servidor na barra lateral ou adicione um novo."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从侧边栏选择服务器或添加新服务器以浏览共享文件夹。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從側邊欄選擇伺服器或新增伺服器以瀏覽共享檔案夾。"
+          }
+        }
       }
     },
     "sidebar_loading_shares": {
       "comment": "Text displayed while shares are being fetched",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Freigaben werden geladen..." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Loading shares..." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Cargando recursos compartidos..." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Chargement des partages..." } },
-        "it": { "stringUnit": { "state": "translated", "value": "Caricamento condivisioni..." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "共有を読み込み中..." } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Delen laden..." } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wczytywanie udziałów..." } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "A carregar partilhas..." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在加载共享..." } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "正在載入共享..." } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigaben werden geladen..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading shares..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando recursos compartidos..."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des partages..."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caricamento condivisioni..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共有を読み込み中..."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delen laden..."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wczytywanie udziałów..."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A carregar partilhas..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载共享..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在載入共享..."
+          }
+        }
       }
     },
     "sidebar_no_shares_description": {
       "comment": "Description when no shares are available on connected server",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Keine freigegebenen Ordner auf diesem Server verfügbar." } },
-        "en": { "stringUnit": { "state": "translated", "value": "No shared folders are available on this server." } },
-        "es": { "stringUnit": { "state": "translated", "value": "No hay carpetas compartidas disponibles en este servidor." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Aucun dossier partagé n'est disponible sur ce serveur." } },
-        "it": { "stringUnit": { "state": "translated", "value": "Nessuna cartella condivisa disponibile su questo server." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "このサーバで利用可能な共有フォルダはありません。" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Geen gedeelde mappen beschikbaar op deze server." } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Brak dostępnych folderów współdzielonych na tym serwerze." } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhuma pasta partilhada disponível neste servidor." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此服务器上没有可用的共享文件夹。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此伺服器上沒有可用的共享檔案夾。" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine freigegebenen Ordner auf diesem Server verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No shared folders are available on this server."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay carpetas compartidas disponibles en este servidor."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun dossier partagé n'est disponible sur ce serveur."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna cartella condivisa disponibile su questo server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このサーバで利用可能な共有フォルダはありません。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geen gedeelde mappen beschikbaar op deze server."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brak dostępnych folderów współdzielonych na tym serwerze."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma pasta partilhada disponível neste servidor."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此服务器上没有可用的共享文件夹。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此伺服器上沒有可用的共享檔案夾。"
+          }
+        }
       }
     },
     "gallery_no_folder_selected_title": {
       "comment": "Title when no folder is selected in splitview detail",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Kein Ordner ausgewählt" } },
-        "en": { "stringUnit": { "state": "translated", "value": "No Folder Selected" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Ninguna carpeta seleccionada" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Aucun dossier sélectionné" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Nessuna cartella selezionata" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "フォルダが選択されていません" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Geen map geselecteerd" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Nie wybrano folderu" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nenhuma pasta selecionada" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "未选择文件夹" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "未選擇檔案夾" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Ordner ausgewählt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Folder Selected"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna carpeta seleccionada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun dossier sélectionné"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna cartella selezionata"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダが選択されていません"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geen map geselecteerd"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nie wybrano folderu"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma pasta selecionada"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未选择文件夹"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未選擇檔案夾"
+          }
+        }
       }
     },
     "gallery_no_folder_selected_description": {
       "comment": "Description when no folder is selected in splitview detail",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Wählen Sie einen Ordner aus, um Fotos und Videos anzuzeigen." } },
-        "en": { "stringUnit": { "state": "translated", "value": "Choose a folder from the tree to view its photos and videos." } },
-        "es": { "stringUnit": { "state": "translated", "value": "Elige una carpeta del árbol para ver sus fotos y vídeos." } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Choisissez un dossier dans l'arborescence pour afficher ses photos et vidéos." } },
-        "it": { "stringUnit": { "state": "translated", "value": "Scegli una cartella dalla struttura per visualizzare foto e video." } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ツリーからフォルダを選択して写真やビデオを表示します。" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Kies een map in de structuur om de foto’s en video’s te bekijken." } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Wybierz folder z drzewa, aby wyświetlić zdjęcia i wideo." } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Escolha uma pasta na árvore para ver as respetivas fotografias e vídeos." } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从目录树中选择一个文件夹以查看其照片和视频。" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "從目錄樹中選擇一個檔案夾以檢視其相片和影片。" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie einen Ordner aus, um Fotos und Videos anzuzeigen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a folder from the tree to view its photos and videos."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige una carpeta del árbol para ver sus fotos y vídeos."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez un dossier dans l'arborescence pour afficher ses photos et vidéos."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scegli una cartella dalla struttura per visualizzare foto e video."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ツリーからフォルダを選択して写真やビデオを表示します。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kies een map in de structuur om de foto’s en video’s te bekijken."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wybierz folder z drzewa, aby wyświetlić zdjęcia i wideo."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escolha uma pasta na árvore para ver as respetivas fotografias e vídeos."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从目录树中选择一个文件夹以查看其照片和视频。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從目錄樹中選擇一個檔案夾以檢視其相片和影片。"
+          }
+        }
       }
     },
     "connection_field_server_name": {
       "comment": "Placeholder for optional server name / hostname input field",
       "extractionState": "manual",
       "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Servername (Optional)" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Server Name (Optional)" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Nombre del servidor (Opcional)" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Nom du serveur (Optionnel)" } },
-        "it": { "stringUnit": { "state": "translated", "value": "Nome del server (Opzionale)" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "サーバ名（任意）" } },
-        "nl": { "stringUnit": { "state": "translated", "value": "Servernaam (optioneel)" } },
-        "pl": { "stringUnit": { "state": "translated", "value": "Nazwa serwera (opcjonalnie)" } },
-        "pt-PT": { "stringUnit": { "state": "translated", "value": "Nome do servidor (Opcional)" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "服务器名称（可选）" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "伺服器名稱（選填）" } }
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servername (Optional)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server Name (Optional)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del servidor (Opcional)"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du serveur (Optionnel)"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome del server (Opzionale)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバ名（任意）"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servernaam (optioneel)"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nazwa serwera (opcjonalnie)"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nome do servidor (Opcional)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器名称（可选）"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "伺服器名稱（選填）"
+          }
+        }
+      }
+    },
+    "sidebar_title_locations": {
+      "comment": "Title of the sidebar in 3-column split view",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orte"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locations"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ubicaciones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emplacements"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posizioni"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場所"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locaties"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Miejsca"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Localizações"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置"
+          }
+        }
+      }
+    },
+    "sidebar_section_locations": {
+      "comment": "Section header for saved locations in sidebar",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orte"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locations"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ubicaciones"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emplacements"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Posizioni"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場所"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locaties"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Miejsca"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Localizações"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "位置"
+          }
+        }
+      }
+    },
+    "sidebar_menu_add_location": {
+      "comment": "Action menu title to add a new location",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ort hinzufügen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Location"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir ubicación"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un emplacement"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi posizione"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場所を追加"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Locatie toevoegen"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dodaj miejsce"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar localização"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入位置"
+          }
+        }
+      }
+    },
+    "sidebar_menu_add_local_folder": {
+      "comment": "Option to add a local on-device folder",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokalen Ordner hinzufügen..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Local Folder..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir carpeta local..."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un dossier local..."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi cartella locale..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルフォルダを追加..."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale map toevoegen..."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dodaj folder lokalny..."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar pasta local..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加本地文件夹..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入本機檔案夾..."
+          }
+        }
+      }
+    },
+    "sidebar_menu_add_icloud_folder": {
+      "comment": "Option to add an iCloud Drive folder",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive-Ordner hinzufügen..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add iCloud Drive Folder..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añadir carpeta de iCloud Drive..."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un dossier iCloud Drive..."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi cartella iCloud Drive..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Driveフォルダを追加..."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive-map toevoegen..."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dodaj folder iCloud Drive..."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar pasta do iCloud Drive..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加 iCloud 云盘文件夹..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入 iCloud 雲端硬碟檔案夾..."
+          }
+        }
+      }
+    },
+    "sidebar_menu_connect_smb": {
+      "comment": "Option to connect to an SMB server",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Server verbinden..."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to Server..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectarse al servidor..."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se connecter au serveur..."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connetti al server..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバへ接続..."
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbind met server..."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Połącz z serwerem..."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligar ao servidor..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接服务器..."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連接伺服器..."
+          }
+        }
+      }
+    },
+    "sidebar_location_on_device": {
+      "comment": "Subtitle for local folder location",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf diesem Gerät"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On This Device"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En este dispositivo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur cet appareil"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Su questo dispositivo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイス内"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Op dit apparaat"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Na tym urządzeniu"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neste dispositivo"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在这台设备上"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此裝置上"
+          }
+        }
+      }
+    },
+    "sidebar_location_icloud_drive": {
+      "comment": "Subtitle for iCloud Drive folder location",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud Drive"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud 云盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud 雲端硬碟"
+          }
+        }
+      }
+    },
+    "sidebar_no_saved_locations_title": {
+      "comment": "Empty state title when no locations are saved",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Orte hinzugefügt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Locations Added"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna ubicación añadida"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun emplacement ajouté"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nessuna posizione aggiunta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "場所が追加されていません"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geen locaties toegevoegd"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brak dodanych miejsc"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nenhuma localização adicionada"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未添加位置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未加入位置"
+          }
+        }
+      }
+    },
+    "sidebar_no_saved_locations_description": {
+      "comment": "Empty state description when no locations are saved",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fügen Sie einen iCloud Drive-Ordner, lokalen Ordner oder SMB-Server hinzu, um Ihre Medien zu durchsuchen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an iCloud Drive folder, local folder, or SMB server to browse your media."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Añade una carpeta de iCloud Drive, una carpeta local o un servidor SMB para examinar tu contenido."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoutez un dossier iCloud Drive, un dossier local ou un serveur SMB pour parcourir vos médias."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aggiungi una cartella iCloud Drive, una cartella locale o un server SMB per sfogliare i tuoi contenuti multimediali."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メディアを閲覧するには、iCloud Driveフォルダ、ローカルフォルダ、またはSMBサーバを追加してください。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voeg een iCloud Drive-map, lokale map of SMB-server toe om uw media te bekijken."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dodaj folder iCloud Drive, folder lokalny lub serwer SMB, aby przeglądać multimedia."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicione uma pasta do iCloud Drive, pasta local ou servidor SMB para explorar os seus ficheiros multimédia."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加 iCloud 云盘文件夹、本地文件夹或 SMB 服务器以浏览您的媒体。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加入 iCloud 雲端硬碟檔案夾、本機檔案夾或 SMB 伺服器以瀏覽媒體。"
+          }
+        }
+      }
+    },
+    "sidebar_title_browse": {
+      "comment": "Navigation title of the sidebar matching Apple Files app",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durchsuchen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explorar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parcourir"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sfoglia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウズ"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bladeren"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Przeglądaj"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explorar"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "瀏覽"
+          }
+        }
       }
     }
   },

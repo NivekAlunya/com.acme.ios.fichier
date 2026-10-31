@@ -7,18 +7,18 @@ import SwiftUI
 
 /// Recursive tree row that supports both expanding subfolders and selecting the folder to display its media
 struct FolderTreeNodeView: View {
-    let node: SMBItem
+    let node: MediaItem
     let level: Int
     @State private var isExpanded: Bool
     var manager: SMBDirectManager
-    let onSelectFolder: (SMBItem) -> Void
+    let onSelectFolder: (MediaItem) -> Void
     
     init(
-        node: SMBItem,
+        node: MediaItem,
         level: Int,
         isInitiallyExpanded: Bool = false,
         manager: SMBDirectManager,
-        onSelectFolder: @escaping (SMBItem) -> Void
+        onSelectFolder: @escaping (MediaItem) -> Void
     ) {
         self.node = node
         self.level = level

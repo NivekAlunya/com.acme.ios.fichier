@@ -53,7 +53,7 @@ actor SMBClientActor {
     }
     
     /// Connects to the server and enumerates all shared folders automatically
-    func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [SMBItem] {
+    func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [MediaItem] {
         guard let manager = SMB2Manager(url: url, credential: credential) else {
             throw URLError(.badURL)
         }
@@ -66,10 +66,10 @@ actor SMBClientActor {
         
         let items = shares
             .map { share in
-                SMBItem(
-                    connectionID: connectionID,
+                MediaItem(
+                    locationID: connectionID,
                     name: share.name,
-                    shareName: share.name,
+                    rootName: share.name,
                     path: "/",
                     isDirectory: true,
                     size: 0,
@@ -82,7 +82,7 @@ actor SMBClientActor {
     }
     
     /// Re-fetches the list of shared folders on the currently connected server
-    func refreshShares() async throws -> [SMBItem] {
+    func refreshShares() async throws -> [MediaItem] {
         guard let client else {
             throw URLError(.notConnectedToInternet)
         }
@@ -92,10 +92,10 @@ actor SMBClientActor {
         
         return shares
             .map { share in
-                SMBItem(
-                    connectionID: connID,
+                MediaItem(
+                    locationID: connID,
                     name: share.name,
-                    shareName: share.name,
+                    rootName: share.name,
                     path: "/",
                     isDirectory: true,
                     size: 0,
@@ -126,7 +126,7 @@ actor SMBClientActor {
     }
     
     /// Scans a directory inside a specific share and returns both its subfolders and its image files
-    func scanFolder(shareName: String, at path: String) async throws -> (folders: [SMBItem], pictures: [SMBItem]) {
+    func scanFolder(shareName: String, at path: String) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
         try Task.checkCancellation()
         let client = try await ensureConnected(to: shareName)
         try Task.checkCancellation()
@@ -135,8 +135,8 @@ actor SMBClientActor {
         let entries = try await client.contentsOfDirectory(atPath: normalizedPath)
         try Task.checkCancellation()
         
-        var folders: [SMBItem] = []
-        var pictures: [SMBItem] = []
+        var folders: [MediaItem] = []
+        var pictures: [MediaItem] = []
         let connID = self.currentConnectionID
         
         for entry in entries {
@@ -149,10 +149,10 @@ actor SMBClientActor {
             let modDate = entry[.contentModificationDateKey] as? Date
             
             if resourceType == .directory {
-                folders.append(SMBItem(
-                    connectionID: connID,
+                folders.append(MediaItem(
+                    locationID: connID,
                     name: name,
-                    shareName: shareName,
+                    rootName: shareName,
                     path: entryPath,
                     isDirectory: true,
                     size: 0,
@@ -163,10 +163,10 @@ actor SMBClientActor {
                 let ext = (name as NSString).pathExtension.lowercased()
                 if supportedMediaExtensions.contains(ext) {
                     let size = Self.extractFileSize(from: entry)
-                    pictures.append(SMBItem(
-                        connectionID: connID,
+                    pictures.append(MediaItem(
+                        locationID: connID,
                         name: name,
-                        shareName: shareName,
+                        rootName: shareName,
                         path: entryPath,
                         isDirectory: false,
                         size: size,
@@ -185,7 +185,7 @@ actor SMBClientActor {
     
     /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
     /// If expectedFolderID doesn't match the current activeFolderID, it bails immediately.
-    func fetchThumbnail(for item: SMBItem, expectedFolderID: String? = nil, maxDimension: CGFloat = 260) async -> UIImage? {
+    func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
@@ -252,7 +252,7 @@ actor SMBClientActor {
     }
     
     /// Fetches and streams a video to local disk cache so AVPlayer can play it smoothly
-    func fetchVideoURL(for item: SMBItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+    func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         let localURL = MediaCacheManager.shared.localVideoURL(for: item)
         if MediaCacheManager.shared.hasCachedVideo(for: item) {
             return localURL
@@ -312,7 +312,7 @@ actor SMBClientActor {
     }
     
     /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads)
-    func fetchMediaRange(for item: SMBItem, offset: Int64, length: Int) async throws -> Data {
+    func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
         let client = try await ensureConnected(to: item.shareName)
         let end = offset + Int64(length)
         let range: Range<Int64> = offset..<end
@@ -320,7 +320,7 @@ actor SMBClientActor {
     }
     
     /// Queries the remote file size directly if item.size was 0
-    func fetchFileSize(for item: SMBItem) async -> Int64 {
+    func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.size > 0 { return item.size }
         do {
             let client = try await ensureConnected(to: item.shareName)
@@ -336,7 +336,7 @@ actor SMBClientActor {
     }
     
     /// Downloads the full-resolution image (cached for smooth navigation & slideshow)
-    func fetchFullImage(for item: SMBItem) async -> UIImage? {
+    func fetchFullImage(for item: MediaItem) async -> UIImage? {
         // Videos must never be loaded as full images into RAM
         if Task.isCancelled || item.isVideo { return nil }
         
@@ -366,7 +366,7 @@ actor SMBClientActor {
     }
     
     /// Extracts EXIF / camera metadata for an item
-    func fetchMetadata(for item: SMBItem) async -> PictureEXIFData? {
+    func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
         // For video files, return basic file metadata directly without downloading gigabytes of data into RAM
         if item.isVideo {

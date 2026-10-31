@@ -7,7 +7,7 @@ import SwiftUI
 
 struct MediaThumbnailCell: View {
     var manager: SMBDirectManager
-    let item: SMBItem
+    let item: MediaItem
     var maxDimension: CGFloat = 260
     var isSelected: Bool = false
     var isSelectionMode: Bool = false

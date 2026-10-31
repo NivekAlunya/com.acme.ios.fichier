@@ -7,7 +7,7 @@ import SwiftUI
 
 struct MediaListRowCell: View {
     var manager: SMBDirectManager
-    let item: SMBItem
+    let item: MediaItem
     var isSelected: Bool = false
     var isSelectionMode: Bool = false
     

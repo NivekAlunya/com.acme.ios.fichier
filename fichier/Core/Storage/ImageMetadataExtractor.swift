@@ -8,24 +8,42 @@ import CoreGraphics
 import ImageIO
 
 nonisolated public enum ImageMetadataExtractor {
+    public static func extract(from url: URL, fileName: String, fileSize: String) -> PictureEXIFData {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else {
+            return emptyData(fileName: fileName, fileSize: fileSize)
+        }
+        return extract(fromSource: source, fileName: fileName, fileSize: fileSize)
+    }
+    
     public static func extract(from data: Data, fileName: String, fileSize: String) -> PictureEXIFData {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions),
-              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-            return PictureEXIFData(
-                fileName: fileName,
-                fileSize: fileSize,
-                dimensions: nil,
-                megapixels: nil,
-                cameraModel: nil,
-                lensModel: nil,
-                focalLength: nil,
-                aperture: nil,
-                shutterSpeed: nil,
-                iso: nil,
-                dateTaken: nil,
-                fileFormat: (fileName as NSString).pathExtension.uppercased()
-            )
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return emptyData(fileName: fileName, fileSize: fileSize)
+        }
+        return extract(fromSource: source, fileName: fileName, fileSize: fileSize)
+    }
+    
+    private static func emptyData(fileName: String, fileSize: String) -> PictureEXIFData {
+        PictureEXIFData(
+            fileName: fileName,
+            fileSize: fileSize,
+            dimensions: nil,
+            megapixels: nil,
+            cameraModel: nil,
+            lensModel: nil,
+            focalLength: nil,
+            aperture: nil,
+            shutterSpeed: nil,
+            iso: nil,
+            dateTaken: nil,
+            fileFormat: (fileName as NSString).pathExtension.uppercased()
+        )
+    }
+    
+    private static func extract(fromSource source: CGImageSource, fileName: String, fileSize: String) -> PictureEXIFData {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return emptyData(fileName: fileName, fileSize: fileSize)
         }
         
         let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]

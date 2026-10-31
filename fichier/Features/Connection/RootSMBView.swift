@@ -7,14 +7,14 @@ import SwiftUI
 
 public struct RootSMBView: View {
     @State private var smbManager = SMBDirectManager()
-    @State private var activePictureForViewer: SMBItem?
-    @State private var activeVideoForViewer: SMBItem?
+    @State private var activePictureForViewer: MediaItem?
+    @State private var activeVideoForViewer: MediaItem?
     @State private var shouldAutoStartSlideshow = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var showingSettings = false
     @State private var showingAddRemote = false
-    @State private var connectingRemoteID: String?
+    @State private var connectingLocationID: String?
     @State private var connectionTask: Task<Void, Never>?
     
     public init() {}
@@ -24,14 +24,14 @@ public struct RootSMBView: View {
             columnVisibility: $columnVisibility,
             preferredCompactColumn: $preferredCompactColumn
         ) {
-            // 1. Sidebar: Remotes list with "+" button and settings
-            RemotesSidebarView(
+            // 1. Sidebar: Unified Locations list (iCloud, Local, SMB)
+            LocationsSidebarView(
                 manager: smbManager,
                 showingAddRemote: $showingAddRemote,
                 showingSettings: $showingSettings,
-                connectingRemoteID: connectingRemoteID,
-                onSelectRemote: { saved in
-                    connectToRemote(saved)
+                connectingLocationID: connectingLocationID,
+                onSelectLocation: { location in
+                    selectLocation(location)
                 }
             )
         } content: {
@@ -111,27 +111,20 @@ public struct RootSMBView: View {
         }
     }
     
-    private func connectToRemote(_ saved: SavedSMBConnection) {
-        if smbManager.isConnected && smbManager.currentConnectionID == saved.id {
+    private func selectLocation(_ location: StorageLocation) {
+        if smbManager.isConnected && smbManager.currentConnectionID == location.id {
             preferredCompactColumn = .content
             return
         }
         
         connectionTask?.cancel()
-        
-        let password = smbManager.password(for: saved)
-        connectingRemoteID = saved.id
+        connectingLocationID = location.id
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         
         connectionTask = Task {
-            await smbManager.connect(
-                host: saved.host,
-                user: saved.username,
-                pass: password,
-                hostname: saved.hostname
-            )
+            await smbManager.selectLocation(location)
             guard !Task.isCancelled else { return }
-            connectingRemoteID = nil
+            connectingLocationID = nil
             if smbManager.isConnected {
                 preferredCompactColumn = .content
             }

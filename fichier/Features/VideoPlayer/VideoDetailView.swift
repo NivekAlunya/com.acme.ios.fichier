@@ -9,15 +9,15 @@ import OSLog
 
 public struct VideoDetailView: View {
     var manager: SMBDirectManager
-    let videos: [SMBItem]
-    let initialItem: SMBItem
+    let videos: [MediaItem]
+    let initialItem: MediaItem
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @State private var currentItem: SMBItem
-    @State private var currentlyLoadedItem: SMBItem?
+    @State private var currentItem: MediaItem
+    @State private var currentlyLoadedItem: MediaItem?
     @State private var playbackStartTime: Date = Date()
     @State private var player: AVPlayer?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
@@ -55,8 +55,8 @@ public struct VideoDetailView: View {
     
     public init(
         manager: SMBDirectManager,
-        videos: [SMBItem],
-        initialItem: SMBItem
+        videos: [MediaItem],
+        initialItem: MediaItem
     ) {
         self.manager = manager
         let vids = videos.filter { $0.isVideo }
@@ -1004,7 +1004,7 @@ public struct VideoDetailView: View {
         }
     }
     
-    private func setupPlayer(for item: SMBItem) {
+    private func setupPlayer(for item: MediaItem) {
         playbackStartTime = Date()
         tearDownPlayer()
         currentlyLoadedItem = item
@@ -1044,10 +1044,10 @@ public struct VideoDetailView: View {
             if validItem.size <= 0 {
                 let realSize = await manager.fetchFileSize(for: item)
                 if realSize > 0 {
-                    validItem = SMBItem(
-                        connectionID: item.connectionID,
+                    validItem = MediaItem(
+                        locationID: item.locationID,
                         name: item.name,
-                        shareName: item.shareName,
+                        rootName: item.rootName,
                         path: item.path,
                         isDirectory: item.isDirectory,
                         size: realSize,
@@ -1113,7 +1113,7 @@ public struct VideoDetailView: View {
         }
     }
     
-    private func configurePlayer(_ avPlayer: AVPlayer, for item: SMBItem) {
+    private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem) {
         // Sync volume & mute state
         self.volume = Double(avPlayer.volume)
         self.isMuted = avPlayer.isMuted

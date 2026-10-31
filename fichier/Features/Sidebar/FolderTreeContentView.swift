@@ -8,12 +8,12 @@ import SwiftUI
 public struct FolderTreeContentView: View {
     @Bindable var manager: SMBDirectManager
     @Binding var showingAddRemote: Bool
-    let onSelectFolder: (SMBItem) -> Void
+    let onSelectFolder: (MediaItem) -> Void
     
     public init(
         manager: SMBDirectManager,
         showingAddRemote: Binding<Bool>,
-        onSelectFolder: @escaping (SMBItem) -> Void
+        onSelectFolder: @escaping (MediaItem) -> Void
     ) {
         self.manager = manager
         self._showingAddRemote = showingAddRemote
@@ -78,6 +78,9 @@ public struct FolderTreeContentView: View {
     }
     
     private var navigationTitle: String {
+        if let location = manager.currentLocation {
+            return location.name
+        }
         if let remote = manager.savedConnections.first(where: { manager.currentConnectionID == $0.id }) {
             return remote.displayName
         }

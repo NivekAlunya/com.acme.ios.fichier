@@ -21,11 +21,11 @@ public final class FavoritesManager {
         }
     }
     
-    public func isFavorite(_ item: SMBItem) -> Bool {
+    public func isFavorite(_ item: MediaItem) -> Bool {
         favoriteIDs.contains(item.id)
     }
     
-    public func toggleFavorite(_ item: SMBItem) {
+    public func toggleFavorite(_ item: MediaItem) {
         if favoriteIDs.contains(item.id) {
             favoriteIDs.remove(item.id)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()

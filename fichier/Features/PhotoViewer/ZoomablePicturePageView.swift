@@ -7,7 +7,7 @@ import SwiftUI
 
 struct ZoomablePicturePageView: View {
     var manager: SMBDirectManager
-    let item: SMBItem
+    let item: MediaItem
     let onImageLoaded: (UIImage) -> Void
     let onTap: () -> Void
     
