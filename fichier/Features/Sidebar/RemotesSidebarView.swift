@@ -83,8 +83,8 @@ public struct RemotesSidebarView: View {
                         .buttonStyle(.plain)
                     }
                     .onDelete { indexSet in
-                        for index in indexSet {
-                            let conn = manager.savedConnections[index]
+                        let connectionsToRemove = indexSet.map { manager.savedConnections[$0] }
+                        for conn in connectionsToRemove {
                             if manager.currentConnectionID == conn.id {
                                 manager.disconnect()
                             }

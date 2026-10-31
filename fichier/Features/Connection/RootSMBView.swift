@@ -15,6 +15,7 @@ public struct RootSMBView: View {
     @State private var showingSettings = false
     @State private var showingAddRemote = false
     @State private var connectingRemoteID: String?
+    @State private var connectionTask: Task<Void, Never>?
     
     public init() {}
     
@@ -116,17 +117,20 @@ public struct RootSMBView: View {
             return
         }
         
+        connectionTask?.cancel()
+        
         let password = smbManager.password(for: saved)
         connectingRemoteID = saved.id
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         
-        Task {
+        connectionTask = Task {
             await smbManager.connect(
                 host: saved.host,
                 user: saved.username,
                 pass: password,
                 hostname: saved.hostname
             )
+            guard !Task.isCancelled else { return }
             connectingRemoteID = nil
             if smbManager.isConnected {
                 preferredCompactColumn = .content
