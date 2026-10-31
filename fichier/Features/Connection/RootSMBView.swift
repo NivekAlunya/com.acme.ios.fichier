@@ -7,8 +7,8 @@ import SwiftUI
 
 public struct RootSMBView: View {
     @State private var smbManager = SMBDirectManager()
-    @State private var activePictureForViewer: SMBItem?
-    @State private var activeVideoForViewer: SMBItem?
+    @State private var activePictureForViewer: MediaItem?
+    @State private var activeVideoForViewer: MediaItem?
     @State private var shouldAutoStartSlideshow = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar

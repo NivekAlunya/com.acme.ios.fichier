@@ -8,9 +8,9 @@ import OSLog
 
 struct MediaGridView: View {
     var manager: SMBDirectManager
-    var onSelectFolder: ((SMBItem) -> Void)? = nil
+    var onSelectFolder: ((MediaItem) -> Void)? = nil
     var onStartSlideshow: (() -> Void)? = nil
-    let onSelectPicture: (SMBItem) -> Void
+    let onSelectPicture: (MediaItem) -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("gallery_view_mode") private var viewMode: ViewMode = .grid
@@ -23,7 +23,7 @@ struct MediaGridView: View {
     @State private var showFavoritesOnly = false
     @State private var mediaFilter: MediaFilter = .all
     @State private var isSelectionMode = false
-    @State private var selectedItems: Set<SMBItem> = []
+    @State private var selectedItems: Set<MediaItem> = []
     @State private var isBatchProcessing = false
     @State private var batchProgressMessage: String?
     @State private var batchStatusToast: String?
@@ -36,14 +36,14 @@ struct MediaGridView: View {
     
     // MARK: - Filtered and Sorted Data
     
-    private var filteredFolders: [SMBItem] {
+    private var filteredFolders: [MediaItem] {
         let list = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
         return sortItems(list)
     }
     
-    private var filteredPictures: [SMBItem] {
+    private var filteredPictures: [MediaItem] {
         var list = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
@@ -70,7 +70,7 @@ struct MediaGridView: View {
         }
     }
     
-    private func sortItems(_ items: [SMBItem]) -> [SMBItem] {
+    private func sortItems(_ items: [MediaItem]) -> [MediaItem] {
         switch sortOption {
         case .nameAsc:
             return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
@@ -604,7 +604,7 @@ struct MediaGridView: View {
     
     // MARK: - Batch Selection Actions
     
-    private func toggleSelection(for item: SMBItem) {
+    private func toggleSelection(for item: MediaItem) {
         if selectedItems.contains(item) {
             selectedItems.remove(item)
         } else {

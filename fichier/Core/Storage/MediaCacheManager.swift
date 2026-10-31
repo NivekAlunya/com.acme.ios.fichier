@@ -91,7 +91,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Video Disk Cache
     
-    public func localVideoURL(for item: SMBItem) -> URL {
+    public func localVideoURL(for item: MediaItem) -> URL {
         let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
         let ext = (item.name as NSString).pathExtension.lowercased()
         let safeExt = ext.isEmpty ? "mp4" : ext
@@ -109,7 +109,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         return url
     }
     
-    public func hasCachedVideo(for item: SMBItem) -> Bool {
+    public func hasCachedVideo(for item: MediaItem) -> Bool {
         let url = localVideoURL(for: item)
         return fileManager.fileExists(atPath: url.path)
     }

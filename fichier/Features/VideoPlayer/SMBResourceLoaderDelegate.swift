@@ -8,10 +8,10 @@ import AVFoundation
 
 nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
     private let worker: SMBClientActor
-    private let item: SMBItem
+    private let item: MediaItem
     private let taskTracker = ResourceLoadingTaskTracker()
     
-    init(worker: SMBClientActor, item: SMBItem) {
+    init(worker: SMBClientActor, item: MediaItem) {
         self.worker = worker
         self.item = item
         super.init()

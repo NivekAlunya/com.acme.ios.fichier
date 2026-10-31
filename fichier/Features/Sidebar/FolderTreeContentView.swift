@@ -8,12 +8,12 @@ import SwiftUI
 public struct FolderTreeContentView: View {
     @Bindable var manager: SMBDirectManager
     @Binding var showingAddRemote: Bool
-    let onSelectFolder: (SMBItem) -> Void
+    let onSelectFolder: (MediaItem) -> Void
     
     public init(
         manager: SMBDirectManager,
         showingAddRemote: Binding<Bool>,
-        onSelectFolder: @escaping (SMBItem) -> Void
+        onSelectFolder: @escaping (MediaItem) -> Void
     ) {
         self.manager = manager
         self._showingAddRemote = showingAddRemote

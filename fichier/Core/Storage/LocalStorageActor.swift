@@ -28,7 +28,7 @@ public actor LocalStorageActor {
     
     // MARK: - Security-Scoped Bookmark Resolution & Activation
     
-    public func activateLocation(_ location: SavedFolderLocation) throws -> StorageItem {
+    public func activateLocation(_ location: SavedFolderLocation) throws -> MediaItem {
         deactivateCurrentLocation()
         
         var isStale = false
@@ -52,7 +52,7 @@ public actor LocalStorageActor {
         
         let resourceValues = try? resolvedURL.resourceValues(forKeys: [.contentModificationDateKey])
         
-        return StorageItem(
+        return MediaItem(
             connectionID: location.id,
             name: location.name,
             shareName: location.name,
@@ -76,9 +76,9 @@ public actor LocalStorageActor {
     // MARK: - Folder Contents Enumeration
     
     public func listContents(
-        at folder: StorageItem,
+        at folder: MediaItem,
         locationID: String
-    ) throws -> (subfolders: [StorageItem], media: [StorageItem]) {
+    ) throws -> (subfolders: [MediaItem], media: [MediaItem]) {
         guard let folderURL = folder.localURL else {
             throw NSError(
                 domain: "LocalStorageActor",
@@ -102,8 +102,8 @@ public actor LocalStorageActor {
             options: [.skipsHiddenFiles]
         )
         
-        var subfolders: [StorageItem] = []
-        var media: [StorageItem] = []
+        var subfolders: [MediaItem] = []
+        var media: [MediaItem] = []
         
         for url in contents {
             let resourceValues = try? url.resourceValues(forKeys: Set(keys))
@@ -117,10 +117,10 @@ public actor LocalStorageActor {
             let relativePath = folder.path.isEmpty ? name : "\(folder.path)/\(name)"
             
             if isDir {
-                let item = StorageItem(
-                    connectionID: locationID,
+                let item = MediaItem(
+                    locationID: locationID,
                     name: name,
-                    shareName: folder.shareName,
+                    rootName: folder.rootName,
                     path: relativePath,
                     isDirectory: true,
                     size: 0,
@@ -130,10 +130,10 @@ public actor LocalStorageActor {
                 )
                 subfolders.append(item)
             } else if supportedImageExtensions.contains(ext) || supportedVideoExtensions.contains(ext) {
-                let item = StorageItem(
-                    connectionID: locationID,
+                let item = MediaItem(
+                    locationID: locationID,
                     name: name,
-                    shareName: folder.shareName,
+                    rootName: folder.rootName,
                     path: relativePath,
                     isDirectory: false,
                     size: size,
@@ -158,7 +158,7 @@ public actor LocalStorageActor {
     
     // MARK: - Thumbnail Generation
     
-    public func fetchThumbnail(for item: StorageItem, maxDimension: CGFloat = 260) async -> UIImage? {
+    public func fetchThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         guard let url = item.localURL else { return nil }
         
         if item.isVideo {
@@ -188,14 +188,14 @@ public actor LocalStorageActor {
     
     // MARK: - Full Image
     
-    public func fetchImage(for item: StorageItem) -> UIImage? {
+    public func fetchImage(for item: MediaItem) -> UIImage? {
         guard let url = item.localURL else { return nil }
         return UIImage(contentsOfFile: url.path)
     }
     
     // MARK: - Metadata Extraction
     
-    public func fetchMetadata(for item: StorageItem) -> PictureEXIFData? {
+    public func fetchMetadata(for item: MediaItem) -> PictureEXIFData? {
         guard let url = item.localURL else { return nil }
         return ImageMetadataExtractor.extract(from: url, fileName: item.name, fileSize: item.formattedSize)
     }

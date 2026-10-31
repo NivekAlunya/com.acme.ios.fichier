@@ -7,12 +7,12 @@ import SwiftUI
 
 public struct PictureDetailView: View {
     var manager: SMBDirectManager
-    let pictures: [SMBItem]
-    let initialItem: SMBItem
+    let pictures: [MediaItem]
+    let initialItem: MediaItem
     let autoStartSlideshow: Bool
     
     @Environment(\.dismiss) private var dismiss
-    @State private var currentItem: SMBItem
+    @State private var currentItem: MediaItem
     @State private var isPlayingSlideshow: Bool
     @State private var slideDirection: SlideDirection = .forward
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
@@ -28,8 +28,8 @@ public struct PictureDetailView: View {
     
     public init(
         manager: SMBDirectManager,
-        pictures: [SMBItem],
-        initialItem: SMBItem,
+        pictures: [MediaItem],
+        initialItem: MediaItem,
         autoStartSlideshow: Bool = false
     ) {
         self.manager = manager
@@ -410,7 +410,7 @@ public struct PictureDetailView: View {
         currentItem = pictures[prevIndex]
     }
     
-    private func prefetchNext(after item: SMBItem) {
+    private func prefetchNext(after item: MediaItem) {
         guard let idx = pictures.firstIndex(where: { $0.id == item.id }), pictures.count > 1 else { return }
         let nextIdx = (idx + 1) % pictures.count
         let nextItem = pictures[nextIdx]

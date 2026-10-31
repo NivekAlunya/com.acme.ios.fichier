@@ -52,7 +52,7 @@ public final class VideoPlaybackStore {
         }
     }
     
-    public func status(for item: SMBItem) -> VideoPlaybackStatus {
+    public func status(for item: MediaItem) -> VideoPlaybackStatus {
         let record = records[item.id] ?? (!item.connectionID.isEmpty ? records["\(item.shareName)::\(item.path)"] : nil)
         guard let record else { return .unwatched }
         if record.isFinished {
@@ -67,7 +67,7 @@ public final class VideoPlaybackStore {
         return .unwatched
     }
     
-    public func position(for item: SMBItem) -> Double? {
+    public func position(for item: MediaItem) -> Double? {
         guard let record = latestRecord(for: item), !record.isFinished, record.position > 3.0 else { return nil }
         // If the saved position is near the end, do not resume at the end
         if record.duration > 0 {
@@ -78,11 +78,11 @@ public final class VideoPlaybackStore {
         return record.position
     }
     
-    public func isFinished(for item: SMBItem) -> Bool {
+    public func isFinished(for item: MediaItem) -> Bool {
         return latestRecord(for: item)?.isFinished ?? false
     }
     
-    public func savePosition(_ seconds: Double, duration: Double, for item: SMBItem) {
+    public func savePosition(_ seconds: Double, duration: Double, for item: MediaItem) {
         guard seconds.isFinite && !seconds.isNaN && duration.isFinite && !duration.isNaN else { return }
         
         // A video with less than 2 seconds played must never be considered completed or in-progress
@@ -115,7 +115,7 @@ public final class VideoPlaybackStore {
         }
     }
     
-    public func markFinished(for item: SMBItem, duration: Double = 0) {
+    public func markFinished(for item: MediaItem, duration: Double = 0) {
         let existing = latestRecord(for: item)
         let dur = duration > 0 ? duration : (existing?.duration ?? 0)
         guard dur >= 2.0 else { return }
@@ -131,7 +131,7 @@ public final class VideoPlaybackStore {
         flush()
     }
     
-    public func clearPosition(for item: SMBItem) {
+    public func clearPosition(for item: MediaItem) {
         var changed = false
         if liveRecords.removeValue(forKey: item.id) != nil { changed = true }
         if records.removeValue(forKey: item.id) != nil { changed = true }
@@ -159,7 +159,7 @@ public final class VideoPlaybackStore {
     
     // MARK: - Private
     
-    private func latestRecord(for item: SMBItem) -> VideoPlaybackRecord? {
+    private func latestRecord(for item: MediaItem) -> VideoPlaybackRecord? {
         if let live = liveRecords[item.id] { return live }
         if let rec = records[item.id] { return rec }
         if !item.connectionID.isEmpty {

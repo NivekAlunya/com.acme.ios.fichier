@@ -7,7 +7,7 @@ import SwiftUI
 
 struct PictureInfoSheet: View {
     let metadata: PictureEXIFData
-    let item: SMBItem
+    let item: MediaItem
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {

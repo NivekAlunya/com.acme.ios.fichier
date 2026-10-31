@@ -7,7 +7,7 @@ import SwiftUI
 
 struct SidebarFolderTreeView: View {
     var manager: SMBDirectManager
-    let onSelectFolder: (SMBItem) -> Void
+    let onSelectFolder: (MediaItem) -> Void
     
     var body: some View {
         List {
