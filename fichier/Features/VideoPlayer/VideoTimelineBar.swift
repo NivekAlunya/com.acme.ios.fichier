@@ -98,9 +98,9 @@ public struct VideoTimelineBar: View {
                             let newFraction = max(0.0, min(1.0, Double(value.location.x / width)))
                             let finalTime = newFraction * duration
                             // Commit seek once when user releases finger
-                            onSeek(finalTime)
                             isScrubbing = false
                             onScrubStateChanged(false)
+                            onSeek(finalTime)
                         }
                 )
             }

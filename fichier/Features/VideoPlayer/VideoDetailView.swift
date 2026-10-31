@@ -54,6 +54,7 @@ public struct VideoDetailView: View {
     @State private var isSeekingFrame: Bool = false
     @State private var pendingSeekSeconds: Double? = nil
     @State private var lastSeekTime: Date = Date.distantPast
+    @State private var lastSeekTargetSeconds: Double = 0
     @State private var seekGeneration: Int = 0
     @State private var stationarySeekTask: Task<Void, Never>?
     @State private var throttleSeekTask: Task<Void, Never>?
@@ -701,6 +702,7 @@ public struct VideoDetailView: View {
                 isScrubbingTimeline = isScrubbing
                 if isScrubbing {
                     hideControlsTask?.cancel()
+                    lastSeekTargetSeconds = currentPlaybackSeconds
                     wasPlayingBeforeScrub = (player?.timeControlStatus == .playing)
                     if wasPlayingBeforeScrub {
                         player?.pause()
@@ -729,6 +731,7 @@ public struct VideoDetailView: View {
                     guard abs(hTranslation) > abs(vTranslation) else { return }
                     isScrubbingWithGesture = true
                     hideControlsTask?.cancel()
+                    lastSeekTargetSeconds = currentPlaybackSeconds
                     wasPlayingBeforeScrub = (player.timeControlStatus == .playing)
                     if wasPlayingBeforeScrub {
                         player.pause()
@@ -765,48 +768,62 @@ public struct VideoDetailView: View {
     
     // MARK: - Live Frame Seeking While Scrubbing
     
+    private func liveSeekTolerance(for targetSeconds: Double) -> CMTime {
+        let delta = abs(targetSeconds - lastSeekTargetSeconds)
+        if delta < 0.75 {
+            return CMTime(seconds: 0.04, preferredTimescale: 600)
+        } else if delta < 3.0 {
+            return CMTime(seconds: 0.35, preferredTimescale: 600)
+        } else if delta < 10.0 {
+            return CMTime(seconds: 1.5, preferredTimescale: 600)
+        } else {
+            return .positiveInfinity
+        }
+    }
+    
     private func requestLiveFrameSeek(to targetSeconds: Double) {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastSeekTime)
         
         // 1. Reset stationary debounce timer on any movement.
         // When the user stops moving their finger (holding stationary without lifting),
-        // after 75ms this task triggers an exact zero-tolerance seek to display the exact frame.
+        // after 60ms this task triggers an exact zero-tolerance seek to display the exact frame.
         stationarySeekTask?.cancel()
         stationarySeekTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(75))
+            try? await Task.sleep(for: .milliseconds(60))
             guard !Task.isCancelled else { return }
             performStationaryExactSeek(to: targetSeconds)
         }
         
-        // 2. If a seek is already in flight, buffer the latest target.
-        if isSeekingFrame {
+        // 2. If a seek is in flight, buffer the latest target unless the in-flight seek is stale (>= 85ms),
+        // in which case we preempt the stale seek immediately so fast scrubbing samples more frames.
+        if isSeekingFrame && elapsed < 0.085 {
             pendingSeekSeconds = targetSeconds
             return
         }
         
-        // 3. Throttle live intermediate seeks during movement (~50ms) to avoid choking the decoder
-        let now = Date()
-        let elapsed = now.timeIntervalSince(lastSeekTime)
-        let minInterval: TimeInterval = 0.05
+        // 3. Pace live intermediate seeks at ~60fps (16ms) to sample maximum frames without flooding AVPlayer
+        let minInterval: TimeInterval = 0.016
         
         if elapsed < minInterval {
             pendingSeekSeconds = targetSeconds
             if throttleSeekTask == nil {
-                let remaining = max(0.01, minInterval - elapsed)
+                let remaining = max(0.005, minInterval - elapsed)
                 throttleSeekTask = Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(Int(remaining * 1000)))
                     guard !Task.isCancelled else { return }
                     self.throttleSeekTask = nil
-                    if let next = self.pendingSeekSeconds, !self.isSeekingFrame {
+                    if let next = self.pendingSeekSeconds {
                         self.pendingSeekSeconds = nil
-                        self.executeLiveSeek(to: next, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+                        self.executeLiveSeek(to: next, tolerance: self.liveSeekTolerance(for: next))
                     }
                 }
             }
             return
         }
         
-        // 4. Dispatch live seek with tight tolerance for responsive visual feedback while moving
-        executeLiveSeek(to: targetSeconds, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+        // 4. Dispatch live seek with adaptive tolerance for high-rate visual feedback while moving
+        executeLiveSeek(to: targetSeconds, tolerance: liveSeekTolerance(for: targetSeconds))
     }
     
     private func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime) {
@@ -818,6 +835,7 @@ public struct VideoDetailView: View {
         let thisGeneration = seekGeneration
         isSeekingFrame = true
         lastSeekTime = Date()
+        lastSeekTargetSeconds = targetSeconds
         
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
@@ -826,7 +844,7 @@ public struct VideoDetailView: View {
                 self.isSeekingFrame = false
                 if let nextTarget = self.pendingSeekSeconds {
                     self.pendingSeekSeconds = nil
-                    self.executeLiveSeek(to: nextTarget, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+                    self.executeLiveSeek(to: nextTarget, tolerance: self.liveSeekTolerance(for: nextTarget))
                 }
             }
         }
@@ -844,6 +862,7 @@ public struct VideoDetailView: View {
         let thisGeneration = seekGeneration
         isSeekingFrame = true
         lastSeekTime = Date()
+        lastSeekTargetSeconds = targetSeconds
         
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
@@ -852,7 +871,7 @@ public struct VideoDetailView: View {
                 self.isSeekingFrame = false
                 if let nextTarget = self.pendingSeekSeconds {
                     self.pendingSeekSeconds = nil
-                    self.executeLiveSeek(to: nextTarget, tolerance: CMTime(seconds: 0.15, preferredTimescale: 600))
+                    self.executeLiveSeek(to: nextTarget, tolerance: self.liveSeekTolerance(for: nextTarget))
                 }
             }
         }
