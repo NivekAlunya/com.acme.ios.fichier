@@ -10,6 +10,12 @@ import AVFoundation
 public actor PhotoLibraryActor {
     private let imageManager = PHCachingImageManager()
     
+    private var exportDirectory: URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fichier_video_exports", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+    
     public init() {}
     
     // MARK: - Authorization
@@ -38,6 +44,8 @@ public actor PhotoLibraryActor {
             )
         }
         
+        purgeOldVideoExports()
+        
         return MediaItem(
             locationID: StorageLocation.photosLocationID,
             name: String(localized: .Strings.sidebarLocationPhotos),
@@ -47,7 +55,8 @@ public actor PhotoLibraryActor {
             size: 0,
             modifiedDate: nil,
             children: nil,
-            localURL: nil
+            localURL: nil,
+            folderIconName: "photo.on.rectangle.angled"
         )
     }
     
@@ -74,14 +83,14 @@ public actor PhotoLibraryActor {
     private func loadAlbums() -> [MediaItem] {
         var albums: [MediaItem] = []
         
-        let smartSubtypes: [(PHAssetCollectionSubtype, LocalizedStringResource)] = [
-            (.smartAlbumUserLibrary, .Strings.photosSmartAlbumRecents),
-            (.smartAlbumFavorites, .Strings.photosSmartAlbumFavorites),
-            (.smartAlbumVideos, .Strings.photosSmartAlbumVideos),
-            (.smartAlbumScreenshots, .Strings.photosSmartAlbumScreenshots)
+        let smartSubtypes: [(PHAssetCollectionSubtype, LocalizedStringResource, String)] = [
+            (.smartAlbumUserLibrary, .Strings.photosSmartAlbumRecents, "clock.arrow.circlepath"),
+            (.smartAlbumFavorites, .Strings.photosSmartAlbumFavorites, "heart.fill"),
+            (.smartAlbumVideos, .Strings.photosSmartAlbumVideos, "video.fill"),
+            (.smartAlbumScreenshots, .Strings.photosSmartAlbumScreenshots, "camera.viewfinder")
         ]
         
-        for (subtype, titleKey) in smartSubtypes {
+        for (subtype, titleKey, icon) in smartSubtypes {
             let fetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
             fetchResult.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: nil)
@@ -95,7 +104,8 @@ public actor PhotoLibraryActor {
                         size: Int64(assets.count),
                         modifiedDate: collection.startDate ?? collection.endDate,
                         children: nil,
-                        localURL: nil
+                        localURL: nil,
+                        folderIconName: icon
                     )
                     albums.append(albumItem)
                 }
@@ -114,7 +124,8 @@ public actor PhotoLibraryActor {
                 size: Int64(assets.count),
                 modifiedDate: collection.startDate ?? collection.endDate,
                 children: nil,
-                localURL: nil
+                localURL: nil,
+                folderIconName: "rectangle.stack"
             )
             albums.append(albumItem)
         }
@@ -137,11 +148,10 @@ public actor PhotoLibraryActor {
             let isVideo = asset.mediaType == .video
             let ext = isVideo ? "mov" : "jpg"
             let defaultName = "IMG_\(asset.localIdentifier.prefix(8)).\(ext)"
-            let originalName: String = PHAssetResource.assetResources(for: asset).first?.filename ?? defaultName
             
             let item = MediaItem(
                 locationID: StorageLocation.photosLocationID,
-                name: originalName,
+                name: defaultName,
                 rootName: rootName,
                 path: asset.localIdentifier,
                 isDirectory: false,
@@ -158,7 +168,7 @@ public actor PhotoLibraryActor {
         return mediaItems
     }
     
-    // MARK: - Thumbnails
+    // MARK: - Thumbnails (Race-free with AsyncStream)
     
     public func fetchThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         guard let assetID = item.phAssetIdentifier else { return nil }
@@ -172,8 +182,7 @@ public actor PhotoLibraryActor {
         options.isNetworkAccessAllowed = true
         options.isSynchronous = false
         
-        return await withCheckedContinuation { continuation in
-            var hasResumed = false
+        var streamIterator = AsyncStream<UIImage?> { continuation in
             imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
@@ -184,15 +193,17 @@ public actor PhotoLibraryActor {
                 let isCancelled = (info?[PHImageCancelledKey] as? Bool) ?? false
                 let error = info?[PHImageErrorKey] as? Error
                 
-                if !hasResumed && (!isDegraded || isCancelled || error != nil) {
-                    hasResumed = true
-                    continuation.resume(returning: image)
+                if !isDegraded || isCancelled || error != nil {
+                    continuation.yield(image)
+                    continuation.finish()
                 }
             }
-        }
+        }.makeAsyncIterator()
+        
+        return await streamIterator.next() ?? nil
     }
     
-    // MARK: - Full Image (Memory-Optimized Downsampled to Screen Bounds)
+    // MARK: - Full Image (Race-free with AsyncStream)
     
     public func fetchImage(for item: MediaItem, maxPixelSize: CGFloat = 2048) async -> UIImage? {
         guard let assetID = item.phAssetIdentifier else { return nil }
@@ -206,8 +217,7 @@ public actor PhotoLibraryActor {
         options.isNetworkAccessAllowed = true
         options.isSynchronous = false
         
-        return await withCheckedContinuation { continuation in
-            var hasResumed = false
+        var streamIterator = AsyncStream<UIImage?> { continuation in
             imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
@@ -218,15 +228,17 @@ public actor PhotoLibraryActor {
                 let isCancelled = (info?[PHImageCancelledKey] as? Bool) ?? false
                 let error = info?[PHImageErrorKey] as? Error
                 
-                if !hasResumed && (!isDegraded || isCancelled || error != nil) {
-                    hasResumed = true
-                    continuation.resume(returning: image)
+                if !isDegraded || isCancelled || error != nil {
+                    continuation.yield(image)
+                    continuation.finish()
                 }
             }
-        }
+        }.makeAsyncIterator()
+        
+        return await streamIterator.next() ?? nil
     }
     
-    // MARK: - Video Playback URL
+    // MARK: - Video Playback URL (Safe Temporary Directory with Eviction)
     
     public func fetchVideoURL(for item: MediaItem) async throws -> URL {
         guard let assetID = item.phAssetIdentifier else {
@@ -236,6 +248,8 @@ public actor PhotoLibraryActor {
         guard let asset = fetch.firstObject else {
             throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: "Video asset not found"])
         }
+        
+        purgeOldVideoExports()
         
         let options = PHVideoRequestOptions()
         options.deliveryMode = .highQualityFormat
@@ -262,9 +276,8 @@ public actor PhotoLibraryActor {
             return urlAsset.url
         }
         
-        // Composition / Slow-mo export fallback with modern async export
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ph_export_\(UUID().uuidString).mov")
+        // Composition / Slow-mo export fallback into managed temporary export directory
+        let tempURL = exportDirectory.appendingPathComponent("ph_export_\(UUID().uuidString).mov")
         guard let exporter = AVAssetExportSession(asset: loadedAsset, presetName: AVAssetExportPresetHighestQuality) else {
             throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
         }
@@ -272,21 +285,25 @@ public actor PhotoLibraryActor {
         return tempURL
     }
     
+    public func purgeOldVideoExports() {
+        let dir = exportDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        let now = Date()
+        for file in files {
+            if let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+               now.timeIntervalSince(date) > 3600 {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+    
     // MARK: - File Size
     
     public func fetchFileSize(for item: MediaItem) -> Int64 {
-        guard let assetID = item.phAssetIdentifier else { return 0 }
-        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
-        guard let asset = fetch.firstObject else { return 0 }
-        
-        if let resource = PHAssetResource.assetResources(for: asset).first,
-           let size = (resource.value(forKey: "fileSize") as? NSNumber)?.int64Value {
-            return size
-        }
-        return 0
+        0
     }
     
-    // MARK: - Metadata & EXIF
+    // MARK: - Metadata & EXIF (Single Asset IPC Query)
     
     public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         guard let assetID = item.phAssetIdentifier else { return nil }
@@ -306,15 +323,15 @@ public actor PhotoLibraryActor {
             dateTaken = nil
         }
         
-        let originalResource = PHAssetResource.assetResources(for: asset).first
-        let ext = (originalResource?.filename as NSString?)?.pathExtension.uppercased()
-        let fileFormat = ext?.isEmpty == false ? ext : (asset.mediaType == .video ? "MOV" : "HEIC")
+        let primaryResource = PHAssetResource.assetResources(for: asset).first
+        let fileName = primaryResource?.filename ?? item.name
+        let ext = (fileName as NSString).pathExtension.uppercased()
+        let fileFormat = ext.isEmpty ? (asset.mediaType == .video ? "MOV" : "HEIC") : ext
         
-        let sizeBytes: Int64 = (originalResource?.value(forKey: "fileSize") as? NSNumber)?.int64Value ?? 0
-        let formattedSize = ByteCountFormatter.string(fromByteCount: sizeBytes, countStyle: .file)
+        let formattedSize = item.size > 0 ? ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file) : "—"
         
         return PictureEXIFData(
-            fileName: originalResource?.filename ?? item.name,
+            fileName: fileName,
             fileSize: formattedSize,
             dimensions: dimensions,
             megapixels: megapixels,

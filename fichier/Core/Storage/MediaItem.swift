@@ -27,6 +27,7 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     public let localURL: URL?
     public let phAssetIdentifier: String?
     public let isMediaVideo: Bool?
+    public let folderIconName: String?
     
     public var isPhotoAsset: Bool {
         phAssetIdentifier != nil
@@ -51,7 +52,8 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         children: [MediaItem]? = nil,
         localURL: URL? = nil,
         phAssetIdentifier: String? = nil,
-        isMediaVideo: Bool? = nil
+        isMediaVideo: Bool? = nil,
+        folderIconName: String? = nil
     ) {
         self.locationID = locationID
         self.name = name
@@ -64,6 +66,7 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.localURL = localURL
         self.phAssetIdentifier = phAssetIdentifier
         self.isMediaVideo = isMediaVideo
+        self.folderIconName = folderIconName
     }
     
     public var formattedSize: String {

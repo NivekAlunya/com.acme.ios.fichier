@@ -32,25 +32,17 @@ struct FolderTreeNodeView: View {
     }
     
     private var nodeIconName: String {
-        if node.locationID == StorageLocation.photosLocationID {
-            if level == 0 {
-                return "photo.on.rectangle.angled"
+        if let customIcon = node.folderIconName {
+            if customIcon == "rectangle.stack" && isSelected {
+                return "rectangle.stack.fill"
             }
-            let name = node.name.lowercased()
-            if name.contains("recent") || name.contains("récent") || name.contains("zuletzt") {
-                return "clock.arrow.circlepath"
-            } else if name.contains("favori") {
-                return "heart.fill"
-            } else if name.contains("video") || name.contains("vidéo") {
-                return "video.fill"
-            } else if name.contains("screenshot") || name.contains("capture") || name.contains("bildschirm") {
-                return "camera.viewfinder"
-            }
-            return isSelected ? "rectangle.stack.fill" : "rectangle.stack"
+            return customIcon
         }
         
         if level == 0 {
-            if manager.currentLocation?.kind == .iCloudFolder {
+            if manager.currentLocation?.kind == .photos {
+                return "photo.on.rectangle.angled"
+            } else if manager.currentLocation?.kind == .iCloudFolder {
                 return "icloud.fill"
             } else if manager.currentLocation?.kind == .localFolder {
                 return "folder.fill"
@@ -61,11 +53,10 @@ struct FolderTreeNodeView: View {
     }
     
     private var nodeIconColor: Color {
+        if node.folderIconName == "heart.fill" {
+            return .pink
+        }
         if node.locationID == StorageLocation.photosLocationID {
-            let name = node.name.lowercased()
-            if name.contains("favori") {
-                return .pink
-            }
             return isSelected ? .pink : .secondary
         }
         return isSelected ? .blue : .accentColor
