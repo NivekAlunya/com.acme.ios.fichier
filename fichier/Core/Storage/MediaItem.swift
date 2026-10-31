@@ -7,6 +7,9 @@ import Foundation
 
 nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     public var id: String {
+        if let phAssetIdentifier {
+            return "ph::\(phAssetIdentifier)"
+        }
         if locationID.isEmpty {
             return "\(rootName)::\(path)"
         } else {
@@ -22,6 +25,12 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     public let modifiedDate: Date?
     public var children: [MediaItem]?
     public let localURL: URL?
+    public let phAssetIdentifier: String?
+    public let isMediaVideo: Bool?
+    
+    public var isPhotoAsset: Bool {
+        phAssetIdentifier != nil
+    }
     
     public var shareName: String {
         rootName
@@ -40,7 +49,9 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         size: Int64 = 0,
         modifiedDate: Date? = nil,
         children: [MediaItem]? = nil,
-        localURL: URL? = nil
+        localURL: URL? = nil,
+        phAssetIdentifier: String? = nil,
+        isMediaVideo: Bool? = nil
     ) {
         self.locationID = locationID
         self.name = name
@@ -51,6 +62,8 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.modifiedDate = modifiedDate
         self.children = children
         self.localURL = localURL
+        self.phAssetIdentifier = phAssetIdentifier
+        self.isMediaVideo = isMediaVideo
     }
     
     public var formattedSize: String {
@@ -66,6 +79,9 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     }
     
     public var isVideo: Bool {
+        if let isMediaVideo {
+            return isMediaVideo
+        }
         let ext = (name as NSString).pathExtension.lowercased()
         return ["mp4", "mov", "m4v"].contains(ext)
     }

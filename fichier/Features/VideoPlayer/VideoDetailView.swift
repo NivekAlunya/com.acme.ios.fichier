@@ -500,24 +500,26 @@ public struct VideoDetailView: View {
             }
             .buttonStyle(.plain)
             
-            // 2. Save to Camera Roll
-            Button {
-                saveToCameraRoll()
-            } label: {
-                if isSaving {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 30, height: 30)
-                } else {
-                    Image(systemName: "square.and.arrow.down")
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+            if !currentItem.isPhotoAsset {
+                // 2. Save to Camera Roll
+                Button {
+                    saveToCameraRoll()
+                } label: {
+                    if isSaving {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                            .frame(width: 30, height: 30)
+                    } else {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
                 }
+                .buttonStyle(.plain)
+                .disabled(isSaving)
             }
-            .buttonStyle(.plain)
-            .disabled(isSaving)
             
             // 3. ShareLink
             if MediaCacheManager.shared.hasCachedVideo(for: currentItem) {

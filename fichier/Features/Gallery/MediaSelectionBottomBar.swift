@@ -10,6 +10,7 @@ struct MediaSelectionBottomBar: View {
     let isAllFavorites: Bool
     let isProcessing: Bool
     let progressMessage: String?
+    var showSaveToPhotos: Bool = true
     let onToggleFavorite: () -> Void
     let onSaveToPhotos: () -> Void
     let onShare: () -> Void
@@ -48,22 +49,24 @@ struct MediaSelectionBottomBar: View {
                 }
                 .disabled(selectedCount == 0 || isProcessing)
                 
-                Spacer()
-                
-                // 2. Save to Photos Button
-                Button {
-                    onSaveToPhotos()
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 20))
-                            .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
-                        Text(.Strings.galleryActionSaveToPhotos)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
+                if showSaveToPhotos {
+                    Spacer()
+                    
+                    // 2. Save to Photos Button
+                    Button {
+                        onSaveToPhotos()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.down")
+                                .font(.system(size: 20))
+                                .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
+                            Text(.Strings.galleryActionSaveToPhotos)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
+                        }
                     }
+                    .disabled(selectedCount == 0 || isProcessing)
                 }
-                .disabled(selectedCount == 0 || isProcessing)
                 
                 Spacer()
                 

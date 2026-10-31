@@ -105,10 +105,11 @@ public struct LocationsSidebarView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .deleteDisabled(location.kind == .photos)
                     }
                     .onDelete { indexSet in
                         let locationsToRemove = indexSet.map { manager.allLocations[$0] }
-                        for loc in locationsToRemove {
+                        for loc in locationsToRemove where loc.kind != .photos {
                             manager.removeLocation(loc)
                         }
                     }

@@ -9,4 +9,5 @@ public enum StorageLocationKind: String, Codable, Hashable, Sendable {
     case smb
     case localFolder
     case iCloudFolder
+    case photos
 }
