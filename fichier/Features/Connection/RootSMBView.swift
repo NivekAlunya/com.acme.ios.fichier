@@ -13,46 +13,43 @@ public struct RootSMBView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
     @State private var showingSettings = false
+    @State private var showingAddRemote = false
+    @State private var connectingRemoteID: String?
+    @State private var connectionTask: Task<Void, Never>?
     
     public init() {}
     
     public var body: some View {
-        Group {
-            if !smbManager.isConnected {
-                // 1. Not connected -> Show Bonjour Discovery & Login Form
-                SMBConnectWithDiscoveryView(smbManager: smbManager)
-            } else {
-                // 2. Connected -> SplitView with Shared Folders Tree Sidebar & Media Grid View
-                NavigationSplitView(
-                    columnVisibility: $columnVisibility,
-                    preferredCompactColumn: $preferredCompactColumn
-                ) {
-                    SidebarFolderTreeView(
-                        manager: smbManager,
-                        onSelectFolder: { folder in
-                            Task {
-                                await smbManager.selectAndLoadFolder(folder)
-                                preferredCompactColumn = .detail
-                            }
-                        }
-                    )
-                    .navigationTitle(.Strings.connectionTitleSharedFolders)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                showingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityLabel(.Strings.settingsTitle)
-                        }
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button(.Strings.connectionButtonDisconnect, role: .destructive) {
-                                smbManager.disconnect()
-                            }
-                        }
+        NavigationSplitView(
+            columnVisibility: $columnVisibility,
+            preferredCompactColumn: $preferredCompactColumn
+        ) {
+            // 1. Sidebar: Remotes list with "+" button and settings
+            RemotesSidebarView(
+                manager: smbManager,
+                showingAddRemote: $showingAddRemote,
+                showingSettings: $showingSettings,
+                connectingRemoteID: connectingRemoteID,
+                onSelectRemote: { saved in
+                    connectToRemote(saved)
+                }
+            )
+        } content: {
+            // 2. Content: Folder Tree of the selected/connected remote
+            FolderTreeContentView(
+                manager: smbManager,
+                showingAddRemote: $showingAddRemote,
+                onSelectFolder: { folder in
+                    Task {
+                        await smbManager.selectAndLoadFolder(folder)
+                        preferredCompactColumn = .detail
                     }
-                } detail: {
+                }
+            )
+        } detail: {
+            // 3. Detail: Media Grid & Viewer
+            Group {
+                if let selectedFolder = smbManager.selectedFolder {
                     MediaGridView(
                         manager: smbManager,
                         onSelectFolder: { subfolder in
@@ -77,26 +74,66 @@ public struct RootSMBView: View {
                             }
                         }
                     )
+                    .navigationTitle(selectedFolder.name)
+                } else {
+                    ContentUnavailableView {
+                        Label(
+                            String(localized: .Strings.galleryNoFolderSelectedTitle),
+                            systemImage: "photo.on.rectangle.angled"
+                        )
+                    } description: {
+                        Text(.Strings.galleryNoFolderSelectedDescription)
+                    }
                     .navigationTitle(smbManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
                 }
-                .fullScreenCover(item: $activePictureForViewer) { pic in
-                    PictureDetailView(
-                        manager: smbManager,
-                        pictures: smbManager.pictures.filter { !$0.isVideo },
-                        initialItem: pic,
-                        autoStartSlideshow: shouldAutoStartSlideshow
-                    )
-                }
-                .fullScreenCover(item: $activeVideoForViewer) { vid in
-                    VideoDetailView(
-                        manager: smbManager,
-                        videos: smbManager.pictures.filter { $0.isVideo },
-                        initialItem: vid
-                    )
-                }
-                .sheet(isPresented: $showingSettings) {
-                    AppSettingsView()
-                }
+            }
+        }
+        .fullScreenCover(item: $activePictureForViewer) { pic in
+            PictureDetailView(
+                manager: smbManager,
+                pictures: smbManager.pictures.filter { !$0.isVideo },
+                initialItem: pic,
+                autoStartSlideshow: shouldAutoStartSlideshow
+            )
+        }
+        .fullScreenCover(item: $activeVideoForViewer) { vid in
+            VideoDetailView(
+                manager: smbManager,
+                videos: smbManager.pictures.filter { $0.isVideo },
+                initialItem: vid
+            )
+        }
+        .sheet(isPresented: $showingSettings) {
+            AppSettingsView()
+        }
+        .sheet(isPresented: $showingAddRemote) {
+            SMBConnectWithDiscoveryView(smbManager: smbManager)
+        }
+    }
+    
+    private func connectToRemote(_ saved: SavedSMBConnection) {
+        if smbManager.isConnected && smbManager.currentConnectionID == saved.id {
+            preferredCompactColumn = .content
+            return
+        }
+        
+        connectionTask?.cancel()
+        
+        let password = smbManager.password(for: saved)
+        connectingRemoteID = saved.id
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        
+        connectionTask = Task {
+            await smbManager.connect(
+                host: saved.host,
+                user: saved.username,
+                pass: password,
+                hostname: saved.hostname
+            )
+            guard !Task.isCancelled else { return }
+            connectingRemoteID = nil
+            if smbManager.isConnected {
+                preferredCompactColumn = .content
             }
         }
     }

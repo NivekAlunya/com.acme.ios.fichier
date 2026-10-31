@@ -60,11 +60,15 @@ public final class SMBDirectManager {
         SMBKeychain.loadPassword(for: connection.id) ?? ""
     }
     
-    private func saveValidatedConnection(host: String, user: String, pass: String) {
+    private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) {
+        let existingHostname = savedConnections.first(where: { $0.id == "\(user)@\(host)" })?.hostname
+        let finalHostname = hostname ?? existingHostname
+        
         let newEntry = SavedSMBConnection(
             host: host,
             username: user,
-            lastConnected: Date()
+            lastConnected: Date(),
+            hostname: finalHostname
         )
         SMBKeychain.savePassword(pass, for: newEntry.id)
         
@@ -87,7 +91,7 @@ public final class SMBDirectManager {
     
     // MARK: - Connect to Mac mini & List All Shares Automatically
     
-    public func connect(host: String, user: String, pass: String) async {
+    public func connect(host: String, user: String, pass: String, hostname: String? = nil) async {
         isLoading = true
         errorMessage = nil
         
@@ -122,7 +126,7 @@ public final class SMBDirectManager {
             }
             
             // Connection verified! Save server credentials for future use
-            saveValidatedConnection(host: cleanHost, user: user, pass: pass)
+            saveValidatedConnection(host: cleanHost, user: user, pass: pass, hostname: hostname)
             
             self.folderTree = discoveredShares
             self.isConnected = true

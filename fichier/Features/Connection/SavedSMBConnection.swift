@@ -10,10 +10,20 @@ nonisolated public struct SavedSMBConnection: Identifiable, Codable, Hashable, S
     public let host: String
     public let username: String
     public let lastConnected: Date
+    public let hostname: String?
     
-    public init(host: String, username: String, lastConnected: Date) {
+    public init(host: String, username: String, lastConnected: Date, hostname: String? = nil) {
         self.host = host
         self.username = username
         self.lastConnected = lastConnected
+        self.hostname = hostname
+    }
+    
+    public var displayName: String {
+        if let hostname = hostname?.trimmingCharacters(in: .whitespacesAndNewlines), !hostname.isEmpty, hostname != host {
+            return "\(hostname) [\(host)]"
+        } else {
+            return host
+        }
     }
 }

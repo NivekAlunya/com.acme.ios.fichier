@@ -11,7 +11,7 @@ struct SidebarFolderTreeView: View {
     
     var body: some View {
         List {
-            Section(String(localized: .Strings.sidebarSectionServerShares(manager.folderTree.count))) {
+            Section(sectionHeaderTitle) {
                 ForEach(manager.folderTree) { shareRootNode in
                     FolderTreeNodeView(
                         node: shareRootNode,
@@ -27,5 +27,12 @@ struct SidebarFolderTreeView: View {
         .refreshable {
             await manager.refreshSharesAndFolders()
         }
+    }
+    
+    private var sectionHeaderTitle: String {
+        if let remote = manager.savedConnections.first(where: { manager.currentConnectionID == $0.id }) {
+            return "\(remote.displayName) (\(manager.folderTree.count))"
+        }
+        return String(localized: .Strings.sidebarSectionServerShares(manager.folderTree.count))
     }
 }

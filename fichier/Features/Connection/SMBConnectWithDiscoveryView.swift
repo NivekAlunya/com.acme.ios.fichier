@@ -6,10 +6,12 @@
 import SwiftUI
 
 struct SMBConnectWithDiscoveryView: View {
+    @Environment(\.dismiss) private var dismiss
     var smbManager: SMBDirectManager
     @State private var discovery = SMBHostDiscovery()
     
     @State private var selectedHost = ""
+    @State private var selectedHostname = ""
     @State private var username = ""
     @State private var password = ""
     @State private var showingSettings = false
@@ -17,59 +19,6 @@ struct SMBConnectWithDiscoveryView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // 0. Saved Validated Connections Section
-                if !smbManager.savedConnections.isEmpty {
-                    Section(.Strings.connectionSectionSavedServers) {
-                        ForEach(smbManager.savedConnections) { saved in
-                            Button {
-                                selectedHost = saved.host
-                                username = saved.username
-                                password = smbManager.password(for: saved)
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                Task {
-                                    await smbManager.connect(
-                                        host: selectedHost,
-                                        user: username,
-                                        pass: password
-                                    )
-                                }
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "externaldrive.connected.to.line.below.fill")
-                                        .foregroundColor(.blue)
-                                        .font(.title3)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(saved.host)
-                                            .font(.headline)
-                                            .foregroundColor(.primary)
-                                        
-                                        Text(.Strings.connectionSavedServerUser(saved.username))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    if selectedHost == saved.host && username == saved.username && smbManager.isLoading {
-                                        ProgressView()
-                                    } else {
-                                        Image(systemName: "arrow.right.circle.fill")
-                                            .foregroundColor(.blue.opacity(0.8))
-                                    }
-                                }
-                            }
-                            .disabled(smbManager.isLoading)
-                        }
-                        .onDelete { offsets in
-                            for index in offsets {
-                                let conn = smbManager.savedConnections[index]
-                                smbManager.removeSavedConnection(conn)
-                            }
-                        }
-                    }
-                }
-                
                 // 1. Bonjour Local Network Discovery Section
                 Section {
                     if discovery.isScanning && discovery.discoveredHosts.isEmpty {
@@ -92,6 +41,7 @@ struct SMBConnectWithDiscoveryView: View {
                             Button {
                                 if let ipv4 = host.resolvedHost {
                                     selectedHost = ipv4
+                                    selectedHostname = host.name
                                 }
                             } label: {
                                 HStack {
@@ -141,6 +91,10 @@ struct SMBConnectWithDiscoveryView: View {
                 
                 // 2. Credentials & Manual Host Input
                 Section(.Strings.connectionSectionServerCredentials) {
+                    TextField(.Strings.connectionFieldServerName, text: $selectedHostname)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                    
                     TextField(.Strings.connectionFieldHostAddress, text: $selectedHost)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -165,11 +119,18 @@ struct SMBConnectWithDiscoveryView: View {
                 // 4. Connect Button
                 Section {
                     Button {
+                        let finalHostname: String? = {
+                            let trimmed = selectedHostname.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty { return trimmed }
+                            return discovery.discoveredHosts.first(where: { $0.resolvedHost == selectedHost })?.name
+                        }()
+                        
                         Task {
                             await smbManager.connect(
                                 host: selectedHost,
                                 user: username,
-                                pass: password
+                                pass: password,
+                                hostname: finalHostname
                             )
                         }
                     } label: {
@@ -187,8 +148,16 @@ struct SMBConnectWithDiscoveryView: View {
                     .disabled(selectedHost.isEmpty || username.isEmpty || smbManager.isLoading)
                 }
             }
-            .navigationTitle(.Strings.connectionTitleMacMiniPhotos)
+            .navigationTitle(.Strings.connectionTitleConnectToServer)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel(.Strings.commonCancel)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showingSettings = true
@@ -198,16 +167,16 @@ struct SMBConnectWithDiscoveryView: View {
                     .accessibilityLabel(.Strings.settingsTitle)
                 }
             }
+            .onChange(of: smbManager.isConnected) { _, isConnected in
+                if isConnected {
+                    dismiss()
+                }
+            }
             .sheet(isPresented: $showingSettings) {
                 AppSettingsView()
             }
             .onAppear {
                 discovery.startDiscovery()
-                if selectedHost.isEmpty, let mostRecent = smbManager.savedConnections.first {
-                    selectedHost = mostRecent.host
-                    username = mostRecent.username
-                    password = smbManager.password(for: mostRecent)
-                }
             }
             .onDisappear {
                 discovery.stopDiscovery()
