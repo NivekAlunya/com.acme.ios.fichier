@@ -105,6 +105,23 @@ public struct VideoTimelineBar: View {
                 )
             }
             .frame(height: 36)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "Playback Timeline", comment: "Accessibility label for playback scrubber"))
+            .accessibilityValue("\(formatSeconds(effectiveCurrentTime)) of \(formatSeconds(duration))")
+            .accessibilityAdjustableAction { direction in
+                guard duration > 0 else { return }
+                let delta = max(5.0, duration * 0.05)
+                switch direction {
+                case .increment:
+                    let target = min(duration, effectiveCurrentTime + delta)
+                    onSeek(target)
+                case .decrement:
+                    let target = max(0, effectiveCurrentTime - delta)
+                    onSeek(target)
+                @unknown default:
+                    break
+                }
+            }
             
             // Duration / Remaining Time (Tap to toggle)
             Button {
@@ -116,6 +133,7 @@ public struct VideoTimelineBar: View {
                     .frame(minWidth: 48, alignment: .trailing)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(showRemainingTime ? String(localized: "Remaining time, tap to show total duration", comment: "Accessibility label for remaining time button") : String(localized: "Total duration, tap to show remaining time", comment: "Accessibility label for total duration button"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

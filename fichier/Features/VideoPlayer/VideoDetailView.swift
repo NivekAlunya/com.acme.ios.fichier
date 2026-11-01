@@ -19,6 +19,8 @@ public struct VideoDetailView: View {
     @State private var currentItem: MediaItem
     @State private var currentlyLoadedItem: MediaItem?
     @State private var playbackStartTime: Date = Date()
+    @State private var didRestorePlaybackPosition: Bool = false
+    @State private var restoredFromSeconds: Double? = nil
     @State private var player: AVPlayer?
     @State private var currentAsset: AVURLAsset?
     @State private var loaderDelegate: SMBResourceLoaderDelegate?
@@ -127,6 +129,7 @@ public struct VideoDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
+                    .accessibilityLabel(String(localized: "Retry Loading Video", comment: "Accessibility label to retry loading video"))
                 }
             }
             
@@ -176,6 +179,7 @@ public struct VideoDetailView: View {
                             .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(isPlaying ? String(localized: "Pause", comment: "Accessibility label to pause playback") : String(localized: "Play", comment: "Accessibility label to start playback"))
                     .transition(.opacity)
                 }
                 
@@ -191,6 +195,7 @@ public struct VideoDetailView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                                 .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
                         }
+                        .accessibilityLabel(String(localized: "Previous Video", comment: "Accessibility label for previous video"))
                         .padding(.leading, 18)
                         
                         Spacer()
@@ -204,6 +209,7 @@ public struct VideoDetailView: View {
                                 .foregroundStyle(.white.opacity(0.85))
                                 .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
                         }
+                        .accessibilityLabel(String(localized: "Next Video", comment: "Accessibility label for next video"))
                         .padding(.trailing, 18)
                     }
                 }
@@ -258,11 +264,12 @@ public struct VideoDetailView: View {
             
             let targetItem = currentlyLoadedItem ?? currentItem
             
-            // If the video reached end-of-play within 2.0 seconds of starting playback,
-            // it was likely restored right at the end (or near EOF).
-            // In that case, DO NOT skip to the next video!
-            // Instead, rewind to 0:00 and let the user watch the video from the beginning.
-            if Date().timeIntervalSince(playbackStartTime) < 2.0 {
+            // If the video reached end-of-play immediately after restoring a saved position near the end,
+            // rewind to 0:00 so the user can watch the full video from the beginning.
+            // Short videos (duration <= 3.0s) or videos that played normally should not be looped.
+            if didRestorePlaybackPosition && (totalDurationSeconds > 3.0 || totalDurationSeconds == 0) {
+                didRestorePlaybackPosition = false
+                restoredFromSeconds = nil
                 player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
                 currentPlaybackSeconds = 0
                 VideoPlaybackStore.shared.clearPosition(for: targetItem)
@@ -270,6 +277,9 @@ public struct VideoDetailView: View {
                 isPlaying = true
                 return
             }
+            
+            didRestorePlaybackPosition = false
+            restoredFromSeconds = nil
             
             if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
                 VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
@@ -300,6 +310,54 @@ public struct VideoDetailView: View {
             guard !isPiPActive else { return }
             tearDownPlayer(deactivateAudioSession: true)
         }
+        .background {
+            // Hardware Keyboard Shortcuts for iPad and Mac
+            Group {
+                Button("") {
+                    tearDownPlayer(deactivateAudioSession: true)
+                    dismiss()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                
+                Button("") { togglePlayPause() }
+                    .keyboardShortcut(.space, modifiers: [])
+                
+                Button("") { togglePlayPause() }
+                    .keyboardShortcut("k", modifiers: [])
+                
+                Button("") { seekRelative(-5) }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                
+                Button("") { seekRelative(5) }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                
+                Button("") { seekRelative(-10) }
+                    .keyboardShortcut("j", modifiers: [])
+                
+                Button("") { seekRelative(10) }
+                    .keyboardShortcut("l", modifiers: [])
+                
+                Button("") { goToPrevious() }
+                    .keyboardShortcut("[", modifiers: [])
+                
+                Button("") { goToNext() }
+                    .keyboardShortcut("]", modifiers: [])
+                
+                Button("") { toggleMute() }
+                    .keyboardShortcut("m", modifiers: [])
+                
+                Button("") { adjustVolume(by: 0.1) }
+                    .keyboardShortcut(.upArrow, modifiers: [])
+                
+                Button("") { adjustVolume(by: -0.1) }
+                    .keyboardShortcut(.downArrow, modifiers: [])
+                
+                Button("") { FavoritesManager.shared.toggleFavorite(currentItem) }
+                    .keyboardShortcut("f", modifiers: [])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
     }
     
     // MARK: - Top Bar
@@ -328,6 +386,7 @@ public struct VideoDetailView: View {
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close video player"))
     }
     
     // MARK: - Sound Volume Bar
@@ -386,6 +445,7 @@ public struct VideoDetailView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Previous Video", comment: "Accessibility label for previous video"))
     }
     
     private var nextButton: some View {
@@ -399,6 +459,7 @@ public struct VideoDetailView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Next Video", comment: "Accessibility label for next video"))
     }
     
     private var toolsDivider: some View {
@@ -496,6 +557,7 @@ public struct VideoDetailView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "Playback Options", comment: "Accessibility label for playback options menu"))
     }
     
     // MARK: - Action Tools Icons
@@ -514,6 +576,7 @@ public struct VideoDetailView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(FavoritesManager.shared.isFavorite(currentItem) ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite"))
             
             if !currentItem.isPhotoAsset {
                 // 2. Save to Camera Roll
@@ -534,6 +597,7 @@ public struct VideoDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isSaving)
+                .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save video to Photos"))
             }
             
             // 3. ShareLink
@@ -549,11 +613,13 @@ public struct VideoDetailView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Share Video", comment: "Accessibility label to share video"))
             }
             
             // 4. AirPlay Button
             AirPlayButtonView()
                 .frame(width: 30, height: 30)
+                .accessibilityLabel(String(localized: "AirPlay", comment: "Accessibility label for AirPlay"))
             
             // 5. Playback Options Menu (Subtitles, Audio, Speed, PiP)
             playbackOptionsMenu
@@ -646,6 +712,7 @@ public struct VideoDetailView: View {
                     .background(Capsule().fill(Color.blue))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Restart from beginning", comment: "Accessibility label to restart playback from start"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -833,6 +900,8 @@ public struct VideoDetailView: View {
         throttleSeekTask = nil
         seekWatchdogTask?.cancel()
         seekWatchdogTask = nil
+        didRestorePlaybackPosition = false
+        restoredFromSeconds = nil
         
         seekGeneration += 1
         let thisGeneration = seekGeneration
@@ -891,6 +960,8 @@ public struct VideoDetailView: View {
         isSeekingFrame = false
         seekWatchdogTask?.cancel()
         seekWatchdogTask = nil
+        didRestorePlaybackPosition = false
+        restoredFromSeconds = nil
         
         seekGeneration += 1
         let thisGeneration = seekGeneration
@@ -991,6 +1062,39 @@ public struct VideoDetailView: View {
     
     private func seekTo(_ targetSeconds: Double, resumePlaying: Bool = false) {
         finishSeeking(at: targetSeconds, resumePlaying: resumePlaying)
+    }
+    
+    private func seekRelative(_ deltaSeconds: Double) {
+        let current = currentPlaybackSeconds
+        let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
+        let maxLimit = dur > 0 ? dur : max(current + deltaSeconds, 0)
+        let newTarget = min(max(0, current + deltaSeconds), maxLimit)
+        seekTo(newTarget, resumePlaying: isPlaying)
+        withAnimation {
+            showControls = true
+        }
+        scheduleControlsAutoHide()
+    }
+    
+    private func toggleMute() {
+        isMuted.toggle()
+        player?.isMuted = isMuted
+        withAnimation {
+            showControls = true
+        }
+        scheduleControlsAutoHide()
+    }
+    
+    private func adjustVolume(by delta: Double) {
+        let newVol = min(max(0.0, volume + delta), 1.0)
+        volume = newVol
+        isMuted = false
+        player?.isMuted = false
+        player?.volume = Float(newVol)
+        withAnimation {
+            showControls = true
+        }
+        scheduleControlsAutoHide()
     }
     
     private func goToNext() {
@@ -1105,6 +1209,8 @@ public struct VideoDetailView: View {
     private func restartVideo() {
         guard player != nil else { return }
         let targetItem = currentlyLoadedItem ?? currentItem
+        didRestorePlaybackPosition = false
+        restoredFromSeconds = nil
         resumeBannerTask?.cancel()
         seekTo(0, resumePlaying: isPlaying)
         currentPlaybackSeconds = 0
@@ -1143,6 +1249,8 @@ public struct VideoDetailView: View {
     
     private func setupPlayer(for item: MediaItem) {
         playbackStartTime = Date()
+        didRestorePlaybackPosition = false
+        restoredFromSeconds = nil
         tearDownPlayer(deactivateAudioSession: false)
         currentlyLoadedItem = item
         showControls = true
@@ -1306,14 +1414,20 @@ public struct VideoDetailView: View {
             let knownDuration = avPlayer.currentItem?.duration.seconds ?? 0
             if knownDuration.isFinite && knownDuration > 0 && (savedSeconds >= knownDuration - 4.0 || savedSeconds / knownDuration >= 0.90) {
                 self.currentPlaybackSeconds = 0
+                self.didRestorePlaybackPosition = false
+                self.restoredFromSeconds = nil
             } else {
                 let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
                 avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
                 self.currentPlaybackSeconds = savedSeconds
+                self.didRestorePlaybackPosition = true
+                self.restoredFromSeconds = savedSeconds
                 showResumeBanner(at: savedSeconds)
             }
         } else {
             self.currentPlaybackSeconds = 0
+            self.didRestorePlaybackPosition = false
+            self.restoredFromSeconds = nil
         }
         
         // 2. Set playback rate
@@ -1341,6 +1455,14 @@ public struct VideoDetailView: View {
                 }
                 if dur.isFinite && !dur.isNaN && dur > 0 {
                     self.totalDurationSeconds = dur
+                }
+                
+                // If playback advanced naturally past 2.5s from the restored point, clear restore flag
+                if self.didRestorePlaybackPosition, let restored = self.restoredFromSeconds {
+                    if abs(secs - restored) > 2.5 {
+                        self.didRestorePlaybackPosition = false
+                        self.restoredFromSeconds = nil
+                    }
                 }
                 let isCurrentlyPlaying = (p.timeControlStatus != .paused)
                 let wasPlaying = self.isPlaying

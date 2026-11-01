@@ -1,44 +1,11 @@
 {
-  "fill" : "system-light",
+  "fill" : "automatic",
   "groups" : [
     {
       "layers" : [
-
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
-      }
-    },
-    {
-      "layers" : [
-
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
-      }
-    },
-    {
-      "layers" : [
         {
-          "image-name" : "AppIcon-Light-OptionB 2.png",
-          "name" : "AppIcon-Light-OptionB 2",
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              -187,
-              -164
-            ]
-          }
+          "image-name" : "fichier.svg",
+          "name" : "fichier"
         }
       ],
       "shadow" : {

@@ -168,6 +168,36 @@ public struct PictureDetailView: View {
             }
             activeMetadata = await manager.fetchMetadata(for: currentItem)
         }
+        .background {
+            // Hardware Keyboard Shortcuts for iPad and Mac
+            Group {
+                Button("") { dismiss() }
+                    .keyboardShortcut(.escape, modifiers: [])
+                Button("") { withAnimation { goToPrevious() } }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                Button("") { withAnimation { goToNext() } }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                Button("") { withAnimation { goToPrevious() } }
+                    .keyboardShortcut("[", modifiers: [])
+                Button("") { withAnimation { goToNext() } }
+                    .keyboardShortcut("]", modifiers: [])
+                Button("") { withAnimation { isPlayingSlideshow.toggle() } }
+                    .keyboardShortcut(.space, modifiers: [])
+                Button("") { FavoritesManager.shared.toggleFavorite(currentItem) }
+                    .keyboardShortcut("f", modifiers: [])
+                Button("") {
+                    Task {
+                        if activeMetadata == nil {
+                            self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+                        }
+                        showingInfoSheet.toggle()
+                    }
+                }
+                .keyboardShortcut("i", modifiers: [])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
     }
     
     // MARK: - Unified Bottom Floating HUD Card (2-Line Layout)
@@ -189,6 +219,7 @@ public struct PictureDetailView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Previous Photo", comment: "Accessibility label for previous photo"))
                     
                     Divider()
                         .frame(height: 28)
@@ -231,6 +262,7 @@ public struct PictureDetailView: View {
                                 .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close photo viewer"))
                         
                         Divider()
                             .frame(height: 16)
@@ -246,6 +278,7 @@ public struct PictureDetailView: View {
                                 .frame(width: 28, height: 28)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(isPlayingSlideshow ? String(localized: "Pause Slideshow", comment: "Accessibility label to pause slideshow") : String(localized: "Start Slideshow", comment: "Accessibility label to start slideshow"))
                         
                         // 3. Slideshow Duration & Transition Style Menu
                         Menu {
@@ -284,6 +317,7 @@ public struct PictureDetailView: View {
                             .background(Color.white.opacity(0.18))
                             .clipShape(Capsule())
                         }
+                        .accessibilityLabel(String(localized: "Slideshow Settings", comment: "Accessibility label for slideshow duration and transition menu"))
                         
                         // 4. EXIF Info Sheet
                         Button {
@@ -300,6 +334,7 @@ public struct PictureDetailView: View {
                                 .frame(width: 28, height: 28)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "Photo Information", comment: "Accessibility label for photo EXIF info"))
                         
                         // 5. Favorite Button
                         Button {
@@ -311,6 +346,7 @@ public struct PictureDetailView: View {
                                 .frame(width: 28, height: 28)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(FavoritesManager.shared.isFavorite(currentItem) ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite photo") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite photo"))
                         
                         if !currentItem.isPhotoAsset {
                             // 6. Save to Camera Roll
@@ -329,6 +365,7 @@ public struct PictureDetailView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(currentImage == nil || isSaving)
+                            .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save photo to Photos"))
                         }
                         
                         // 7. ShareLink
@@ -343,6 +380,7 @@ public struct PictureDetailView: View {
                                     .frame(width: 28, height: 28)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(String(localized: "Share Photo", comment: "Accessibility label to share photo"))
                         }
                     }
                 }
@@ -364,6 +402,7 @@ public struct PictureDetailView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Next Photo", comment: "Accessibility label for next photo"))
                 }
             }
             .padding(.horizontal, 8)
