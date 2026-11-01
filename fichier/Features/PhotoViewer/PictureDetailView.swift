@@ -182,180 +182,213 @@ public struct PictureDetailView: View {
         }
     }
     
-    // MARK: - Unified Bottom Floating HUD Pill
+    // MARK: - Unified Bottom Floating HUD Card (2-Line Layout)
     
     private var bottomUnifiedHUD: some View {
         HStack {
             Spacer()
             
-            HStack(spacing: 9) {
-                // 1. Close Button
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(7)
-                        .background(Color.white.opacity(0.18))
-                        .clipShape(Circle())
-                }
-                
-                Divider()
-                    .frame(height: 18)
-                    .background(Color.white.opacity(0.3))
-                
-                // 2. Previous Photo Button
+            HStack(spacing: 6) {
+                // Leading: Previous Photo Button (Full height)
                 if pictures.count > 1 {
                     Button {
                         withAnimation { goToPrevious() }
                     } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(5)
+                            .frame(width: 32, height: 48)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Divider()
+                        .frame(height: 28)
+                        .background(Color.white.opacity(0.3))
+                }
+                
+                // Middle: 2 Lines (Line 1: Title & Counter, Line 2: Action Icons)
+                VStack(spacing: 6) {
+                    // Line 1: Title & Item Counter with generous breathing room
+                    HStack(spacing: 6) {
+                        Text(currentItem.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 220)
+                        
+                        Text("•")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.4))
+                        
+                        Text(.Strings.commonItemCounterAndSize(currentIndex + 1, pictures.count, currentItem.formattedSize))
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 4)
+                    
+                    // Line 2: Close and Action Tools
+                    HStack(spacing: 8) {
+                        // 1. Close Button
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 26, height: 26)
+                                .background(Color.white.opacity(0.2))
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        
+                        Divider()
+                            .frame(height: 16)
+                            .background(Color.white.opacity(0.25))
+                        
+                        // 2. Slideshow Play/Pause
+                        Button {
+                            withAnimation { isPlayingSlideshow.toggle() }
+                        } label: {
+                            Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(isPlayingSlideshow ? Color.orange : Color.white)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // 3. Slideshow Duration & Transition Style Menu
+                        Menu {
+                            Section(.Strings.slideshowSectionTransitionStyle) {
+                                Picker(.Strings.slideshowPickerStyle, selection: $transitionStyle) {
+                                    ForEach(SlideshowTransitionStyle.allCases) { style in
+                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
+                                    }
+                                }
+                            }
+                            
+                            Section(.Strings.slideshowPickerDuration) {
+                                Picker(.Strings.slideshowPickerSlideshowDuration, selection: $slideshowInterval) {
+                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "timer")
+                                    .font(.system(size: 10))
+                                Text("\(Int(slideshowInterval))")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .fixedSize()
+                            }
+                            .fixedSize()
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 4)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Capsule())
+                        }
+                        
+                        // 4. EXIF Info Sheet
+                        Button {
+                            Task {
+                                if activeMetadata == nil {
+                                    self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+                                }
+                                showingInfoSheet = true
+                            }
+                        } label: {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(.white)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        // 5. Favorite Button
+                        Button {
+                            FavoritesManager.shared.toggleFavorite(currentItem)
+                        } label: {
+                            Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        
+                        if !currentItem.isPhotoAsset {
+                            // 6. Save to Camera Roll
+                            Button {
+                                saveToCameraRoll()
+                            } label: {
+                                if isSaving {
+                                    ProgressView().scaleEffect(0.65)
+                                        .frame(width: 28, height: 28)
+                                } else {
+                                    Image(systemName: "square.and.arrow.down")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 28, height: 28)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(currentImage == nil || isSaving)
+                        }
+                        
+                        // 7. ShareLink
+                        if let img = currentImage {
+                            ShareLink(
+                                item: Image(uiImage: img),
+                                preview: SharePreview(currentItem.name, image: Image(uiImage: img))
+                            ) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 28, height: 28)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
+                .padding(.horizontal, 6)
                 
-                // 3. Name & Counter
-                VStack(spacing: 1) {
-                    Text(currentItem.name)
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .frame(maxWidth: 120)
-                    
-                    Text(.Strings.commonItemCounterAndSize(currentIndex + 1, pictures.count, currentItem.formattedSize))
-                        .font(.system(size: 9))
-                        .foregroundColor(.white.opacity(0.7))
-                }
-                
-                // 4. Next Photo Button
+                // Trailing: Next Photo Button (Full height)
                 if pictures.count > 1 {
+                    Divider()
+                        .frame(height: 28)
+                        .background(Color.white.opacity(0.3))
+                    
                     Button {
                         withAnimation { goToNext() }
                     } label: {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .padding(5)
+                            .frame(width: 32, height: 48)
+                            .contentShape(Rectangle())
                     }
-                }
-                
-                Divider()
-                    .frame(height: 18)
-                    .background(Color.white.opacity(0.3))
-                
-                // 5. Slideshow Play/Pause
-                Button {
-                    withAnimation { isPlayingSlideshow.toggle() }
-                } label: {
-                    Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isPlayingSlideshow ? Color.orange : Color.white)
-                        .padding(5)
-                }
-                
-                // 6. Slideshow Duration & Transition Style Menu
-                Menu {
-                    Section(.Strings.slideshowSectionTransitionStyle) {
-                        Picker(.Strings.slideshowPickerStyle, selection: $transitionStyle) {
-                            ForEach(SlideshowTransitionStyle.allCases) { style in
-                                Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                            }
-                        }
-                    }
-                    
-                    Section(.Strings.slideshowPickerDuration) {
-                        Picker(.Strings.slideshowPickerSlideshowDuration, selection: $slideshowInterval) {
-                            Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                            Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                            Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                            Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                            Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                            Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "timer")
-                            .font(.system(size: 10))
-                        Text(.Strings.slideshowDurationSecondsShort(Int(slideshowInterval)))
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.18))
-                    .clipShape(Capsule())
-                }
-                
-                // 7. EXIF Info Sheet
-                Button {
-                    Task {
-                        if activeMetadata == nil {
-                            self.activeMetadata = await manager.fetchMetadata(for: currentItem)
-                        }
-                        showingInfoSheet = true
-                    }
-                } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.white)
-                        .padding(5)
-                }
-                
-                // 7. Favorite Button
-                Button {
-                    FavoritesManager.shared.toggleFavorite(currentItem)
-                } label: {
-                    Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
-                        .font(.system(size: 14))
-                        .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
-                        .padding(5)
-                }
-                
-                if !currentItem.isPhotoAsset {
-                    // 8. Save to Camera Roll
-                    Button {
-                        saveToCameraRoll()
-                    } label: {
-                        if isSaving {
-                            ProgressView().scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.white)
-                                .padding(5)
-                        }
-                    }
-                    .disabled(currentImage == nil || isSaving)
-                }
-                
-                // 9. ShareLink
-                if let img = currentImage {
-                    ShareLink(
-                        item: Image(uiImage: img),
-                        preview: SharePreview(currentItem.name, image: Image(uiImage: img))
-                    ) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.white)
-                            .padding(5)
-                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 8)
             .padding(.vertical, 8)
             .background(
-                Capsule()
+                RoundedRectangle(cornerRadius: 18)
                     .fill(.ultraThinMaterial)
                     .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
             )
             
             Spacer()
         }
-        .padding(.bottom, 24)
+        .padding(.bottom, 20)
     }
     
     private var activeTransition: AnyTransition {
