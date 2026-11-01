@@ -12,7 +12,7 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
     private let chunkSize: Int
     private let taskTracker = ResourceLoadingTaskTracker()
     
-    init(worker: SMBClientActor, item: MediaItem, chunkSize: Int = 1024 * 1024) {
+    init(worker: SMBClientActor, item: MediaItem, chunkSize: Int = 256 * 1024) {
         self.worker = worker
         self.item = item
         self.chunkSize = chunkSize
@@ -71,9 +71,6 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                     
                     while currentOffset < targetEnd {
                         if Task.isCancelled || loadingRequest.isCancelled {
-                            if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-                                loadingRequest.finishLoading(with: URLError(.cancelled))
-                            }
                             return
                         }
                         
@@ -85,9 +82,6 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                         )
                         
                         if Task.isCancelled || loadingRequest.isCancelled {
-                            if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-                                loadingRequest.finishLoading(with: URLError(.cancelled))
-                            }
                             return
                         }
                         if chunk.isEmpty { break }
@@ -96,15 +90,11 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                         currentOffset += Int64(chunk.count)
                     }
                     
-                    if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-                        if Task.isCancelled {
-                            loadingRequest.finishLoading(with: URLError(.cancelled))
-                        } else {
-                            loadingRequest.finishLoading()
-                        }
+                    if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
+                        loadingRequest.finishLoading()
                     }
                 } catch {
-                    if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+                    if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
                         loadingRequest.finishLoading(with: error)
                     }
                 }

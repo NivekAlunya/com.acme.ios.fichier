@@ -564,7 +564,7 @@ public final class SMBDirectManager {
     
     // MARK: - Streaming Helpers
     
-    public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
+    nonisolated public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
         let safeName = itemName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
         guard let url = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else { return nil }
         return (url, uniqueID)

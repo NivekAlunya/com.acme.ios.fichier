@@ -787,10 +787,10 @@ public struct VideoDetailView: View {
         
         // 1. Reset stationary debounce timer on any movement.
         // When the user stops moving their finger (holding stationary without lifting),
-        // after 60ms this task triggers an exact zero-tolerance seek to display the exact frame.
+        // after 120ms this task triggers an exact zero-tolerance seek to display the exact frame.
         stationarySeekTask?.cancel()
         stationarySeekTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(60))
+            try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             performStationaryExactSeek(to: targetSeconds)
         }
@@ -885,16 +885,29 @@ public struct VideoDetailView: View {
         pendingSeekSeconds = nil
         isSeekingFrame = false
         seekGeneration += 1
+        let thisGeneration = seekGeneration
         
-        seekTo(targetSeconds)
-        if resumePlaying {
-            player?.play()
-            isPlaying = true
+        guard let player = player else { return }
+        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
+        currentPlaybackSeconds = targetSeconds
+        
+        withAnimation(.easeInOut(duration: 0.15)) {
+            self.isBuffering = true
         }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            self.isBuffering = false
+        
+        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    self.isBuffering = false
+                }
+                if resumePlaying && finished {
+                    player.play()
+                    self.isPlaying = true
+                }
+                self.scheduleControlsAutoHide()
+            }
         }
-        scheduleControlsAutoHide()
     }
     
     // MARK: - Auto-Hide Controls
@@ -930,7 +943,7 @@ public struct VideoDetailView: View {
     
     private func togglePlayPause() {
         guard let player = player else { return }
-        if player.timeControlStatus == .playing {
+        if player.timeControlStatus != .paused {
             player.pause()
             isPlaying = false
             hideControlsTask?.cancel()
@@ -939,22 +952,36 @@ public struct VideoDetailView: View {
             }
         } else {
             if totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 {
-                player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+                seekTo(0, resumePlaying: true)
                 currentPlaybackSeconds = 0
+            } else {
+                player.play()
+                isPlaying = true
+                scheduleControlsAutoHide()
             }
-            player.play()
-            isPlaying = true
-            scheduleControlsAutoHide()
         }
     }
     
-    private func seekTo(_ targetSeconds: Double) {
+    private func seekTo(_ targetSeconds: Double, resumePlaying: Bool = false) {
         guard let player = player else { return }
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
-        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero)
         currentPlaybackSeconds = targetSeconds
-        withAnimation(.easeInOut(duration: 0.2)) {
-            self.isBuffering = false
+        withAnimation(.easeInOut(duration: 0.15)) {
+            self.isBuffering = true
+        }
+        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    self.isBuffering = false
+                }
+                if resumePlaying && finished {
+                    player.play()
+                    self.isPlaying = true
+                }
+            }
         }
     }
     
@@ -1066,10 +1093,10 @@ public struct VideoDetailView: View {
     }
     
     private func restartVideo() {
-        guard let player = player else { return }
+        guard player != nil else { return }
         let targetItem = currentlyLoadedItem ?? currentItem
         resumeBannerTask?.cancel()
-        player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        seekTo(0, resumePlaying: isPlaying)
         currentPlaybackSeconds = 0
         VideoPlaybackStore.shared.clearPosition(for: targetItem)
         withAnimation {
@@ -1265,7 +1292,7 @@ public struct VideoDetailView: View {
                 self.isPlaying = isCurrentlyPlaying
                 
                 // If the video is rendering frames or time is advancing, dismiss buffering popup
-                if self.isBuffering && (secs > 0.05 || p.timeControlStatus == .playing || p.rate > 0 || current.status == .readyToPlay) {
+                if self.isBuffering && (p.timeControlStatus == .playing || p.rate > 0 || current.isPlaybackLikelyToKeepUp) {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.isBuffering = false
                     }

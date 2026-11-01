@@ -16,9 +16,6 @@ actor ResourceLoadingTaskTracker {
         operation: @Sendable @escaping () async -> Void
     ) {
         if isStopped || cancelledRequests.remove(request) != nil {
-            if !request.isCancelled && !request.isFinished {
-                request.finishLoading(with: URLError(.cancelled))
-            }
             return
         }
         guard !request.isCancelled else { return }
