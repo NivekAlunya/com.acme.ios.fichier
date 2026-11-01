@@ -1154,27 +1154,10 @@ public struct VideoDetailView: View {
                 return
             }
             
-            var validItem = item
-            if validItem.size <= 0 {
-                let realSize = await manager.fetchFileSize(for: item)
-                if realSize > 0 {
-                    validItem = MediaItem(
-                        locationID: item.locationID,
-                        name: item.name,
-                        rootName: item.rootName,
-                        path: item.path,
-                        isDirectory: item.isDirectory,
-                        size: realSize,
-                        modifiedDate: item.modifiedDate
-                    )
-                }
-            }
-            
+            let validItem = await manager.resolveValidItem(for: item)
             guard !Task.isCancelled else { return }
             
-            let uniqueID = UUID().uuidString
-            let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
-            guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
+            guard validItem.size > 0, let (streamURL, uniqueID) = SMBDirectManager.makeStreamURL(for: validItem.name) else {
                 self.errorMessage = String(localized: .Strings.videoPlayerErrorInvalidStreamUrl)
                 self.isBuffering = false
                 return

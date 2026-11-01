@@ -67,6 +67,23 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.folderIconName = folderIconName
     }
     
+    public func withSize(_ newSize: Int64) -> MediaItem {
+        MediaItem(
+            locationID: locationID,
+            name: name,
+            rootName: rootName,
+            path: path,
+            isDirectory: isDirectory,
+            size: newSize,
+            modifiedDate: modifiedDate,
+            children: children,
+            localURL: localURL,
+            phAssetIdentifier: phAssetIdentifier,
+            isMediaVideo: isMediaVideo,
+            folderIconName: folderIconName
+        )
+    }
+    
     public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
         lhs.id == rhs.id && lhs.size == rhs.size && lhs.modifiedDate == rhs.modifiedDate
     }
@@ -91,12 +108,12 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         if let isMediaVideo {
             return isMediaVideo
         }
-        let ext = (name as NSString).pathExtension.lowercased()
-        return ["mp4", "mov", "m4v"].contains(ext)
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isVideo(extension: ext)
     }
     
     public var isGIF: Bool {
-        let ext = (name as NSString).pathExtension.lowercased()
-        return ext == "gif"
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isGIF(extension: ext)
     }
 }

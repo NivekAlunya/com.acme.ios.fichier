@@ -38,20 +38,20 @@ actor SMBClientActor {
         thumbnailCache.setObject(image, forKey: key)
     }
     
-    private let imageExtensions: Set<String> = [
-        "jpg", "jpeg", "jpe", "jif", "jfif",
-        "png", "heic", "heif", "webp", "avif",
-        "gif", "tiff", "tif", "bmp", "ico",
-        "jp2", "j2k", "jpf", "jpx",
-        "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "pef", "raf"
-    ]
-    
-    private let videoExtensions: Set<String> = [
-        "mp4", "mov", "m4v"
-    ]
-    
-    private var supportedMediaExtensions: Set<String> {
-        imageExtensions.union(videoExtensions)
+    private func makeShareItems(from shares: [(name: String, comment: String)], connectionID: String) -> [MediaItem] {
+        shares
+            .map { share in
+                MediaItem(
+                    locationID: connectionID,
+                    name: share.name,
+                    rootName: share.name,
+                    path: "/",
+                    isDirectory: true,
+                    size: 0,
+                    children: nil
+                )
+            }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
     
     /// Connects to the server and enumerates all shared folders automatically
@@ -67,21 +67,7 @@ actor SMBClientActor {
         self.currentConnectionID = connectionID
         self.currentShareName = nil
         
-        let items = shares
-            .map { share in
-                MediaItem(
-                    locationID: connectionID,
-                    name: share.name,
-                    rootName: share.name,
-                    path: "/",
-                    isDirectory: true,
-                    size: 0,
-                    children: nil
-                )
-            }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        
-        return items
+        return makeShareItems(from: shares, connectionID: connectionID)
     }
     
     /// Re-fetches the list of shared folders on the currently connected server
@@ -91,21 +77,7 @@ actor SMBClientActor {
         }
         let shares = try await client.listShares(enumerateHidden: false)
         self.currentShareName = nil
-        let connID = self.currentConnectionID
-        
-        return shares
-            .map { share in
-                MediaItem(
-                    locationID: connID,
-                    name: share.name,
-                    rootName: share.name,
-                    path: "/",
-                    isDirectory: true,
-                    size: 0,
-                    children: nil
-                )
-            }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return makeShareItems(from: shares, connectionID: self.currentConnectionID)
     }
     
     private func ensureConnected(to shareName: String) async throws -> SMB2Manager {
@@ -165,7 +137,7 @@ actor SMBClientActor {
                 ))
             } else if resourceType == .regular {
                 let ext = (name as NSString).pathExtension.lowercased()
-                if supportedMediaExtensions.contains(ext) {
+                if SupportedMediaTypes.isSupported(extension: ext) {
                     let size = Self.extractFileSize(from: entry)
                     pictures.append(MediaItem(
                         locationID: connID,
@@ -202,18 +174,12 @@ actor SMBClientActor {
         }
         
         // 2. Persistent On-Disk Cache check (Tier 2 - Bypasses Wi-Fi / SMB completely!)
-        let diskKey = MediaCacheManager.shared.cacheKey(
+        let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: ""
-        ) : nil
         if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
             thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
             return diskCached

@@ -502,18 +502,12 @@ public final class SMBDirectManager {
         
         // Video thumbnail streaming & caching
         if item.isVideo {
-            let diskKey = MediaCacheManager.shared.cacheKey(
+            let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
                 path: "\(item.path)_vidstream_v7",
                 dimension: maxDimension,
                 connectionID: item.connectionID
             )
-            let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
-                for: item.shareName,
-                path: "\(item.path)_vidstream_v7",
-                dimension: maxDimension,
-                connectionID: ""
-            ) : nil
             if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
                 worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
                 return diskCached
@@ -521,13 +515,12 @@ public final class SMBDirectManager {
             
             guard !Task.isCancelled else { return nil }
             
-            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 5.0s)
+            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 10.0s with 0.0s fallback)
             if MediaCacheManager.shared.hasCachedVideo(for: item) {
                 let localURL = MediaCacheManager.shared.localVideoURL(for: item)
                 if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
                     from: localURL,
-                    maxDimension: maxDimension,
-                    preferredTime: CMTime(seconds: 5.0, preferredTimescale: 600)
+                    maxDimension: maxDimension
                 ) {
                     worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                     MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
@@ -552,18 +545,12 @@ public final class SMBDirectManager {
         }
         
         // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
-        let photoDiskKey = MediaCacheManager.shared.cacheKey(
+        let (photoDiskKey, photoFallbackKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        let photoFallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: ""
-        ) : nil
         if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey) {
             worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
             return diskCached
@@ -575,6 +562,20 @@ public final class SMBDirectManager {
         return await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
     }
     
+    // MARK: - Streaming Helpers
+    
+    public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
+        let safeName = itemName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
+        guard let url = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else { return nil }
+        return (url, uniqueID)
+    }
+    
+    public func resolveValidItem(for item: MediaItem) async -> MediaItem {
+        guard item.size <= 0 else { return item }
+        let realSize = await fetchFileSize(for: item)
+        return realSize > 0 ? item.withSize(realSize) : item
+    }
+
     /// Streams minimal byte slices on demand using the same progressive loader as the player to extract a keyframe
     private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
@@ -589,26 +590,8 @@ public final class SMBDirectManager {
                 return cached
             }
             
-            var validItem = item
-            if validItem.size <= 0 {
-                let realSize = await fetchFileSize(for: item)
-                if realSize > 0 {
-                    validItem = MediaItem(
-                        locationID: item.locationID,
-                        name: item.name,
-                        rootName: item.rootName,
-                        path: item.path,
-                        isDirectory: item.isDirectory,
-                        size: realSize,
-                        modifiedDate: item.modifiedDate
-                    )
-                }
-            }
-            guard validItem.size > 0 else { return nil }
-            
-            let uniqueID = UUID().uuidString
-            let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
-            guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
+            let validItem = await resolveValidItem(for: item)
+            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
@@ -626,13 +609,13 @@ public final class SMBDirectManager {
             return await withTaskCancellationHandler {
                 await withTaskGroup(of: UIImage?.self) { group in
                     group.addTask {
-                        // 1. Try 5.0s frame first (representative preview)
+                        // 1. Try 10.0s frame first (representative preview)
                         do {
-                            let (cgImage, _) = try await generator.image(at: CMTime(seconds: 5.0, preferredTimescale: 600))
+                            let (cgImage, _) = try await generator.image(at: CMTime(seconds: 10.0, preferredTimescale: 600))
                             return UIImage(cgImage: cgImage)
                         } catch {
                             guard !Task.isCancelled else { return nil }
-                            // 2. Fallback: try .zero or 0.5s if video is shorter than 5s
+                            // 2. Fallback: try .zero or 0.5s if video is shorter than 10s
                             generator.requestedTimeToleranceBefore = .positiveInfinity
                             generator.requestedTimeToleranceAfter = .positiveInfinity
                             if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {

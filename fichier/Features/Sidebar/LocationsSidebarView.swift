@@ -44,23 +44,7 @@ public struct LocationsSidebarView: View {
                         Text(.Strings.sidebarNoSavedLocationsDescription)
                     } actions: {
                         Menu {
-                            Button {
-                                showingFolderPicker = true
-                            } label: {
-                                Label(.Strings.sidebarMenuAddIcloudFolder, systemImage: "icloud")
-                            }
-                            
-                            Button {
-                                showingFolderPicker = true
-                            } label: {
-                                Label(.Strings.sidebarMenuAddLocalFolder, systemImage: "iphone")
-                            }
-                            
-                            Button {
-                                showingAddRemote = true
-                            } label: {
-                                Label(.Strings.sidebarMenuConnectSmb, systemImage: "macmini")
-                            }
+                            addLocationMenuContent
                         } label: {
                             Text(.Strings.sidebarMenuAddLocation)
                         }
@@ -119,25 +103,7 @@ public struct LocationsSidebarView: View {
                     Text(.Strings.sidebarSectionLocations)
                     Spacer()
                     Menu {
-                        Button {
-                            showingFolderPicker = true
-                        } label: {
-                            Label(.Strings.sidebarMenuAddIcloudFolder, systemImage: "icloud")
-                        }
-                        
-                        Button {
-                            showingFolderPicker = true
-                        } label: {
-                            Label(.Strings.sidebarMenuAddLocalFolder, systemImage: "iphone")
-                        }
-                        
-                        Divider()
-                        
-                        Button {
-                            showingAddRemote = true
-                        } label: {
-                            Label(.Strings.sidebarMenuConnectSmb, systemImage: "macmini")
-                        }
+                        addLocationMenuContent
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
@@ -191,7 +157,7 @@ public struct LocationsSidebarView: View {
             }
         }
         .alert(
-            "Folder Selection Failed",
+            Text(.Strings.galleryErrorUnableToLoadFolder),
             isPresented: $showingFolderErrorAlert,
             actions: {
                 Button(.Strings.commonCancel, role: .cancel) {}
@@ -200,6 +166,29 @@ public struct LocationsSidebarView: View {
                 Text(folderPickerErrorMessage ?? "")
             }
         )
+    }
+    
+    @ViewBuilder
+    private var addLocationMenuContent: some View {
+        Button {
+            showingFolderPicker = true
+        } label: {
+            Label(.Strings.sidebarMenuAddIcloudFolder, systemImage: "icloud")
+        }
+        
+        Button {
+            showingFolderPicker = true
+        } label: {
+            Label(.Strings.sidebarMenuAddLocalFolder, systemImage: "iphone")
+        }
+        
+        Divider()
+        
+        Button {
+            showingAddRemote = true
+        } label: {
+            Label(.Strings.sidebarMenuConnectSmb, systemImage: "macmini")
+        }
     }
     
     private func isCurrentLocation(_ location: StorageLocation) -> Bool {

@@ -12,14 +12,6 @@ public actor LocalStorageActor {
     private var activeSecurityScopedURL: URL?
     private var activeLocationID: String?
     
-    private let supportedImageExtensions: Set<String> = [
-        "jpg", "jpeg", "png", "heic", "heif", "gif", "webp", "tiff", "bmp"
-    ]
-    
-    private let supportedVideoExtensions: Set<String> = [
-        "mp4", "mov", "m4v"
-    ]
-    
     public init() {}
     
     deinit {
@@ -140,7 +132,7 @@ public actor LocalStorageActor {
                     localURL: url
                 )
                 subfolders.append(item)
-            } else if supportedImageExtensions.contains(ext) || supportedVideoExtensions.contains(ext) {
+            } else if SupportedMediaTypes.isSupported(extension: ext) {
                 let item = MediaItem(
                     locationID: locationID,
                     name: name,
@@ -173,16 +165,7 @@ public actor LocalStorageActor {
         guard let url = item.localURL else { return nil }
         
         if item.isVideo {
-            let asset = AVURLAsset(url: url)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
-            
-            let time = CMTime(seconds: 0.1, preferredTimescale: 600)
-            if let (cgImage, _) = try? await generator.image(at: time) {
-                return UIImage(cgImage: cgImage)
-            }
-            return nil
+            return await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: maxDimension)
         } else {
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailWithTransform: true,

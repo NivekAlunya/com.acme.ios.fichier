@@ -59,6 +59,12 @@ nonisolated public final class MediaCacheManager: Sendable {
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
+    public func thumbnailKeys(for shareName: String, path: String, dimension: CGFloat, connectionID: String = "") -> (primary: String, fallback: String?) {
+        let primary = cacheKey(for: shareName, path: path, dimension: dimension, connectionID: connectionID)
+        let fallback = !connectionID.isEmpty ? cacheKey(for: shareName, path: path, dimension: dimension, connectionID: "") : nil
+        return (primary, fallback)
+    }
+    
     // MARK: - Thumbnail Disk Cache
     
     public func getThumbnail(for key: String, fallbackKey: String? = nil) -> UIImage? {
@@ -136,7 +142,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     public func generateVideoThumbnail(
         from localURL: URL,
         maxDimension: CGFloat,
-        preferredTime: CMTime = CMTime(seconds: 5.0, preferredTimescale: 600)
+        preferredTime: CMTime = CMTime(seconds: 10.0, preferredTimescale: 600)
     ) async -> UIImage? {
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
@@ -145,12 +151,12 @@ nonisolated public final class MediaCacheManager: Sendable {
         generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
         generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
         
-        // 1. Try preferred time (defaults to 5.0s):
+        // 1. Try preferred time (defaults to 10.0s):
         if let (cgImage, _) = try? await generator.image(at: preferredTime) {
             return UIImage(cgImage: cgImage)
         }
         
-        // 2. Fallback to keyframe at zero (e.g. for short videos < 5s):
+        // 2. Fallback to keyframe at zero (e.g. for short videos < 10s):
         generator.requestedTimeToleranceBefore = .positiveInfinity
         generator.requestedTimeToleranceAfter = .positiveInfinity
         do {
