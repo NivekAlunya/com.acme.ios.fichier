@@ -35,7 +35,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to access security-scoped folder: \(location.name)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to access security-scoped folder: \(location.name)", comment: "Error message when security-scoped folder access fails")]
             )
         }
         
@@ -86,7 +86,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Missing localURL for folder: \(folder.name)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "Missing local URL for folder: \(folder.name)", comment: "Error message when local URL is missing for a folder")]
             )
         }
         

@@ -158,27 +158,15 @@ public struct PictureDetailView: View {
                 goToNext()
             }
         }
-        .onChange(of: currentItem) { _, newItem in
-            prefetchNext(after: newItem)
-            Task {
-                if !newItem.isVideo {
-                    self.currentImage = await manager.downloadImage(for: newItem)
-                } else {
-                    self.currentImage = nil
-                }
-                self.activeMetadata = await manager.fetchMetadata(for: newItem)
-            }
-        }
-        .onAppear {
+        // Photo loading, EXIF extraction, and prefetching with structured cancellation on photo switch
+        .task(id: currentItem.id) {
+            activeMetadata = nil
+            currentImage = nil
             prefetchNext(after: currentItem)
-            Task {
-                if !currentItem.isVideo {
-                    self.currentImage = await manager.downloadImage(for: currentItem)
-                } else {
-                    self.currentImage = nil
-                }
-                self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+            if !currentItem.isVideo {
+                currentImage = await manager.downloadImage(for: currentItem)
             }
+            activeMetadata = await manager.fetchMetadata(for: currentItem)
         }
     }
     

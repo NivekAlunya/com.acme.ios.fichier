@@ -155,14 +155,16 @@ public actor PhotoLibraryActor {
             let isVideo = asset.mediaType == .video
             let ext = isVideo ? "mov" : "jpg"
             let defaultName = "IMG_\(asset.localIdentifier.prefix(8)).\(ext)"
+            let originalName = (asset.value(forKey: "filename") as? String) ?? defaultName
+            let estimatedSize = Self.estimateFileSize(for: asset)
             
             let item = MediaItem(
                 locationID: StorageLocation.photosLocationID,
-                name: defaultName,
+                name: originalName,
                 rootName: rootName,
                 path: asset.localIdentifier,
                 isDirectory: false,
-                size: 0,
+                size: estimatedSize,
                 modifiedDate: asset.modificationDate ?? asset.creationDate,
                 children: nil,
                 localURL: nil,
@@ -267,11 +269,11 @@ public actor PhotoLibraryActor {
     
     public func fetchVideoURL(for item: MediaItem) async throws -> URL {
         guard let assetID = item.phAssetIdentifier else {
-            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid asset identifier"])
+            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Invalid asset identifier", comment: "Error message when a photo asset identifier is invalid")])
         }
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
         guard let asset = fetch.firstObject else {
-            throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: "Video asset not found"])
+            throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: String(localized: "Video asset not found", comment: "Error message when a video asset cannot be found in Photo Library")])
         }
         
         let options = PHVideoRequestOptions()
@@ -290,7 +292,7 @@ public actor PhotoLibraryActor {
                     continuation.resume(throwing: error)
                 } else {
                     hasResumed = true
-                    continuation.resume(throwing: NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: "Unable to load video asset"]))
+                    continuation.resume(throwing: NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")]))
                 }
             }
         }
@@ -302,7 +304,7 @@ public actor PhotoLibraryActor {
         // Composition / Slow-mo export fallback into managed temporary export directory
         let tempURL = exportDirectory.appendingPathComponent("ph_export_\(UUID().uuidString).mov")
         guard let exporter = AVAssetExportSession(asset: loadedAsset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+            throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to create export session", comment: "Error message when AVAssetExportSession cannot be initialized")])
         }
         try await exporter.export(to: tempURL, as: .mov)
         return tempURL
@@ -323,7 +325,23 @@ public actor PhotoLibraryActor {
     // MARK: - File Size
     
     public func fetchFileSize(for item: MediaItem) -> Int64 {
-        0
+        guard let assetID = item.phAssetIdentifier else { return 0 }
+        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
+        guard let asset = fetch.firstObject else { return 0 }
+        let resources = PHAssetResource.assetResources(for: asset)
+        if let primary = resources.first, let size = primary.value(forKey: "fileSize") as? Int64, size > 0 {
+            return size
+        }
+        return Self.estimateFileSize(for: asset)
+    }
+    
+    private static func estimateFileSize(for asset: PHAsset) -> Int64 {
+        if asset.mediaType == .video {
+            return Int64(max(200_000, asset.duration * 1_800_000))
+        } else {
+            let pixels = Double(asset.pixelWidth * asset.pixelHeight)
+            return Int64(max(50_000, pixels * 0.35))
+        }
     }
     
     // MARK: - Metadata & EXIF (Single Asset IPC Query)
@@ -351,7 +369,8 @@ public actor PhotoLibraryActor {
         let ext = (fileName as NSString).pathExtension.uppercased()
         let fileFormat = ext.isEmpty ? (asset.mediaType == .video ? "MOV" : "HEIC") : ext
         
-        let formattedSize = item.size > 0 ? ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file) : "—"
+        let sizeInBytes = item.size > 0 ? item.size : ((primaryResource?.value(forKey: "fileSize") as? Int64) ?? Self.estimateFileSize(for: asset))
+        let formattedSize = sizeInBytes > 0 ? ByteCountFormatter.string(fromByteCount: sizeInBytes, countStyle: .file) : "—"
         
         return PictureEXIFData(
             fileName: fileName,

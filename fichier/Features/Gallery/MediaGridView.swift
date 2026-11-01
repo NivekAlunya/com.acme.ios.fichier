@@ -9,8 +9,8 @@ import OSLog
 struct MediaGridView: View {
     var manager: SMBDirectManager
     var onSelectFolder: ((MediaItem) -> Void)? = nil
-    var onStartSlideshow: (() -> Void)? = nil
-    let onSelectPicture: (MediaItem) -> Void
+    var onStartSlideshow: (([MediaItem]) -> Void)? = nil
+    let onSelectPicture: (MediaItem, [MediaItem]) -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("gallery_view_mode") private var viewMode: ViewMode = .grid
@@ -211,7 +211,7 @@ struct MediaGridView: View {
                         if !displayPictures.isEmpty {
                             Menu {
                                 Button {
-                                    onStartSlideshow?()
+                                    onStartSlideshow?(displayPictures)
                                 } label: {
                                     Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
                                 }
@@ -237,7 +237,7 @@ struct MediaGridView: View {
                             } label: {
                                 Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
                             } primaryAction: {
-                                onStartSlideshow?()
+                                onStartSlideshow?(displayPictures)
                             }
                         }
                         
@@ -428,7 +428,7 @@ struct MediaGridView: View {
                                         if isSelectionMode {
                                             toggleSelection(for: pic)
                                         } else {
-                                            onSelectPicture(pic)
+                                            onSelectPicture(pic, pictures)
                                         }
                                     }
                                     .onLongPressGesture {
@@ -567,7 +567,7 @@ struct MediaGridView: View {
                                 if isSelectionMode {
                                     toggleSelection(for: pic)
                                 } else {
-                                    onSelectPicture(pic)
+                                    onSelectPicture(pic, pictures)
                                 }
                             } label: {
                                 MediaListRowCell(

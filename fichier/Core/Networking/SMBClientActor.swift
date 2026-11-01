@@ -212,11 +212,18 @@ actor SMBClientActor {
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
             
-            guard let image = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
-                return nil
+            // Offload CPU-bound image downsampling and disk caching off the actor lock
+            let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let decoded = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
+                    return nil
+                }
+                MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
+                return decoded
+            }.value
+            
+            if let image {
+                thumbnailCache.setObject(image, forKey: memoryCacheKey)
             }
-            thumbnailCache.setObject(image, forKey: memoryCacheKey)
-            MediaCacheManager.shared.saveThumbnail(image, for: diskKey)
             return image
         } catch {
             if !Task.isCancelled {

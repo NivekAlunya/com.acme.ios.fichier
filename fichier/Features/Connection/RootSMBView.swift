@@ -9,6 +9,7 @@ public struct RootSMBView: View {
     @State private var smbManager = SMBDirectManager()
     @State private var activePictureForViewer: MediaItem?
     @State private var activeVideoForViewer: MediaItem?
+    @State private var activeContextMedia: [MediaItem] = []
     @State private var shouldAutoStartSlideshow = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var preferredCompactColumn: NavigationSplitViewColumn = .sidebar
@@ -58,14 +59,16 @@ public struct RootSMBView: View {
                                 preferredCompactColumn = .detail
                             }
                         },
-                        onStartSlideshow: {
-                            let photosOnly = smbManager.pictures.filter { !$0.isVideo }
+                        onStartSlideshow: { currentDisplayPictures in
+                            let photosOnly = currentDisplayPictures.filter { !$0.isVideo }
                             if let first = photosOnly.first {
+                                activeContextMedia = currentDisplayPictures
                                 activePictureForViewer = first
                                 shouldAutoStartSlideshow = true
                             }
                         },
-                        onSelectPicture: { item in
+                        onSelectPicture: { item, currentDisplayPictures in
+                            activeContextMedia = currentDisplayPictures
                             if item.isVideo {
                                 activeVideoForViewer = item
                             } else {
@@ -89,17 +92,19 @@ public struct RootSMBView: View {
             }
         }
         .fullScreenCover(item: $activePictureForViewer) { pic in
+            let context = activeContextMedia.isEmpty ? smbManager.pictures : activeContextMedia
             PictureDetailView(
                 manager: smbManager,
-                pictures: smbManager.pictures.filter { !$0.isVideo },
+                pictures: context.filter { !$0.isVideo },
                 initialItem: pic,
                 autoStartSlideshow: shouldAutoStartSlideshow
             )
         }
         .fullScreenCover(item: $activeVideoForViewer) { vid in
+            let context = activeContextMedia.isEmpty ? smbManager.pictures : activeContextMedia
             VideoDetailView(
                 manager: smbManager,
-                videos: smbManager.pictures.filter { $0.isVideo },
+                videos: context.filter { $0.isVideo },
                 initialItem: vid
             )
         }
