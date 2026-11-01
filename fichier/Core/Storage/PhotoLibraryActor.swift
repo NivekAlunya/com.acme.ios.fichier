@@ -365,7 +365,7 @@ public actor PhotoLibraryActor {
         }
         
         let primaryResource = PHAssetResource.assetResources(for: asset).first
-        let fileName = primaryResource?.filename ?? item.name
+        let fileName = primaryResource?.originalFilename ?? (asset.value(forKey: "filename") as? String) ?? item.name
         let ext = (fileName as NSString).pathExtension.uppercased()
         let fileFormat = ext.isEmpty ? (asset.mediaType == .video ? "MOV" : "HEIC") : ext
         

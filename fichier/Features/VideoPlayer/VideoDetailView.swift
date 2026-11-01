@@ -58,6 +58,7 @@ public struct VideoDetailView: View {
     @State private var seekGeneration: Int = 0
     @State private var stationarySeekTask: Task<Void, Never>?
     @State private var throttleSeekTask: Task<Void, Never>?
+    @State private var seekWatchdogTask: Task<Void, Never>?
     
     public init(
         manager: SMBDirectManager,
@@ -703,7 +704,7 @@ public struct VideoDetailView: View {
                 if isScrubbing {
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player?.timeControlStatus == .playing)
+                    wasPlayingBeforeScrub = (player?.timeControlStatus != .paused)
                     if wasPlayingBeforeScrub {
                         player?.pause()
                         isPlaying = false
@@ -732,7 +733,7 @@ public struct VideoDetailView: View {
                     isScrubbingWithGesture = true
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player.timeControlStatus == .playing)
+                    wasPlayingBeforeScrub = (player.timeControlStatus != .paused)
                     if wasPlayingBeforeScrub {
                         player.pause()
                         isPlaying = false
@@ -830,6 +831,8 @@ public struct VideoDetailView: View {
         guard let player = player else { return }
         throttleSeekTask?.cancel()
         throttleSeekTask = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
         
         seekGeneration += 1
         let thisGeneration = seekGeneration
@@ -856,6 +859,8 @@ public struct VideoDetailView: View {
         // Finger has stopped moving! Cancel any throttled intermediate seeks.
         throttleSeekTask?.cancel()
         throttleSeekTask = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
         pendingSeekSeconds = nil
         
         seekGeneration += 1
@@ -884,6 +889,9 @@ public struct VideoDetailView: View {
         throttleSeekTask = nil
         pendingSeekSeconds = nil
         isSeekingFrame = false
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        
         seekGeneration += 1
         let thisGeneration = seekGeneration
         
@@ -891,17 +899,36 @@ public struct VideoDetailView: View {
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         currentPlaybackSeconds = targetSeconds
         
-        withAnimation(.easeInOut(duration: 0.15)) {
-            self.isBuffering = true
-        }
+        // Use 0.2s tolerance for seamless playback continuation, or .zero for stationary frame inspection
+        let tolerance: CMTime = resumePlaying ? CMTime(seconds: 0.2, preferredTimescale: 600) : .zero
         
-        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
-            Task { @MainActor in
-                guard thisGeneration == self.seekGeneration else { return }
+        // Fail-safe watchdog: ensure buffering indicator and playback state recover within 800ms
+        seekWatchdogTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(800))
+            guard !Task.isCancelled, thisGeneration == self.seekGeneration else { return }
+            if self.isBuffering {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     self.isBuffering = false
                 }
-                if resumePlaying && finished {
+            }
+            if resumePlaying && player.timeControlStatus != .playing {
+                player.play()
+                self.isPlaying = true
+                self.scheduleControlsAutoHide()
+            }
+        }
+        
+        player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                self.seekWatchdogTask?.cancel()
+                self.seekWatchdogTask = nil
+                
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    self.isBuffering = false
+                }
+                
+                if resumePlaying {
                     player.play()
                     self.isPlaying = true
                 }
@@ -963,26 +990,7 @@ public struct VideoDetailView: View {
     }
     
     private func seekTo(_ targetSeconds: Double, resumePlaying: Bool = false) {
-        guard let player = player else { return }
-        seekGeneration += 1
-        let thisGeneration = seekGeneration
-        let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
-        currentPlaybackSeconds = targetSeconds
-        withAnimation(.easeInOut(duration: 0.15)) {
-            self.isBuffering = true
-        }
-        player.seek(to: targetCM, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
-            Task { @MainActor in
-                guard thisGeneration == self.seekGeneration else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.isBuffering = false
-                }
-                if resumePlaying && finished {
-                    player.play()
-                    self.isPlaying = true
-                }
-            }
-        }
+        finishSeeking(at: targetSeconds, resumePlaying: resumePlaying)
     }
     
     private func goToNext() {
@@ -1065,6 +1073,8 @@ public struct VideoDetailView: View {
         stationarySeekTask = nil
         throttleSeekTask?.cancel()
         throttleSeekTask = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
         loadTask?.cancel()
         loadTask = nil
         monitorTask?.cancel()
@@ -1157,6 +1167,7 @@ public struct VideoDetailView: View {
             configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
             avPlayer.play()
             self.scheduleControlsAutoHide()
+            startContinuousPlaybackMonitoring(for: avPlayer)
             return
         }
         
@@ -1173,6 +1184,7 @@ public struct VideoDetailView: View {
                     configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
                     avPlayer.play()
                     self.scheduleControlsAutoHide()
+                    startContinuousPlaybackMonitoring(for: avPlayer)
                 } catch {
                     guard !Task.isCancelled else { return }
                     self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(error.localizedDescription))
@@ -1204,38 +1216,81 @@ public struct VideoDetailView: View {
             self.player = avPlayer
             configurePlayer(avPlayer, for: validItem, loadTracksImmediately: false)
             avPlayer.play()
+            startContinuousPlaybackMonitoring(for: avPlayer)
+        }
+    }
+    
+    private func startContinuousPlaybackMonitoring(for avPlayer: AVPlayer) {
+        monitorTask?.cancel()
+        monitorTask = Task { @MainActor [weak avPlayer] in
+            var tracksLoaded = false
+            var waitingStartTime: Date? = nil
             
-            // Monitor playback readiness
-            self.monitorTask?.cancel()
-            self.monitorTask = Task { @MainActor [weak avPlayer] in
-                while !Task.isCancelled {
-                    guard let p = avPlayer else { break }
-                    let currentItem = p.currentItem
-                    let isReady = p.timeControlStatus == .playing
-                        || (currentItem?.status == .readyToPlay && (p.rate > 0 || currentItem?.isPlaybackLikelyToKeepUp == true))
-                        || self.currentPlaybackSeconds > 0.05
-                    
-                    if isReady {
+            while !Task.isCancelled {
+                guard let p = avPlayer else { break }
+                let currentItem = p.currentItem
+                
+                // 1. Terminal error check
+                let playbackError = p.error ?? currentItem?.error
+                if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
+                    let desc = playbackError?.localizedDescription ?? "Playback error"
+                    self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(desc))
+                    if self.isBuffering {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             self.isBuffering = false
                         }
-                        self.isPlaying = (p.timeControlStatus != .paused)
-                        if let item = currentItem {
-                            await self.trackManager.loadTracks(for: item)
+                    }
+                    break
+                }
+                
+                // 2. Load audio/subtitle tracks once playerItem is ready
+                if !tracksLoaded, let item = currentItem, item.status == .readyToPlay {
+                    tracksLoaded = true
+                    Task { @MainActor in
+                        await self.trackManager.loadTracks(for: item)
+                    }
+                }
+                
+                // 3. Continuous timeControlStatus monitoring
+                switch p.timeControlStatus {
+                case .playing:
+                    waitingStartTime = nil
+                    if self.isBuffering {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.isBuffering = false
                         }
+                    }
+                    if !self.isPlaying {
+                        self.isPlaying = true
                         self.scheduleControlsAutoHide()
-                        break
                     }
                     
-                    let playbackError = p.error ?? currentItem?.error
-                    if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
-                        let desc = playbackError?.localizedDescription ?? "Playback error"
-                        self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(desc))
-                        self.isBuffering = false
-                        break
+                case .paused:
+                    waitingStartTime = nil
+                    if self.isBuffering {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.isBuffering = false
+                        }
                     }
-                    try? await Task.sleep(for: .milliseconds(150))
+                    if self.isPlaying && !self.isScrubbingTimeline && !self.isScrubbingWithGesture {
+                        self.isPlaying = false
+                    }
+                    
+                case .waitingToPlayAtSpecifiedRate:
+                    if waitingStartTime == nil {
+                        waitingStartTime = Date()
+                    } else if let start = waitingStartTime, Date().timeIntervalSince(start) > 0.35 {
+                        if !self.isBuffering && !self.isScrubbingTimeline && !self.isScrubbingWithGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                self.isBuffering = true
+                            }
+                        }
+                    }
+                @unknown default:
+                    break
                 }
+                
+                try? await Task.sleep(for: .milliseconds(120))
             }
         }
     }
