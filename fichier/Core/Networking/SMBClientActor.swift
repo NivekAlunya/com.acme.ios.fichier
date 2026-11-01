@@ -24,6 +24,7 @@ actor SMBClientActor {
         cache.totalCostLimit = 250 * 1024 * 1024
         return cache
     }()
+    private let metadataCache = NSCache<NSString, PictureEXIFBox>()
     
     func setActiveFolder(id: String?) {
         self.activeFolderID = id
@@ -125,6 +126,7 @@ actor SMBClientActor {
         currentShareName = nil
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
+        metadataCache.removeAllObjects()
     }
     
     /// Scans a directory inside a specific share and returns both its subfolders and its image files
@@ -188,7 +190,7 @@ actor SMBClientActor {
     /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
     /// If expectedFolderID doesn't match the current activeFolderID, it bails immediately.
     func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = 260) async -> UIImage? {
-        if Task.isCancelled { return nil }
+        if Task.isCancelled || item.isVideo { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
         }
@@ -202,13 +204,13 @@ actor SMBClientActor {
         // 2. Persistent On-Disk Cache check (Tier 2 - Bypasses Wi-Fi / SMB completely!)
         let diskKey = MediaCacheManager.shared.cacheKey(
             for: item.shareName,
-            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
+            path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
         let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
             for: item.shareName,
-            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
+            path: item.path,
             dimension: maxDimension,
             connectionID: ""
         ) : nil
@@ -229,9 +231,6 @@ actor SMBClientActor {
                 return nil
             }
             
-            // Videos are processed via streamVideoThumbnail in SMBDirectManager
-            if item.isVideo { return nil }
-            
             // Photo Thumbnail Handling
             let data = try await client.contents(atPath: item.path) { _, _ in
                 !Task.isCancelled
@@ -239,6 +238,12 @@ actor SMBClientActor {
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil
+            }
+            
+            // Extract and cache metadata immediately while image bytes are in memory!
+            if metadataCache.object(forKey: item.id as NSString) == nil {
+                let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+                metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
             
             guard let image = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
@@ -313,6 +318,7 @@ actor SMBClientActor {
     func clearMemoryCache() {
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
+        metadataCache.removeAllObjects()
     }
     
     /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads)
@@ -366,6 +372,12 @@ actor SMBClientActor {
             }
             if Task.isCancelled { return nil }
             
+            // Ensure metadata is cached from downloaded full image bytes
+            if metadataCache.object(forKey: item.id as NSString) == nil {
+                let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+                metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
+            }
+            
             guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
             let pixelCost = Int(image.size.width * image.scale * image.size.height * image.scale * 4)
             fullImageCache.setObject(image, forKey: cacheKey, cost: max(data.count, pixelCost))
@@ -399,12 +411,38 @@ actor SMBClientActor {
                 fileFormat: (item.name as NSString).pathExtension.uppercased()
             )
         }
+        
+        // 1. Check in-memory metadata cache (populated during thumbnail or full image fetch)
+        let cacheKey = item.id as NSString
+        if let cached = metadataCache.object(forKey: cacheKey)?.value {
+            return cached
+        }
+        
         do {
             let client = try await ensureConnected(to: item.shareName)
             if Task.isCancelled { return nil }
-            let data = try await client.contents(atPath: item.path)
+            
+            // 2. Fast single-packet fetch: Read first 64 KB range to extract EXIF header
+            let rangeData = try? await client.contents(atPath: item.path, range: 0..<65536) { _, _ in
+                !Task.isCancelled
+            }
+            if let rangeData, !rangeData.isEmpty {
+                let meta = ImageMetadataExtractor.extract(from: rangeData, fileName: item.name, fileSize: item.formattedSize)
+                if meta.dimensions != nil || meta.cameraModel != nil || meta.dateTaken != nil {
+                    metadataCache.setObject(PictureEXIFBox(meta), forKey: cacheKey)
+                    return meta
+                }
+            }
+            
+            // 3. Fallback to full contents only if EXIF header was located deeper in the file
             if Task.isCancelled { return nil }
-            return ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
+            if Task.isCancelled { return nil }
+            let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+            metadataCache.setObject(PictureEXIFBox(meta), forKey: cacheKey)
+            return meta
         } catch {
             return nil
         }

@@ -267,8 +267,6 @@ public actor PhotoLibraryActor {
             throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: "Video asset not found"])
         }
         
-        purgeOldVideoExports()
-        
         let options = PHVideoRequestOptions()
         options.deliveryMode = .highQualityFormat
         options.isNetworkAccessAllowed = true

@@ -36,33 +36,31 @@ struct MediaGridView: View {
     
     // MARK: - Filtered and Sorted Data
     
-    private var filteredFolders: [MediaItem] {
-        let list = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
+    private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
+        let listFolders = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
-        return sortItems(list)
-    }
-    
-    private var filteredPictures: [MediaItem] {
-        var list = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
+        let sortedFolders = sortItems(listFolders)
+        
+        var listPictures = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
         if showFavoritesOnly {
-            list = list.filter { FavoritesManager.shared.isFavorite($0) }
+            listPictures = listPictures.filter { FavoritesManager.shared.isFavorite($0) }
         }
         switch mediaFilter {
         case .all:
             break
         case .photos:
-            list = list.filter { !$0.isVideo }
+            listPictures = listPictures.filter { !$0.isVideo }
         case .videos:
-            list = list.filter { $0.isVideo }
+            listPictures = listPictures.filter { $0.isVideo }
         }
-        return sortItems(list)
+        let sortedPictures = sortItems(listPictures)
+        return (sortedFolders, sortedPictures)
     }
     
-    private var mediaSectionHeader: LocalizedStringResource {
-        let count = filteredPictures.count
+    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
         switch mediaFilter {
         case .all: return .Strings.gallerySectionMediaCount(count)
         case .photos: return .Strings.gallerySectionPhotosCount(count)
@@ -92,6 +90,8 @@ struct MediaGridView: View {
     }
     
     var body: some View {
+        let (displayFolders, displayPictures) = filterAndSortData()
+        
         ZStack(alignment: .bottom) {
             Group {
                 if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
@@ -109,7 +109,7 @@ struct MediaGridView: View {
                             .buttonStyle(.borderedProminent)
                         }
                     }
-                } else if !searchText.isEmpty && filteredPictures.isEmpty && filteredFolders.isEmpty {
+                } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
                     ContentUnavailableView(
@@ -120,9 +120,9 @@ struct MediaGridView: View {
                 } else {
                     switch viewMode {
                     case .grid:
-                        gridContent
+                        gridContent(folders: displayFolders, pictures: displayPictures)
                     case .list:
-                        listContent
+                        listContent(folders: displayFolders, pictures: displayPictures)
                     }
                 }
             }
@@ -176,8 +176,8 @@ struct MediaGridView: View {
         .toolbar {
             if isSelectionMode {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
-                        toggleAllSelection()
+                    Button(selectedItems.count == displayPictures.count && !displayPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
+                        toggleAllSelection(for: displayPictures)
                     }
                 }
                 
@@ -198,7 +198,7 @@ struct MediaGridView: View {
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
-                        if !filteredPictures.isEmpty {
+                        if !displayPictures.isEmpty {
                             Button(.Strings.galleryButtonSelect) {
                                 withAnimation {
                                     isSelectionMode = true
@@ -207,7 +207,7 @@ struct MediaGridView: View {
                         }
                         
                         // Slideshow trigger & duration menu
-                        if !filteredPictures.isEmpty {
+                        if !displayPictures.isEmpty {
                             Menu {
                                 Button {
                                     onStartSlideshow?()
@@ -341,7 +341,8 @@ struct MediaGridView: View {
     
     // MARK: - Grid Mode
     
-    private var gridContent: some View {
+    @ViewBuilder
+    private func gridContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 Color.clear
@@ -349,15 +350,15 @@ struct MediaGridView: View {
                     .id("topOfGrid")
                 
                 VStack(alignment: .leading, spacing: 16) {
-                    if !filteredFolders.isEmpty {
+                    if !folders.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(.Strings.gallerySectionSubfoldersCount(filteredFolders.count))
+                            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal, 12)
                             
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
-                                ForEach(filteredFolders) { subfolder in
+                                ForEach(folders) { subfolder in
                                     Button {
                                         onSelectFolder?(subfolder)
                                     } label: {
@@ -391,10 +392,10 @@ struct MediaGridView: View {
                         }
                     }
                     
-                    if !filteredPictures.isEmpty {
+                    if !pictures.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(mediaSectionHeader)
+                                Text(mediaSectionHeader(for: pictures.count))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundColor(.secondary)
                                 
@@ -407,7 +408,7 @@ struct MediaGridView: View {
                             .padding(.horizontal, 12)
                             
                             LazyVGrid(columns: gridColumns, spacing: 10) {
-                                ForEach(filteredPictures) { pic in
+                                ForEach(pictures) { pic in
                                     MediaThumbnailCell(
                                         manager: manager,
                                         item: pic,
@@ -436,7 +437,7 @@ struct MediaGridView: View {
                             .padding(.horizontal, 12)
                             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
                         }
-                    } else if !filteredFolders.isEmpty {
+                    } else if !folders.isEmpty {
                         ContentUnavailableView(
                             String(localized: .Strings.galleryNoPicturesTitle),
                             systemImage: "photo",
@@ -517,12 +518,13 @@ struct MediaGridView: View {
     
     // MARK: - List Mode
     
-    private var listContent: some View {
+    @ViewBuilder
+    private func listContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
         ScrollViewReader { proxy in
             List {
-                if !filteredFolders.isEmpty {
-                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(filteredFolders.count))) {
-                        ForEach(filteredFolders) { subfolder in
+                if !folders.isEmpty {
+                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(folders.count))) {
+                        ForEach(folders) { subfolder in
                             Button {
                                 onSelectFolder?(subfolder)
                             } label: {
@@ -550,9 +552,9 @@ struct MediaGridView: View {
                     .id("topOfList")
                 }
                 
-                if !filteredPictures.isEmpty {
-                    Section(String(localized: mediaSectionHeader)) {
-                        ForEach(filteredPictures) { pic in
+                if !pictures.isEmpty {
+                    Section(String(localized: mediaSectionHeader(for: pictures.count))) {
+                        ForEach(pictures) { pic in
                             Button {
                                 if isSelectionMode {
                                     toggleSelection(for: pic)
@@ -581,7 +583,7 @@ struct MediaGridView: View {
                             )
                         }
                     }
-                    .id(filteredFolders.isEmpty ? "topOfList" : "picturesSection")
+                    .id(folders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
             .id(currentDirectoryID)
@@ -614,11 +616,11 @@ struct MediaGridView: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
     
-    private func toggleAllSelection() {
-        if selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty {
+    private func toggleAllSelection(for pictures: [MediaItem]) {
+        if selectedItems.count == pictures.count && !pictures.isEmpty {
             selectedItems.removeAll()
         } else {
-            selectedItems = Set(filteredPictures)
+            selectedItems = Set(pictures)
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }

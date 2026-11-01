@@ -18,10 +18,12 @@ public final class SMBHostDiscovery {
     public var errorMessage: String?
     
     private var browser: NWBrowser?
+    private var pendingConnections: [NWConnection] = []
     
     public init() {}
     
     public func startDiscovery() {
+        stopDiscovery()
         discoveredHosts = []
         isScanning = true
         errorMessage = nil
@@ -67,6 +69,10 @@ public final class SMBHostDiscovery {
     public func stopDiscovery() {
         browser?.cancel()
         browser = nil
+        for conn in pendingConnections {
+            conn.cancel()
+        }
+        pendingConnections.removeAll()
         isScanning = false
     }
     
@@ -95,43 +101,47 @@ public final class SMBHostDiscovery {
         }
         
         let connection = NWConnection(to: host.endpoint, using: tcpParams)
+        pendingConnections.append(connection)
+        
         connection.stateUpdateHandler = { [weak self, weak connection] state in
-            guard let self else { return }
-            switch state {
-            case .ready:
-                if let innerEndpoint = connection?.currentPath?.remoteEndpoint,
-                   case let .hostPort(resolvedHost, _) = innerEndpoint {
-                    
-                    var ipv4String: String?
-                    switch resolvedHost {
-                    case .ipv4(let ip):
-                        // Strip any interface suffix like %en0
-                        let raw = "\(ip)"
-                        ipv4String = raw.components(separatedBy: "%").first ?? raw
-                    case .name(let name, _):
-                        ipv4String = name
-                    case .ipv6:
-                        // Ignore IPv6
-                        break
-                    @unknown default:
-                        break
-                    }
-                    
-                    if let validHost = ipv4String {
-                        AppLog.discovery.debug("Resolved \(host.name, privacy: .private) -> IPv4: \(validHost, privacy: .private)")
-                        Task { @MainActor in
+            guard let self, let connection else { return }
+            MainActor.assumeIsolated {
+                switch state {
+                case .ready:
+                    if let innerEndpoint = connection.currentPath?.remoteEndpoint,
+                       case let .hostPort(resolvedHost, _) = innerEndpoint {
+                        
+                        var ipv4String: String?
+                        switch resolvedHost {
+                        case .ipv4(let ip):
+                            // Strip any interface suffix like %en0
+                            let raw = "\(ip)"
+                            ipv4String = raw.components(separatedBy: "%").first ?? raw
+                        case .name(let name, _):
+                            ipv4String = name
+                        case .ipv6:
+                            // Ignore IPv6
+                            break
+                        @unknown default:
+                            break
+                        }
+                        
+                        if let validHost = ipv4String {
+                            AppLog.discovery.debug("Resolved \(host.name, privacy: .private) -> IPv4: \(validHost, privacy: .private)")
                             self.updateResolvedHost(for: host.name, resolvedHost: validHost)
                         }
                     }
+                    self.pendingConnections.removeAll { $0 === connection }
+                    connection.cancel()
+                case .failed, .cancelled:
+                    self.pendingConnections.removeAll { $0 === connection }
+                    connection.cancel()
+                default:
+                    break
                 }
-                connection?.cancel()
-            case .failed, .cancelled:
-                connection?.cancel()
-            default:
-                break
             }
         }
-        connection.start(queue: .global())
+        connection.start(queue: .main)
     }
     
     private func updateResolvedHost(for name: String, resolvedHost: String) {
