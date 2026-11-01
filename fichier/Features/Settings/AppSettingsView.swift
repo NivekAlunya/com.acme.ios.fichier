@@ -18,7 +18,7 @@ struct AppSettingsView: View {
     @AppStorage("gallery_grid_size") private var gridSize: GridSize = .medium
     
     // Cache State
-    @State private var cacheSizeString: String = MediaCacheManager.shared.formattedCacheSize()
+    @State private var cacheSizeString: String = "…"
     @State private var isShowingClearConfirmation = false
     @State private var isClearingCache = false
     
@@ -151,13 +151,11 @@ struct AppSettingsView: View {
     private func clearCache() {
         isClearingCache = true
         Task {
-            MediaCacheManager.shared.clearAllCache()
+            await MediaCacheManager.shared.clearAllCacheAsync()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             let newSize = await MediaCacheManager.shared.formattedCacheSize()
-            await MainActor.run {
-                cacheSizeString = newSize
-                isClearingCache = false
-            }
+            cacheSizeString = newSize
+            isClearingCache = false
         }
     }
 }

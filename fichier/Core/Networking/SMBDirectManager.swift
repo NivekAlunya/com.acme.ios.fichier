@@ -53,11 +53,14 @@ public final class SMBDirectManager {
     public init() {
         loadSavedConnections()
         loadSavedFolderLocations()
+        Task {
+            await refreshMediaCacheSize()
+        }
     }
     
     // MARK: - Saved Connections Persistence
     
-    public func loadSavedConnections() {
+    private func loadSavedConnections() {
         guard let data = UserDefaults.standard.data(forKey: savedConnectionsKey),
               let decoded = try? JSONDecoder().decode([SavedSMBConnection].self, from: data) else {
             savedConnections = []
@@ -117,7 +120,7 @@ public final class SMBDirectManager {
         return list
     }
     
-    public func loadSavedFolderLocations() {
+    private func loadSavedFolderLocations() {
         guard let data = UserDefaults.standard.data(forKey: savedFolderLocationsKey),
               let decoded = try? JSONDecoder().decode([SavedFolderLocation].self, from: data) else {
             savedFolderLocations = []
@@ -708,14 +711,17 @@ public final class SMBDirectManager {
         return try await worker.fetchVideoURL(for: item, progress: progress)
     }
     
-    public var mediaCacheSize: String {
-        MediaCacheManager.shared.formattedCacheSize()
+    public var mediaCacheSize: String = "…"
+    
+    public func refreshMediaCacheSize() async {
+        mediaCacheSize = await MediaCacheManager.shared.formattedCacheSize()
     }
     
     public func clearMediaCache() {
-        MediaCacheManager.shared.clearAllCache()
         Task {
+            await MediaCacheManager.shared.clearAllCacheAsync()
             await worker.clearMemoryCache()
+            await refreshMediaCacheSize()
         }
     }
     

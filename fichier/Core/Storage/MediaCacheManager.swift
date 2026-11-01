@@ -244,11 +244,11 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Computes total cache size on a background thread to prevent UI hitches
     public func calculateTotalCacheSize() async -> Int64 {
         await Task.detached(priority: .utility) { [self] in
-            self.calculateTotalCacheSizeSync()
+            self.calculateTotalCacheSizeInternal()
         }.value
     }
     
-    public func calculateTotalCacheSizeSync() -> Int64 {
+    private func calculateTotalCacheSizeInternal() -> Int64 {
         var total: Int64 = 0
         for dir in [thumbnailsDirectory, videosDirectory] {
             if let enumerator = fileManager.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) {
@@ -264,11 +264,6 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     public func formattedCacheSize() async -> String {
         let bytes = await calculateTotalCacheSize()
-        return formatByteCount(bytes)
-    }
-    
-    public func formattedCacheSize() -> String {
-        let bytes = calculateTotalCacheSizeSync()
         return formatByteCount(bytes)
     }
     
@@ -300,5 +295,11 @@ nonisolated public final class MediaCacheManager: Sendable {
         ]
         try? fileManager.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true, attributes: attributes)
         try? fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true, attributes: attributes)
+    }
+    
+    public func clearAllCacheAsync(protecting: Set<URL> = []) async {
+        await Task.detached(priority: .utility) { [self] in
+            self.clearAllCache(protecting: protecting)
+        }.value
     }
 }

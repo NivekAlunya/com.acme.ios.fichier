@@ -27,6 +27,7 @@ struct MediaGridView: View {
     @State private var isBatchProcessing = false
     @State private var batchProgressMessage: String?
     @State private var batchStatusToast: String?
+    @State private var batchTask: Task<Void, Never>?
     @State private var shareSheetItems: [Any]?
     @State private var showingSettings = false
     
@@ -336,6 +337,13 @@ struct MediaGridView: View {
                     }
                 }
             }
+        }
+        .task {
+            await manager.refreshMediaCacheSize()
+        }
+        .onDisappear {
+            batchTask?.cancel()
+            batchTask = nil
         }
     }
     
@@ -647,10 +655,12 @@ struct MediaGridView: View {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
         isBatchProcessing = true
+        batchTask?.cancel()
         
-        Task {
+        batchTask = Task {
             var savedCount = 0
             for (idx, item) in items.enumerated() {
+                guard !Task.isCancelled else { break }
                 batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(idx + 1, items.count))
                 do {
                     if item.isVideo {
@@ -667,6 +677,12 @@ struct MediaGridView: View {
                 }
             }
             
+            guard !Task.isCancelled else {
+                isBatchProcessing = false
+                batchProgressMessage = nil
+                return
+            }
+            
             isBatchProcessing = false
             batchProgressMessage = nil
             withAnimation {
@@ -676,6 +692,7 @@ struct MediaGridView: View {
             }
             
             try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
             withAnimation {
                 batchStatusToast = nil
             }
@@ -687,10 +704,12 @@ struct MediaGridView: View {
         guard !items.isEmpty else { return }
         isBatchProcessing = true
         batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
+        batchTask?.cancel()
         
-        Task {
+        batchTask = Task {
             var shareables: [Any] = []
             for item in items {
+                guard !Task.isCancelled else { break }
                 if item.isVideo {
                     if let localURL = try? await manager.fetchVideoURL(for: item) {
                         shareables.append(localURL)
@@ -701,6 +720,13 @@ struct MediaGridView: View {
                     }
                 }
             }
+            
+            guard !Task.isCancelled else {
+                isBatchProcessing = false
+                batchProgressMessage = nil
+                return
+            }
+            
             isBatchProcessing = false
             batchProgressMessage = nil
             

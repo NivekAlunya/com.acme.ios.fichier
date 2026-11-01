@@ -6,16 +6,7 @@
 import Foundation
 
 nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
-    public var id: String {
-        if let phAssetIdentifier {
-            return "ph::\(phAssetIdentifier)"
-        }
-        if locationID.isEmpty {
-            return "\(rootName)::\(path)"
-        } else {
-            return "\(locationID)|\(rootName)::\(path)"
-        }
-    }
+    public let id: String
     public let locationID: String
     public let name: String
     public let rootName: String
@@ -55,6 +46,13 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         isMediaVideo: Bool? = nil,
         folderIconName: String? = nil
     ) {
+        if let phAssetIdentifier {
+            self.id = "ph::\(phAssetIdentifier)"
+        } else if locationID.isEmpty {
+            self.id = "\(rootName)::\(path)"
+        } else {
+            self.id = "\(locationID)|\(rootName)::\(path)"
+        }
         self.locationID = locationID
         self.name = name
         self.rootName = rootName
@@ -67,6 +65,14 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.phAssetIdentifier = phAssetIdentifier
         self.isMediaVideo = isMediaVideo
         self.folderIconName = folderIconName
+    }
+    
+    public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
+        lhs.id == rhs.id && lhs.size == rhs.size && lhs.modifiedDate == rhs.modifiedDate
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
     
     public var formattedSize: String {

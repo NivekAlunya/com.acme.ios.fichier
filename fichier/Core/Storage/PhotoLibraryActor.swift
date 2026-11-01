@@ -80,6 +80,13 @@ public actor PhotoLibraryActor {
         }
     }
     
+    private func countOfAssets(in collection: PHAssetCollection) -> Int {
+        if collection.estimatedAssetCount != NSNotFound {
+            return collection.estimatedAssetCount
+        }
+        return PHAsset.fetchAssets(in: collection, options: nil).count
+    }
+    
     private func loadAlbums() -> [MediaItem] {
         var albums: [MediaItem] = []
         
@@ -92,16 +99,16 @@ public actor PhotoLibraryActor {
         
         for (subtype, titleKey, icon) in smartSubtypes {
             let fetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
-            fetchResult.enumerateObjects { collection, _, _ in
-                let assets = PHAsset.fetchAssets(in: collection, options: nil)
-                if assets.count > 0 || subtype == .smartAlbumUserLibrary {
+            fetchResult.enumerateObjects { [self] collection, _, _ in
+                let count = countOfAssets(in: collection)
+                if count > 0 || subtype == .smartAlbumUserLibrary {
                     let albumItem = MediaItem(
                         locationID: StorageLocation.photosLocationID,
                         name: collection.localizedTitle ?? String(localized: titleKey),
                         rootName: "Photos",
                         path: collection.localIdentifier,
                         isDirectory: true,
-                        size: Int64(assets.count),
+                        size: Int64(count),
                         modifiedDate: collection.startDate ?? collection.endDate,
                         children: nil,
                         localURL: nil,
@@ -113,15 +120,15 @@ public actor PhotoLibraryActor {
         }
         
         let userAlbumsFetch = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-        userAlbumsFetch.enumerateObjects { collection, _, _ in
-            let assets = PHAsset.fetchAssets(in: collection, options: nil)
+        userAlbumsFetch.enumerateObjects { [self] collection, _, _ in
+            let count = countOfAssets(in: collection)
             let albumItem = MediaItem(
                 locationID: StorageLocation.photosLocationID,
                 name: collection.localizedTitle ?? "Album",
                 rootName: "Photos",
                 path: collection.localIdentifier,
                 isDirectory: true,
-                size: Int64(assets.count),
+                size: Int64(count),
                 modifiedDate: collection.startDate ?? collection.endDate,
                 children: nil,
                 localURL: nil,
