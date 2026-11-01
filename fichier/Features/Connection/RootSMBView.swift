@@ -112,7 +112,7 @@ public struct RootSMBView: View {
     }
     
     private func selectLocation(_ location: StorageLocation) {
-        if smbManager.isConnected && smbManager.currentConnectionID == location.id {
+        if smbManager.isConnected && smbManager.currentLocation?.id == location.id {
             preferredCompactColumn = .content
             return
         }

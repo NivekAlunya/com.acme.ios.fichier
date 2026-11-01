@@ -94,6 +94,11 @@ public final class SMBDirectManager {
     public func removeSavedConnection(_ connection: SavedSMBConnection) {
         SMBKeychain.deletePassword(for: connection.id)
         savedConnections.removeAll { $0.id == connection.id }
+        if currentLocation?.smbConnection?.id == connection.id {
+            Task {
+                await disconnect()
+            }
+        }
         if let encoded = try? JSONEncoder().encode(savedConnections) {
             UserDefaults.standard.set(encoded, forKey: savedConnectionsKey)
         }
@@ -179,6 +184,7 @@ public final class SMBDirectManager {
         switch location.kind {
         case .smb:
             guard let conn = location.smbConnection else { return }
+            await disconnect()
             currentLocation = location
             let pass = password(for: conn)
             await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
@@ -275,13 +281,12 @@ public final class SMBDirectManager {
                 self.currentLocation = StorageLocation(smb: saved)
             }
             
+            self.selectedFolder = nil
+            self.activeFolderID = nil
+            self.currentFolders = []
+            self.pictures = []
             self.folderTree = discoveredShares
             self.isConnected = true
-            
-            // Automatically select and load the first shared folder
-            if let firstShare = discoveredShares.first {
-                await selectAndLoadFolder(firstShare)
-            }
         } catch {
             self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
             self.isConnected = false
@@ -342,8 +347,6 @@ public final class SMBDirectManager {
             
             if let current = selectedFolder {
                 await selectAndLoadFolder(current)
-            } else if let first = refreshedShares.first {
-                await selectAndLoadFolder(first)
             }
         } catch {
             self.errorMessage = String(localized: .Strings.networkingErrorRefreshSharesFailed(error.localizedDescription))

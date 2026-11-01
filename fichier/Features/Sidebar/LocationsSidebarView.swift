@@ -203,7 +203,7 @@ public struct LocationsSidebarView: View {
     }
     
     private func isCurrentLocation(_ location: StorageLocation) -> Bool {
-        manager.isConnected && manager.currentConnectionID == location.id
+        manager.isConnected && manager.currentLocation?.id == location.id
     }
     
     private func isConnecting(_ location: StorageLocation) -> Bool {

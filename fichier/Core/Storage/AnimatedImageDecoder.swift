@@ -14,9 +14,6 @@ nonisolated public enum AnimatedImageDecoder: Sendable {
         
         let count = CGImageSourceGetCount(source)
         guard count > 1 else {
-            if let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-                return UIImage(cgImage: cgImage)
-            }
             return UIImage(data: data)
         }
         

@@ -20,7 +20,8 @@ actor SMBClientActor {
     nonisolated(unsafe) private let thumbnailCache = NSCache<NSString, UIImage>()
     private let fullImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 12
+        cache.countLimit = 5
+        cache.totalCostLimit = 250 * 1024 * 1024
         return cache
     }()
     
@@ -60,6 +61,7 @@ actor SMBClientActor {
         
         // Fetch all non-hidden shares from the Mac mini via IPC$
         let shares = try await manager.listShares(enumerateHidden: false)
+        try? await self.client?.disconnectShare()
         self.client = manager
         self.currentConnectionID = connectionID
         self.currentShareName = nil
@@ -359,11 +361,14 @@ actor SMBClientActor {
             let client = try await ensureConnected(to: item.shareName)
             if Task.isCancelled { return nil }
             
-            let data = try await client.contents(atPath: item.path)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
             if Task.isCancelled { return nil }
             
             guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
-            fullImageCache.setObject(image, forKey: cacheKey)
+            let pixelCost = Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+            fullImageCache.setObject(image, forKey: cacheKey, cost: max(data.count, pixelCost))
             return image
         } catch {
             if !Task.isCancelled {

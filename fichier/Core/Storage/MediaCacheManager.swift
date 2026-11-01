@@ -29,6 +29,10 @@ nonisolated public final class MediaCacheManager: Sendable {
         ]
         try? fm.createDirectory(at: thumbs, withIntermediateDirectories: true, attributes: attributes)
         try? fm.createDirectory(at: vids, withIntermediateDirectories: true, attributes: attributes)
+        
+        Task.detached(priority: .background) { [self] in
+            self.evictThumbnailsIfNeeded()
+        }
     }
     
     // MARK: - Key Hashing
@@ -193,6 +197,41 @@ nonisolated public final class MediaCacheManager: Sendable {
         for file in videoFiles {
             if totalSize <= limitBytes { break }
             if protectedURLs.contains(file.url) { continue }
+            do {
+                try fileManager.removeItem(at: file.url)
+                totalSize -= file.size
+            } catch {
+                // Ignore failure to remove individual item
+            }
+        }
+    }
+    
+    /// Evicts oldest cached thumbnails if total thumbnail cache size exceeds limitBytes (defaults to 300 MB).
+    public func evictThumbnailsIfNeeded(limitBytes: Int64 = 300_000_000) {
+        guard let enumerator = fileManager.enumerator(
+            at: thumbnailsDirectory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        
+        var thumbFiles: [(url: URL, size: Int64, date: Date)] = []
+        var totalSize: Int64 = 0
+        
+        for case let fileURL as URL in enumerator {
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize else { continue }
+            let fileSize = Int64(size)
+            let date = values.contentModificationDate ?? Date.distantPast
+            totalSize += fileSize
+            thumbFiles.append((url: fileURL, size: fileSize, date: date))
+        }
+        
+        guard totalSize > limitBytes else { return }
+        
+        thumbFiles.sort { $0.date < $1.date }
+        
+        for file in thumbFiles {
+            if totalSize <= limitBytes { break }
             do {
                 try fileManager.removeItem(at: file.url)
                 totalSize -= file.size
