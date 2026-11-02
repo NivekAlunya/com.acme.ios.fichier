@@ -53,8 +53,37 @@ public final class SMBDirectManager {
     public init() {
         loadSavedConnections()
         loadSavedFolderLocations()
+        setupLifecycleObservers()
         Task {
             await refreshMediaCacheSize()
+        }
+    }
+    
+    // MARK: - Lifecycle & Memory Pressure Observers
+    
+    /// Registers system observers for memory warnings and background transitions.
+    private func setupLifecycleObservers() {
+        // Clear in-memory image caches on low memory warnings to prevent OOM terminations
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.worker.clearMemoryCache()
+            }
+        }
+        
+        // Execute disk cache hygiene sweep when app transitions to background
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task.detached(priority: .utility) {
+                MediaCacheManager.shared.performMaintenanceSweep()
+            }
         }
     }
     

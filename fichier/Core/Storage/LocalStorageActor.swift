@@ -20,22 +20,34 @@ public actor LocalStorageActor {
     
     // MARK: - Security-Scoped Bookmark Resolution & Activation
     
+    /// Resolves and activates a security-scoped bookmark for a local or iCloud Drive folder.
+    /// Distinguishes between stale bookmarks, unmounted external drives, and revoked OS permissions,
+    /// returning the activated root MediaItem along with any refreshed bookmark data.
     public func activateLocation(_ location: SavedFolderLocation) throws -> (rootItem: MediaItem, updatedBookmark: Data?) {
         deactivateCurrentLocation()
         
         var isStale = false
-        let resolvedURL = try URL(
-            resolvingBookmarkData: location.bookmarkData,
-            options: .withoutUI,
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        )
+        let resolvedURL: URL
+        do {
+            resolvedURL = try URL(
+                resolvingBookmarkData: location.bookmarkData,
+                options: .withoutUI,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+        } catch {
+            throw NSError(
+                domain: "LocalStorageActor",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to locate folder '\(location.name)'. If it is on an external drive, ensure the drive is connected.", comment: "Error message when resolving security-scoped bookmark fails")]
+            )
+        }
         
         guard resolvedURL.startAccessingSecurityScopedResource() else {
             throw NSError(
                 domain: "LocalStorageActor",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to access security-scoped folder: \(location.name)", comment: "Error message when security-scoped folder access fails")]
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "Access permission expired for folder '\(location.name)'. Please re-select the folder in Settings or Sidebar.", comment: "Error message when security-scoped resource access is rejected")]
             )
         }
         
@@ -44,11 +56,16 @@ public actor LocalStorageActor {
         
         var updatedBookmark: Data? = nil
         if isStale {
-            updatedBookmark = try? resolvedURL.bookmarkData(
+            // Attempt minimal bookmark refresh first, falling back to standard bookmark options
+            updatedBookmark = (try? resolvedURL.bookmarkData(
                 options: .minimalBookmark,
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
-            )
+            )) ?? (try? resolvedURL.bookmarkData(
+                options: [],
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            ))
         }
         
         let resourceValues = try? resolvedURL.resourceValues(forKeys: [.contentModificationDateKey])
@@ -78,6 +95,8 @@ public actor LocalStorageActor {
     
     // MARK: - Folder Contents Enumeration
     
+    /// Enumerates subfolders and supported media files within a security-scoped local or iCloud folder.
+    /// Provides clear diagnostic errors if an external volume was disconnected during navigation.
     public func listContents(
         at folder: MediaItem,
         locationID: String
@@ -85,7 +104,7 @@ public actor LocalStorageActor {
         guard let folderURL = folder.localURL else {
             throw NSError(
                 domain: "LocalStorageActor",
-                code: 2,
+                code: 3,
                 userInfo: [NSLocalizedDescriptionKey: String(localized: "Missing local URL for folder: \(folder.name)", comment: "Error message when local URL is missing for a folder")]
             )
         }
@@ -99,11 +118,20 @@ public actor LocalStorageActor {
         ]
         
         let fileManager = FileManager.default
-        let contents = try fileManager.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
-        )
+        let contents: [URL]
+        do {
+            contents = try fileManager.contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            throw NSError(
+                domain: "LocalStorageActor",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "Cannot read contents of '\(folder.name)'. Please verify the folder or external volume is connected.", comment: "Error message when reading contents of a local folder fails")]
+            )
+        }
         
         var subfolders: [MediaItem] = []
         var media: [MediaItem] = []

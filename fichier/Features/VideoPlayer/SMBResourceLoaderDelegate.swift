@@ -75,6 +75,9 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                         }
                         
                         let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
+                        // Fetch the requested chunk via SMBClientActor.
+                        // The worker automatically recovers from transient socket drops and renegotiates
+                        // the SMB share connection transparently before failing this loading request.
                         let chunk = try await worker.fetchMediaRange(
                             for: item,
                             offset: currentOffset,

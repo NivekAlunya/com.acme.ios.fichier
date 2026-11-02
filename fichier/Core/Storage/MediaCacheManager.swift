@@ -31,7 +31,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         try? fm.createDirectory(at: vids, withIntermediateDirectories: true, attributes: attributes)
         
         Task.detached(priority: .background) { [self] in
-            self.evictThumbnailsIfNeeded()
+            self.performMaintenanceSweep()
         }
     }
     
@@ -168,6 +168,65 @@ nonisolated public final class MediaCacheManager: Sendable {
     }
     
     // MARK: - Cache Size, Eviction & Cleanup
+    
+    /// Returns the approximate available free volume space in bytes.
+    public func systemAvailableFreeSpace() -> Int64 {
+        let cachesURL = thumbnailsDirectory
+        if let values = try? cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+           let capacity = values.volumeAvailableCapacityForImportantUsage {
+            return capacity
+        }
+        if let values = try? cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
+           let capacity = values.volumeAvailableCapacity {
+            return Int64(capacity)
+        }
+        return Int64.max
+    }
+    
+    /// Cleans up any leftover temporary partial download files (.part) that are older than the specified age (default 1 hour).
+    public func cleanOrphanedPartFiles(olderThan seconds: TimeInterval = 3600) {
+        guard let enumerator = fileManager.enumerator(
+            at: videosDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        
+        let now = Date()
+        for case let fileURL as URL in enumerator {
+            if fileURL.pathExtension == "part" {
+                if let modDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                   now.timeIntervalSince(modDate) > seconds {
+                    try? fileManager.removeItem(at: fileURL)
+                }
+            }
+        }
+    }
+    
+    /// Performs a comprehensive disk cache hygiene pass:
+    /// 1. Prunes orphaned partial `.part` downloads left over from interrupted saves or app termination.
+    /// 2. Dynamically assesses host volume free space; under low disk space (< 1.5 GB), cuts cache limits
+    ///    to 400 MB (videos) and 100 MB (thumbnails) so the app never triggers system low-space warnings.
+    /// 3. Evicts oldest thumbnails and video files (FIFO) while respecting `protectedURLs`.
+    public func performMaintenanceSweep(protecting: Set<URL> = []) {
+        cleanOrphanedPartFiles()
+        
+        let freeSpace = systemAvailableFreeSpace()
+        let isLowDiskSpace = freeSpace < 1_500_000_000
+        
+        // Dynamically adjust disk budget according to host volume capacity
+        let videoLimit: Int64 = isLowDiskSpace ? 400_000_000 : 2_000_000_000
+        let thumbLimit: Int64 = isLowDiskSpace ? 100_000_000 : 300_000_000
+        
+        evictVideosIfNeeded(limitBytes: videoLimit, keeping: protecting)
+        evictThumbnailsIfNeeded(limitBytes: thumbLimit)
+    }
+    
+    /// Async wrapper for `performMaintenanceSweep` dispatched on background utility QoS.
+    public func performMaintenanceSweepAsync(protecting: Set<URL> = []) async {
+        await Task.detached(priority: .utility) { [self] in
+            self.performMaintenanceSweep(protecting: protecting)
+        }.value
+    }
     
     /// Evicts oldest cached videos if total video cache size exceeds limitBytes (defaults to 2 GB),
     /// skipping any files specified in `protectedURLs` (such as the currently playing video).

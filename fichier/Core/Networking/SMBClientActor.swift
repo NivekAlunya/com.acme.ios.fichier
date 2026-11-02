@@ -80,11 +80,17 @@ actor SMBClientActor {
         return makeShareItems(from: shares, connectionID: self.currentConnectionID)
     }
     
-    private func ensureConnected(to shareName: String) async throws -> SMB2Manager {
+    /// Ensures connection to a specific share, optionally forcing a disconnect & reconnect
+    /// if a previous socket error occurred.
+    private func ensureConnected(to shareName: String, forceReconnect: Bool = false) async throws -> SMB2Manager {
         guard let client else {
             throw URLError(.notConnectedToInternet)
         }
-        if currentShareName != shareName {
+        if forceReconnect || currentShareName != shareName {
+            if forceReconnect {
+                try? await client.disconnectShare()
+                currentShareName = nil
+            }
             try await client.connectShare(name: shareName)
             currentShareName = shareName
         }
@@ -101,62 +107,79 @@ actor SMBClientActor {
         metadataCache.removeAllObjects()
     }
     
-    /// Scans a directory inside a specific share and returns both its subfolders and its image files
+    /// Scans a directory inside a specific share and returns both its subfolders and its media files.
+    /// Includes automatic retry with socket reconnection to survive momentary network drops.
     func scanFolder(shareName: String, at path: String) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
-        try Task.checkCancellation()
-        let client = try await ensureConnected(to: shareName)
-        try Task.checkCancellation()
+        let maxAttempts = 2
+        var lastError: Error?
         
-        let normalizedPath = path == "/" ? "" : path
-        let entries = try await client.contentsOfDirectory(atPath: normalizedPath)
-        try Task.checkCancellation()
-        
-        var folders: [MediaItem] = []
-        var pictures: [MediaItem] = []
-        let connID = self.currentConnectionID
-        
-        for entry in entries {
-            if Task.isCancelled { throw CancellationError() }
-            guard let name = entry[.nameKey] as? String,
-                  !name.hasPrefix(".") else { continue }
-            
-            let resourceType = entry[.fileResourceTypeKey] as? URLFileResourceType
-            let entryPath = (entry[.pathKey] as? String) ?? (normalizedPath.isEmpty ? name : (normalizedPath as NSString).appendingPathComponent(name))
-            let modDate = entry[.contentModificationDateKey] as? Date
-            
-            if resourceType == .directory {
-                folders.append(MediaItem(
-                    locationID: connID,
-                    name: name,
-                    rootName: shareName,
-                    path: entryPath,
-                    isDirectory: true,
-                    size: 0,
-                    modifiedDate: modDate,
-                    children: nil
-                ))
-            } else if resourceType == .regular {
-                let ext = (name as NSString).pathExtension.lowercased()
-                if SupportedMediaTypes.isSupported(extension: ext) {
-                    let size = Self.extractFileSize(from: entry)
-                    pictures.append(MediaItem(
-                        locationID: connID,
-                        name: name,
-                        rootName: shareName,
-                        path: entryPath,
-                        isDirectory: false,
-                        size: size,
-                        modifiedDate: modDate
-                    ))
+        for attempt in 1...maxAttempts {
+            try Task.checkCancellation()
+            do {
+                let client = try await ensureConnected(to: shareName, forceReconnect: attempt > 1)
+                try Task.checkCancellation()
+                
+                let normalizedPath = path == "/" ? "" : path
+                let entries = try await client.contentsOfDirectory(atPath: normalizedPath)
+                try Task.checkCancellation()
+                
+                var folders: [MediaItem] = []
+                var pictures: [MediaItem] = []
+                let connID = self.currentConnectionID
+                
+                for entry in entries {
+                    if Task.isCancelled { throw CancellationError() }
+                    guard let name = entry[.nameKey] as? String,
+                          !name.hasPrefix(".") else { continue }
+                    
+                    let resourceType = entry[.fileResourceTypeKey] as? URLFileResourceType
+                    let entryPath = (entry[.pathKey] as? String) ?? (normalizedPath.isEmpty ? name : (normalizedPath as NSString).appendingPathComponent(name))
+                    let modDate = entry[.contentModificationDateKey] as? Date
+                    
+                    if resourceType == .directory {
+                        folders.append(MediaItem(
+                            locationID: connID,
+                            name: name,
+                            rootName: shareName,
+                            path: entryPath,
+                            isDirectory: true,
+                            size: 0,
+                            modifiedDate: modDate,
+                            children: nil
+                        ))
+                    } else if resourceType == .regular {
+                        let ext = (name as NSString).pathExtension.lowercased()
+                        if SupportedMediaTypes.isSupported(extension: ext) {
+                            let size = Self.extractFileSize(from: entry)
+                            pictures.append(MediaItem(
+                                locationID: connID,
+                                name: name,
+                                rootName: shareName,
+                                path: entryPath,
+                                isDirectory: false,
+                                size: size,
+                                modifiedDate: modDate
+                            ))
+                        }
+                    }
+                }
+                
+                try Task.checkCancellation()
+                folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                pictures.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                
+                return (folders, pictures)
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                lastError = error
+                if attempt < maxAttempts {
+                    // Brief pause to allow the network interface or server socket to stabilize
+                    try? await Task.sleep(nanoseconds: 300_000_000)
                 }
             }
         }
         
-        try Task.checkCancellation()
-        folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        pictures.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        
-        return (folders, pictures)
+        throw lastError ?? URLError(.cannotConnectToHost)
     }
     
     /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
@@ -288,22 +311,45 @@ actor SMBClientActor {
         return localURL
     }
     
+    /// Flushes all in-memory caches to immediately release RAM during system memory pressure warnings
     func clearMemoryCache() {
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
         metadataCache.removeAllObjects()
     }
     
-    /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads)
+    /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads).
+    /// Features automatic retry (up to 3 attempts with exponential backoff) and forces socket reconnection
+    /// if a transient socket drop, broken pipe, or timeout occurs during playback.
     func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
-        try Task.checkCancellation()
-        let client = try await ensureConnected(to: item.shareName)
-        try Task.checkCancellation()
-        let end = offset + Int64(length)
-        let range: Range<Int64> = offset..<end
-        return try await client.contents(atPath: item.path, range: range) { _, _ in
-            !Task.isCancelled
+        let maxAttempts = 3
+        var lastError: Error?
+        
+        for attempt in 1...maxAttempts {
+            try Task.checkCancellation()
+            do {
+                // If retrying, force reconnecting the share to renew dead or timed-out sockets
+                let client = try await ensureConnected(to: item.shareName, forceReconnect: attempt > 1)
+                try Task.checkCancellation()
+                
+                let end = offset + Int64(length)
+                let range: Range<Int64> = offset..<end
+                return try await client.contents(atPath: item.path, range: range) { _, _ in
+                    !Task.isCancelled
+                }
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                lastError = error
+                
+                // Exponential backoff before retry: 250ms on first failure, 500ms on second
+                if attempt < maxAttempts {
+                    let backoffMs = UInt64(attempt * 250)
+                    try? await Task.sleep(nanoseconds: backoffMs * 1_000_000)
+                }
+            }
         }
+        
+        throw lastError ?? URLError(.cannotConnectToHost)
     }
     
     /// Queries the remote file size directly if item.size was 0
