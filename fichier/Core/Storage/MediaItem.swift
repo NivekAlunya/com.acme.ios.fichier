@@ -6,16 +6,7 @@
 import Foundation
 
 nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
-    public var id: String {
-        if let phAssetIdentifier {
-            return "ph::\(phAssetIdentifier)"
-        }
-        if locationID.isEmpty {
-            return "\(rootName)::\(path)"
-        } else {
-            return "\(locationID)|\(rootName)::\(path)"
-        }
-    }
+    public let id: String
     public let locationID: String
     public let name: String
     public let rootName: String
@@ -55,6 +46,13 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         isMediaVideo: Bool? = nil,
         folderIconName: String? = nil
     ) {
+        if let phAssetIdentifier {
+            self.id = "ph::\(phAssetIdentifier)"
+        } else if locationID.isEmpty {
+            self.id = "\(rootName)::\(path)"
+        } else {
+            self.id = "\(locationID)|\(rootName)::\(path)"
+        }
         self.locationID = locationID
         self.name = name
         self.rootName = rootName
@@ -67,6 +65,31 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.phAssetIdentifier = phAssetIdentifier
         self.isMediaVideo = isMediaVideo
         self.folderIconName = folderIconName
+    }
+    
+    public func withSize(_ newSize: Int64) -> MediaItem {
+        MediaItem(
+            locationID: locationID,
+            name: name,
+            rootName: rootName,
+            path: path,
+            isDirectory: isDirectory,
+            size: newSize,
+            modifiedDate: modifiedDate,
+            children: children,
+            localURL: localURL,
+            phAssetIdentifier: phAssetIdentifier,
+            isMediaVideo: isMediaVideo,
+            folderIconName: folderIconName
+        )
+    }
+    
+    public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
+        lhs.id == rhs.id && lhs.size == rhs.size && lhs.modifiedDate == rhs.modifiedDate
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
     
     public var formattedSize: String {
@@ -85,12 +108,12 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         if let isMediaVideo {
             return isMediaVideo
         }
-        let ext = (name as NSString).pathExtension.lowercased()
-        return ["mp4", "mov", "m4v"].contains(ext)
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isVideo(extension: ext)
     }
     
     public var isGIF: Bool {
-        let ext = (name as NSString).pathExtension.lowercased()
-        return ext == "gif"
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isGIF(extension: ext)
     }
 }

@@ -8,7 +8,7 @@ import Photos
 import AVFoundation
 
 public actor PhotoLibraryActor {
-    private let imageManager = PHCachingImageManager()
+    private lazy var imageManager = PHCachingImageManager()
     
     private var exportDirectory: URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fichier_video_exports", isDirectory: true)
@@ -80,6 +80,13 @@ public actor PhotoLibraryActor {
         }
     }
     
+    private func countOfAssets(in collection: PHAssetCollection) -> Int {
+        if collection.estimatedAssetCount != NSNotFound {
+            return collection.estimatedAssetCount
+        }
+        return PHAsset.fetchAssets(in: collection, options: nil).count
+    }
+    
     private func loadAlbums() -> [MediaItem] {
         var albums: [MediaItem] = []
         
@@ -92,16 +99,16 @@ public actor PhotoLibraryActor {
         
         for (subtype, titleKey, icon) in smartSubtypes {
             let fetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
-            fetchResult.enumerateObjects { collection, _, _ in
-                let assets = PHAsset.fetchAssets(in: collection, options: nil)
-                if assets.count > 0 || subtype == .smartAlbumUserLibrary {
+            fetchResult.enumerateObjects { [self] collection, _, _ in
+                let count = countOfAssets(in: collection)
+                if count > 0 || subtype == .smartAlbumUserLibrary {
                     let albumItem = MediaItem(
                         locationID: StorageLocation.photosLocationID,
                         name: collection.localizedTitle ?? String(localized: titleKey),
                         rootName: "Photos",
                         path: collection.localIdentifier,
                         isDirectory: true,
-                        size: Int64(assets.count),
+                        size: Int64(count),
                         modifiedDate: collection.startDate ?? collection.endDate,
                         children: nil,
                         localURL: nil,
@@ -113,15 +120,15 @@ public actor PhotoLibraryActor {
         }
         
         let userAlbumsFetch = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-        userAlbumsFetch.enumerateObjects { collection, _, _ in
-            let assets = PHAsset.fetchAssets(in: collection, options: nil)
+        userAlbumsFetch.enumerateObjects { [self] collection, _, _ in
+            let count = countOfAssets(in: collection)
             let albumItem = MediaItem(
                 locationID: StorageLocation.photosLocationID,
                 name: collection.localizedTitle ?? "Album",
                 rootName: "Photos",
                 path: collection.localIdentifier,
                 isDirectory: true,
-                size: Int64(assets.count),
+                size: Int64(count),
                 modifiedDate: collection.startDate ?? collection.endDate,
                 children: nil,
                 localURL: nil,
@@ -148,14 +155,16 @@ public actor PhotoLibraryActor {
             let isVideo = asset.mediaType == .video
             let ext = isVideo ? "mov" : "jpg"
             let defaultName = "IMG_\(asset.localIdentifier.prefix(8)).\(ext)"
+            let originalName = (asset.value(forKey: "filename") as? String) ?? defaultName
+            let estimatedSize = Self.estimateFileSize(for: asset)
             
             let item = MediaItem(
                 locationID: StorageLocation.photosLocationID,
-                name: defaultName,
+                name: originalName,
                 rootName: rootName,
                 path: asset.localIdentifier,
                 isDirectory: false,
-                size: 0,
+                size: estimatedSize,
                 modifiedDate: asset.modificationDate ?? asset.creationDate,
                 children: nil,
                 localURL: nil,
@@ -183,7 +192,7 @@ public actor PhotoLibraryActor {
         options.isSynchronous = false
         
         var streamIterator = AsyncStream<UIImage?> { continuation in
-            imageManager.requestImage(
+            let requestID = imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
                 contentMode: .aspectFill,
@@ -196,6 +205,13 @@ public actor PhotoLibraryActor {
                 if !isDegraded || isCancelled || error != nil {
                     continuation.yield(image)
                     continuation.finish()
+                }
+            }
+            continuation.onTermination = { @Sendable [weak self] termination in
+                if case .cancelled = termination {
+                    Task {
+                        await self?.cancelImageRequest(requestID)
+                    }
                 }
             }
         }.makeAsyncIterator()
@@ -218,7 +234,7 @@ public actor PhotoLibraryActor {
         options.isSynchronous = false
         
         var streamIterator = AsyncStream<UIImage?> { continuation in
-            imageManager.requestImage(
+            let requestID = imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
                 contentMode: .aspectFit,
@@ -233,23 +249,32 @@ public actor PhotoLibraryActor {
                     continuation.finish()
                 }
             }
+            continuation.onTermination = { @Sendable [weak self] termination in
+                if case .cancelled = termination {
+                    Task {
+                        await self?.cancelImageRequest(requestID)
+                    }
+                }
+            }
         }.makeAsyncIterator()
         
         return await streamIterator.next() ?? nil
+    }
+    
+    private func cancelImageRequest(_ requestID: PHImageRequestID) {
+        imageManager.cancelImageRequest(requestID)
     }
     
     // MARK: - Video Playback URL (Safe Temporary Directory with Eviction)
     
     public func fetchVideoURL(for item: MediaItem) async throws -> URL {
         guard let assetID = item.phAssetIdentifier else {
-            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid asset identifier"])
+            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Invalid asset identifier", comment: "Error message when a photo asset identifier is invalid")])
         }
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
         guard let asset = fetch.firstObject else {
-            throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: "Video asset not found"])
+            throw NSError(domain: "PhotoLibraryActor", code: 3, userInfo: [NSLocalizedDescriptionKey: String(localized: "Video asset not found", comment: "Error message when a video asset cannot be found in Photo Library")])
         }
-        
-        purgeOldVideoExports()
         
         let options = PHVideoRequestOptions()
         options.deliveryMode = .highQualityFormat
@@ -267,7 +292,7 @@ public actor PhotoLibraryActor {
                     continuation.resume(throwing: error)
                 } else {
                     hasResumed = true
-                    continuation.resume(throwing: NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: "Unable to load video asset"]))
+                    continuation.resume(throwing: NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")]))
                 }
             }
         }
@@ -279,7 +304,7 @@ public actor PhotoLibraryActor {
         // Composition / Slow-mo export fallback into managed temporary export directory
         let tempURL = exportDirectory.appendingPathComponent("ph_export_\(UUID().uuidString).mov")
         guard let exporter = AVAssetExportSession(asset: loadedAsset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to create export session"])
+            throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to create export session", comment: "Error message when AVAssetExportSession cannot be initialized")])
         }
         try await exporter.export(to: tempURL, as: .mov)
         return tempURL
@@ -300,7 +325,23 @@ public actor PhotoLibraryActor {
     // MARK: - File Size
     
     public func fetchFileSize(for item: MediaItem) -> Int64 {
-        0
+        guard let assetID = item.phAssetIdentifier else { return 0 }
+        let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
+        guard let asset = fetch.firstObject else { return 0 }
+        let resources = PHAssetResource.assetResources(for: asset)
+        if let primary = resources.first, let size = primary.value(forKey: "fileSize") as? Int64, size > 0 {
+            return size
+        }
+        return Self.estimateFileSize(for: asset)
+    }
+    
+    private static func estimateFileSize(for asset: PHAsset) -> Int64 {
+        if asset.mediaType == .video {
+            return Int64(max(200_000, asset.duration * 1_800_000))
+        } else {
+            let pixels = Double(asset.pixelWidth * asset.pixelHeight)
+            return Int64(max(50_000, pixels * 0.35))
+        }
     }
     
     // MARK: - Metadata & EXIF (Single Asset IPC Query)
@@ -324,11 +365,12 @@ public actor PhotoLibraryActor {
         }
         
         let primaryResource = PHAssetResource.assetResources(for: asset).first
-        let fileName = primaryResource?.filename ?? item.name
+        let fileName = primaryResource?.originalFilename ?? (asset.value(forKey: "filename") as? String) ?? item.name
         let ext = (fileName as NSString).pathExtension.uppercased()
         let fileFormat = ext.isEmpty ? (asset.mediaType == .video ? "MOV" : "HEIC") : ext
         
-        let formattedSize = item.size > 0 ? ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file) : "—"
+        let sizeInBytes = item.size > 0 ? item.size : ((primaryResource?.value(forKey: "fileSize") as? Int64) ?? Self.estimateFileSize(for: asset))
+        let formattedSize = sizeInBytes > 0 ? ByteCountFormatter.string(fromByteCount: sizeInBytes, countStyle: .file) : "—"
         
         return PictureEXIFData(
             fileName: fileName,

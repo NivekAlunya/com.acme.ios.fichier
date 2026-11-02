@@ -5,10 +5,10 @@
 
 import AVFoundation
 
-public final class VideoSubtitleDelegate: NSObject, AVPlayerItemLegibleOutputPushDelegate, @unchecked Sendable {
-    public var onSubtitleChanged: (@MainActor (String) -> Void)?
+public final class VideoSubtitleDelegate: NSObject, AVPlayerItemLegibleOutputPushDelegate, Sendable {
+    public let onSubtitleChanged: (@MainActor @Sendable (String) -> Void)?
     
-    public init(onSubtitleChanged: (@MainActor (String) -> Void)? = nil) {
+    public init(onSubtitleChanged: (@MainActor @Sendable (String) -> Void)? = nil) {
         self.onSubtitleChanged = onSubtitleChanged
         super.init()
     }

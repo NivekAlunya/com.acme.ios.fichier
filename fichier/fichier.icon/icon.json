@@ -1,13 +1,11 @@
 {
-  "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
-  },
+  "fill" : "automatic",
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "Variant_3_Solid_Glyph.jpg",
-          "name" : "Variant_3_Solid_Glyph"
+          "image-name" : "fichier.svg",
+          "name" : "fichier"
         }
       ],
       "shadow" : {

@@ -9,11 +9,13 @@ import AVFoundation
 nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelegate, Sendable {
     private let worker: SMBClientActor
     private let item: MediaItem
+    private let chunkSize: Int
     private let taskTracker = ResourceLoadingTaskTracker()
     
-    init(worker: SMBClientActor, item: MediaItem) {
+    init(worker: SMBClientActor, item: MediaItem, chunkSize: Int = 256 * 1024) {
         self.worker = worker
         self.item = item
+        self.chunkSize = chunkSize
         super.init()
     }
     
@@ -60,35 +62,42 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         let tracker = self.taskTracker
         let worker = self.worker
         let item = self.item
+        let chunkSize = self.chunkSize
         
         Task {
             await tracker.runTask(for: loadingRequest) {
                 do {
                     var currentOffset = startOffset
-                    let chunkSize = 1024 * 1024 // 1 MB chunks for fast buffering over SMB and fewer roundtrips
                     
                     while currentOffset < targetEnd {
-                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        if Task.isCancelled || loadingRequest.isCancelled {
+                            return
+                        }
                         
                         let bytesToRead = min(chunkSize, Int(targetEnd - currentOffset))
+                        // Fetch the requested chunk via SMBClientActor.
+                        // The worker automatically recovers from transient socket drops and renegotiates
+                        // the SMB share connection transparently before failing this loading request.
                         let chunk = try await worker.fetchMediaRange(
                             for: item,
                             offset: currentOffset,
                             length: bytesToRead
                         )
                         
-                        if Task.isCancelled || loadingRequest.isCancelled { return }
+                        if Task.isCancelled || loadingRequest.isCancelled {
+                            return
+                        }
                         if chunk.isEmpty { break }
                         
                         dataRequest.respond(with: chunk)
                         currentOffset += Int64(chunk.count)
                     }
                     
-                    if !loadingRequest.isCancelled && !Task.isCancelled {
+                    if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
                         loadingRequest.finishLoading()
                     }
                 } catch {
-                    if !loadingRequest.isCancelled && !Task.isCancelled {
+                    if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
                         loadingRequest.finishLoading(with: error)
                     }
                 }

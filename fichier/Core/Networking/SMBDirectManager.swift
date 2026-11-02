@@ -42,6 +42,9 @@ public final class SMBDirectManager {
     public private(set) var currentConnectionID: String = ""
     private var loadFolderTask: Task<Void, Never>?
     
+    // In-memory cache of the last viewed folder per location to restore iPad split-view state seamlessly
+    private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
+    
     private let worker = SMBClientActor()
     nonisolated var clientActor: SMBClientActor { worker }
     private let localWorker = LocalStorageActor()
@@ -53,11 +56,43 @@ public final class SMBDirectManager {
     public init() {
         loadSavedConnections()
         loadSavedFolderLocations()
+        setupLifecycleObservers()
+        Task {
+            await refreshMediaCacheSize()
+        }
+    }
+    
+    // MARK: - Lifecycle & Memory Pressure Observers
+    
+    /// Registers system observers for memory warnings and background transitions.
+    private func setupLifecycleObservers() {
+        // Clear in-memory image caches on low memory warnings to prevent OOM terminations
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.worker.clearMemoryCache()
+            }
+        }
+        
+        // Execute disk cache hygiene sweep when app transitions to background
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task.detached(priority: .utility) {
+                MediaCacheManager.shared.performMaintenanceSweep()
+            }
+        }
     }
     
     // MARK: - Saved Connections Persistence
     
-    public func loadSavedConnections() {
+    private func loadSavedConnections() {
         guard let data = UserDefaults.standard.data(forKey: savedConnectionsKey),
               let decoded = try? JSONDecoder().decode([SavedSMBConnection].self, from: data) else {
             savedConnections = []
@@ -94,6 +129,11 @@ public final class SMBDirectManager {
     public func removeSavedConnection(_ connection: SavedSMBConnection) {
         SMBKeychain.deletePassword(for: connection.id)
         savedConnections.removeAll { $0.id == connection.id }
+        if currentLocation?.smbConnection?.id == connection.id {
+            Task {
+                await disconnect()
+            }
+        }
         if let encoded = try? JSONEncoder().encode(savedConnections) {
             UserDefaults.standard.set(encoded, forKey: savedConnectionsKey)
         }
@@ -112,7 +152,7 @@ public final class SMBDirectManager {
         return list
     }
     
-    public func loadSavedFolderLocations() {
+    private func loadSavedFolderLocations() {
         guard let data = UserDefaults.standard.data(forKey: savedFolderLocationsKey),
               let decoded = try? JSONDecoder().decode([SavedFolderLocation].self, from: data) else {
             savedFolderLocations = []
@@ -179,6 +219,7 @@ public final class SMBDirectManager {
         switch location.kind {
         case .smb:
             guard let conn = location.smbConnection else { return }
+            await disconnect()
             currentLocation = location
             let pass = password(for: conn)
             await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
@@ -199,7 +240,11 @@ public final class SMBDirectManager {
                 self.folderTree = [rootItem]
                 self.isConnected = true
                 self.isLoading = false
-                await selectAndLoadFolder(rootItem)
+                
+                // Restore previously selected folder or default to root
+                let locID = location.id
+                let targetFolder = lastSelectedFolderPerLocation[locID] ?? rootItem
+                await selectAndLoadFolder(targetFolder)
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
@@ -221,7 +266,12 @@ public final class SMBDirectManager {
                 self.isConnected = true
                 self.isLoading = false
                 
-                if let firstAlbum = albums.first {
+                // Restore previously selected album/folder if available
+                let locID = location.id
+                if let remembered = lastSelectedFolderPerLocation[locID],
+                   (albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id) {
+                    await selectAndLoadFolder(remembered)
+                } else if let firstAlbum = albums.first {
                     await selectAndLoadFolder(firstAlbum)
                 } else {
                     await selectAndLoadFolder(rootWithChildren)
@@ -275,12 +325,20 @@ public final class SMBDirectManager {
                 self.currentLocation = StorageLocation(smb: saved)
             }
             
+            self.selectedFolder = nil
+            self.activeFolderID = nil
+            self.currentFolders = []
+            self.pictures = []
             self.folderTree = discoveredShares
             self.isConnected = true
             
-            // Automatically select and load the first shared folder
-            if let firstShare = discoveredShares.first {
-                await selectAndLoadFolder(firstShare)
+            // Auto-restore previously selected folder for this location, or auto-select if only 1 share
+            let locID = currentLocation?.id ?? connID
+            if let remembered = lastSelectedFolderPerLocation[locID],
+               discoveredShares.contains(where: { $0.shareName == remembered.shareName || $0.name == remembered.name }) {
+                await selectAndLoadFolder(remembered)
+            } else if discoveredShares.count == 1, let singleShare = discoveredShares.first {
+                await selectAndLoadFolder(singleShare)
             }
         } catch {
             self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
@@ -342,8 +400,6 @@ public final class SMBDirectManager {
             
             if let current = selectedFolder {
                 await selectAndLoadFolder(current)
-            } else if let first = refreshedShares.first {
-                await selectAndLoadFolder(first)
             }
         } catch {
             self.errorMessage = String(localized: .Strings.networkingErrorRefreshSharesFailed(error.localizedDescription))
@@ -353,6 +409,11 @@ public final class SMBDirectManager {
     // MARK: - Select Folder & Load Both Subfolders + Pictures
     
     public func selectAndLoadFolder(_ folder: MediaItem) async {
+        // Record this folder as the last active selection for the current location
+        if let locID = currentLocation?.id, !locID.isEmpty {
+            lastSelectedFolderPerLocation[locID] = folder
+        }
+        
         // 1. Cancel previous folder scan task immediately
         loadFolderTask?.cancel()
         
@@ -457,14 +518,16 @@ public final class SMBDirectManager {
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+            return cached
+        }
+        
         // Photos Library asset thumbnail
         if item.phAssetIdentifier != nil {
-            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
-                return cached
-            }
             if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                 return thumb
             }
             return nil
@@ -472,12 +535,22 @@ public final class SMBDirectManager {
         
         // Local or iCloud Drive file thumbnail
         if item.localURL != nil {
-            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
-                return cached
+            // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
+            let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
+            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
+                for: item.shareName,
+                path: subPath,
+                dimension: maxDimension,
+                connectionID: item.connectionID
+            )
+            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+                return diskCached
             }
+            
             if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
@@ -489,48 +562,42 @@ public final class SMBDirectManager {
             return nil
         }
         
-        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = await worker.getCachedThumbnail(forKey: memoryCacheKey) {
-            return cached
-        }
-        
         // Video thumbnail streaming & caching
         if item.isVideo {
-            let diskKey = MediaCacheManager.shared.cacheKey(
+            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
                 path: "\(item.path)_vidstream_v7",
                 dimension: maxDimension,
                 connectionID: item.connectionID
             )
-            let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
-                for: item.shareName,
-                path: "\(item.path)_vidstream_v7",
-                dimension: maxDimension,
-                connectionID: ""
-            ) : nil
-            if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
-                await worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
                 return diskCached
             }
             
-            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 5.0s)
+            guard !Task.isCancelled else { return nil }
+            
+            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 12.0s with 0.0s fallback)
             if MediaCacheManager.shared.hasCachedVideo(for: item) {
                 let localURL = MediaCacheManager.shared.localVideoURL(for: item)
                 if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
                     from: localURL,
-                    maxDimension: maxDimension,
-                    preferredTime: CMTime(seconds: 5.0, preferredTimescale: 600)
+                    maxDimension: MediaCacheManager.standardThumbnailDimension
                 ) {
-                    await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                    MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                    worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                    MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                     return thumb
                 }
             }
             
             // 2. Stream video frame on demand via AVAssetResourceLoader (reads front header + moov atom only!)
-            if let thumb = await streamVideoThumbnail(for: item, maxDimension: maxDimension) {
-                await worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+            // Debounce briefly so cells flying past during fast scroll are cancelled before hitting SMB
+            try? await Task.sleep(for: .milliseconds(60))
+            guard !Task.isCancelled else { return nil }
+            
+            if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension) {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             
@@ -539,66 +606,91 @@ public final class SMBDirectManager {
             return nil
         }
         
-        return await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+        // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
+        let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey, legacyKey: photoLegacyKey) {
+            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        
+        try? await Task.sleep(for: .milliseconds(40))
+        guard !Task.isCancelled else { return nil }
+        
+        let thumb = await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+        if let thumb {
+            worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+        }
+        return thumb
     }
     
+    // MARK: - Streaming Helpers
+    
+    nonisolated public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
+        let safeName = itemName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
+        guard let url = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else { return nil }
+        return (url, uniqueID)
+    }
+    
+    public func resolveValidItem(for item: MediaItem) async -> MediaItem {
+        guard item.size <= 0 else { return item }
+        let realSize = await fetchFileSize(for: item)
+        return realSize > 0 ? item.withSize(realSize) : item
+    }
+
     /// Streams minimal byte slices on demand using the same progressive loader as the player to extract a keyframe
-    private func streamVideoThumbnail(for item: MediaItem, maxDimension: CGFloat) async -> UIImage? {
+    private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
         return await videoThumbnailLimiter.withPermit {
-            if Task.isCancelled { return nil }
-            
-            var validItem = item
-            if validItem.size <= 0 {
-                let realSize = await fetchFileSize(for: item)
-                if realSize > 0 {
-                    validItem = MediaItem(
-                        locationID: item.locationID,
-                        name: item.name,
-                        rootName: item.rootName,
-                        path: item.path,
-                        isDirectory: item.isDirectory,
-                        size: realSize,
-                        modifiedDate: item.modifiedDate
-                    )
-                }
+            guard !Task.isCancelled else { return nil }
+            if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+                return nil
             }
-            guard validItem.size > 0 else { return nil }
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
+            let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+            if let cached = self.worker.getCachedThumbnail(forKey: memoryCacheKey) ?? self.worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+                return cached
+            }
             
-            let uniqueID = UUID().uuidString
-            let safeName = validItem.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
-            guard let streamURL = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else {
+            let validItem = await resolveValidItem(for: item)
+            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
             let asset = AVURLAsset(url: streamURL)
-            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem)
+            // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
+            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
-            generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
+            let standardDim = MediaCacheManager.standardThumbnailDimension
+            generator.maximumSize = CGSize(width: standardDim, height: standardDim)
+            generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
+            generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
             
             return await withTaskCancellationHandler {
                 await withTaskGroup(of: UIImage?.self) { group in
                     group.addTask {
-                        // 1. Try 5.0s frame first (representative preview)
+                        // 1. Try representative frame first using standardized thumbnail timestamp
                         do {
-                            let (cgImage, _) = try await generator.image(at: CMTime(seconds: 5.0, preferredTimescale: 600))
+                            let (cgImage, _) = try await generator.image(at: MediaCacheManager.defaultVideoThumbnailTime)
                             return UIImage(cgImage: cgImage)
                         } catch {
                             guard !Task.isCancelled else { return nil }
-                            // 2. Fallback: try .zero or 0.5s if video is shorter than 5s
+                            // 2. Fallback: try .zero or standardized fallback timestamp if video is shorter
                             generator.requestedTimeToleranceBefore = .positiveInfinity
                             generator.requestedTimeToleranceAfter = .positiveInfinity
-                            if let (cgImage, _) = try? await generator.image(at: .zero) {
+                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {
                                 return UIImage(cgImage: cgImage)
                             }
-                            if let (cgImage, _) = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
+                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: MediaCacheManager.fallbackVideoThumbnailTime) {
                                 return UIImage(cgImage: cgImage)
                             }
                             return nil
@@ -671,14 +763,17 @@ public final class SMBDirectManager {
         return try await worker.fetchVideoURL(for: item, progress: progress)
     }
     
-    public var mediaCacheSize: String {
-        MediaCacheManager.shared.formattedCacheSize()
+    public var mediaCacheSize: String = "…"
+    
+    public func refreshMediaCacheSize() async {
+        mediaCacheSize = await MediaCacheManager.shared.formattedCacheSize()
     }
     
     public func clearMediaCache() {
-        MediaCacheManager.shared.clearAllCache()
         Task {
+            await MediaCacheManager.shared.clearAllCacheAsync()
             await worker.clearMemoryCache()
+            await refreshMediaCacheSize()
         }
     }
     

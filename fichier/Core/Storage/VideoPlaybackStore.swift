@@ -78,10 +78,6 @@ public final class VideoPlaybackStore {
         return record.position
     }
     
-    public func isFinished(for item: MediaItem) -> Bool {
-        return latestRecord(for: item)?.isFinished ?? false
-    }
-    
     public func savePosition(_ seconds: Double, duration: Double, for item: MediaItem) {
         guard seconds.isFinite && !seconds.isNaN && duration.isFinite && !duration.isNaN else { return }
         

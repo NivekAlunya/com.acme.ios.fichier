@@ -17,54 +17,32 @@ actor SMBClientActor {
     private var currentConnectionID: String = ""
     private var currentShareName: String?
     private var activeFolderID: String?
-    private let thumbnailCache = NSCache<NSString, UIImage>()
+    /// Thread-safe in-memory thumbnail cache allowing lockless, synchronous lookup without serializing behind SMB socket I/O
+    nonisolated private let thumbnailCache = ThreadSafeMemoryCache<NSString, UIImage>()
     private let fullImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 12
+        cache.countLimit = 5
+        let physicalMemory = ProcessInfo.processInfo.physicalMemory
+        // Dynamically scale in-memory cache limit on low-RAM devices (~187 MB on 3 GB hardware) while capping at 250 MB on 4+ GB devices
+        cache.totalCostLimit = Int(min(Int64(250 * 1024 * 1024), Int64(physicalMemory / 16)))
         return cache
     }()
+    private let metadataCache = NSCache<NSString, PictureEXIFBox>()
     
     func setActiveFolder(id: String?) {
         self.activeFolderID = id
     }
     
-    func getCachedThumbnail(forKey key: NSString) -> UIImage? {
+    nonisolated func getCachedThumbnail(forKey key: NSString) -> UIImage? {
         thumbnailCache.object(forKey: key)
     }
     
-    func cacheThumbnail(_ image: UIImage, forKey key: NSString) {
+    nonisolated func cacheThumbnail(_ image: UIImage, forKey key: NSString) {
         thumbnailCache.setObject(image, forKey: key)
     }
     
-    private let imageExtensions: Set<String> = [
-        "jpg", "jpeg", "jpe", "jif", "jfif",
-        "png", "heic", "heif", "webp", "avif",
-        "gif", "tiff", "tif", "bmp", "ico",
-        "jp2", "j2k", "jpf", "jpx",
-        "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "pef", "raf"
-    ]
-    
-    private let videoExtensions: Set<String> = [
-        "mp4", "mov", "m4v"
-    ]
-    
-    private var supportedMediaExtensions: Set<String> {
-        imageExtensions.union(videoExtensions)
-    }
-    
-    /// Connects to the server and enumerates all shared folders automatically
-    func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [MediaItem] {
-        guard let manager = SMB2Manager(url: url, credential: credential) else {
-            throw URLError(.badURL)
-        }
-        
-        // Fetch all non-hidden shares from the Mac mini via IPC$
-        let shares = try await manager.listShares(enumerateHidden: false)
-        self.client = manager
-        self.currentConnectionID = connectionID
-        self.currentShareName = nil
-        
-        let items = shares
+    private func makeShareItems(from shares: [(name: String, comment: String)], connectionID: String) -> [MediaItem] {
+        shares
             .map { share in
                 MediaItem(
                     locationID: connectionID,
@@ -77,8 +55,22 @@ actor SMBClientActor {
                 )
             }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    
+    /// Connects to the server and enumerates all shared folders automatically
+    func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [MediaItem] {
+        guard let manager = SMB2Manager(url: url, credential: credential) else {
+            throw URLError(.badURL)
+        }
         
-        return items
+        // Fetch all non-hidden shares from the Mac mini via IPC$
+        let shares = try await manager.listShares(enumerateHidden: false)
+        try? await self.client?.disconnectShare()
+        self.client = manager
+        self.currentConnectionID = connectionID
+        self.currentShareName = nil
+        
+        return makeShareItems(from: shares, connectionID: connectionID)
     }
     
     /// Re-fetches the list of shared folders on the currently connected server
@@ -88,28 +80,20 @@ actor SMBClientActor {
         }
         let shares = try await client.listShares(enumerateHidden: false)
         self.currentShareName = nil
-        let connID = self.currentConnectionID
-        
-        return shares
-            .map { share in
-                MediaItem(
-                    locationID: connID,
-                    name: share.name,
-                    rootName: share.name,
-                    path: "/",
-                    isDirectory: true,
-                    size: 0,
-                    children: nil
-                )
-            }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return makeShareItems(from: shares, connectionID: self.currentConnectionID)
     }
     
-    private func ensureConnected(to shareName: String) async throws -> SMB2Manager {
+    /// Ensures connection to a specific share, optionally forcing a disconnect & reconnect
+    /// if a previous socket error occurred.
+    private func ensureConnected(to shareName: String, forceReconnect: Bool = false) async throws -> SMB2Manager {
         guard let client else {
             throw URLError(.notConnectedToInternet)
         }
-        if currentShareName != shareName {
+        if forceReconnect || currentShareName != shareName {
+            if forceReconnect {
+                try? await client.disconnectShare()
+                currentShareName = nil
+            }
             try await client.connectShare(name: shareName)
             currentShareName = shareName
         }
@@ -123,94 +107,107 @@ actor SMBClientActor {
         currentShareName = nil
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
+        metadataCache.removeAllObjects()
     }
     
-    /// Scans a directory inside a specific share and returns both its subfolders and its image files
+    /// Scans a directory inside a specific share and returns both its subfolders and its media files.
+    /// Includes automatic retry with socket reconnection to survive momentary network drops.
     func scanFolder(shareName: String, at path: String) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
-        try Task.checkCancellation()
-        let client = try await ensureConnected(to: shareName)
-        try Task.checkCancellation()
+        let maxAttempts = 2
+        var lastError: Error?
         
-        let normalizedPath = path == "/" ? "" : path
-        let entries = try await client.contentsOfDirectory(atPath: normalizedPath)
-        try Task.checkCancellation()
-        
-        var folders: [MediaItem] = []
-        var pictures: [MediaItem] = []
-        let connID = self.currentConnectionID
-        
-        for entry in entries {
-            if Task.isCancelled { throw CancellationError() }
-            guard let name = entry[.nameKey] as? String,
-                  !name.hasPrefix(".") else { continue }
-            
-            let resourceType = entry[.fileResourceTypeKey] as? URLFileResourceType
-            let entryPath = (entry[.pathKey] as? String) ?? (normalizedPath.isEmpty ? name : (normalizedPath as NSString).appendingPathComponent(name))
-            let modDate = entry[.contentModificationDateKey] as? Date
-            
-            if resourceType == .directory {
-                folders.append(MediaItem(
-                    locationID: connID,
-                    name: name,
-                    rootName: shareName,
-                    path: entryPath,
-                    isDirectory: true,
-                    size: 0,
-                    modifiedDate: modDate,
-                    children: nil
-                ))
-            } else if resourceType == .regular {
-                let ext = (name as NSString).pathExtension.lowercased()
-                if supportedMediaExtensions.contains(ext) {
-                    let size = Self.extractFileSize(from: entry)
-                    pictures.append(MediaItem(
-                        locationID: connID,
-                        name: name,
-                        rootName: shareName,
-                        path: entryPath,
-                        isDirectory: false,
-                        size: size,
-                        modifiedDate: modDate
-                    ))
+        for attempt in 1...maxAttempts {
+            try Task.checkCancellation()
+            do {
+                let client = try await ensureConnected(to: shareName, forceReconnect: attempt > 1)
+                try Task.checkCancellation()
+                
+                let normalizedPath = path == "/" ? "" : path
+                let entries = try await client.contentsOfDirectory(atPath: normalizedPath)
+                try Task.checkCancellation()
+                
+                var folders: [MediaItem] = []
+                var pictures: [MediaItem] = []
+                let connID = self.currentConnectionID
+                
+                for entry in entries {
+                    if Task.isCancelled { throw CancellationError() }
+                    guard let name = entry[.nameKey] as? String,
+                          !name.hasPrefix(".") else { continue }
+                    
+                    let resourceType = entry[.fileResourceTypeKey] as? URLFileResourceType
+                    let entryPath = (entry[.pathKey] as? String) ?? (normalizedPath.isEmpty ? name : (normalizedPath as NSString).appendingPathComponent(name))
+                    let modDate = entry[.contentModificationDateKey] as? Date
+                    
+                    if resourceType == .directory {
+                        folders.append(MediaItem(
+                            locationID: connID,
+                            name: name,
+                            rootName: shareName,
+                            path: entryPath,
+                            isDirectory: true,
+                            size: 0,
+                            modifiedDate: modDate,
+                            children: nil
+                        ))
+                    } else if resourceType == .regular {
+                        let ext = (name as NSString).pathExtension.lowercased()
+                        if SupportedMediaTypes.isSupported(extension: ext) {
+                            let size = Self.extractFileSize(from: entry)
+                            pictures.append(MediaItem(
+                                locationID: connID,
+                                name: name,
+                                rootName: shareName,
+                                path: entryPath,
+                                isDirectory: false,
+                                size: size,
+                                modifiedDate: modDate
+                            ))
+                        }
+                    }
+                }
+                
+                try Task.checkCancellation()
+                folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                pictures.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                
+                return (folders, pictures)
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                lastError = error
+                if attempt < maxAttempts {
+                    // Brief pause to allow the network interface or server socket to stabilize
+                    try? await Task.sleep(nanoseconds: 300_000_000)
                 }
             }
         }
         
-        try Task.checkCancellation()
-        folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        pictures.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        
-        return (folders, pictures)
+        throw lastError ?? URLError(.cannotConnectToHost)
     }
     
     /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
     /// If expectedFolderID doesn't match the current activeFolderID, it bails immediately.
-    func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = 260) async -> UIImage? {
-        if Task.isCancelled { return nil }
+    func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
+        if Task.isCancelled || item.isVideo { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
         }
         
-        // 1. In-Memory RAM Cache check (Tier 1)
-        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = thumbnailCache.object(forKey: memoryCacheKey) {
+        // 1. In-Memory RAM Cache check (Tier 1) - unified across all view modes
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        if let cached = thumbnailCache.object(forKey: memoryCacheKey) ?? thumbnailCache.object(forKey: legacyMemoryKey) {
             return cached
         }
         
         // 2. Persistent On-Disk Cache check (Tier 2 - Bypasses Wi-Fi / SMB completely!)
-        let diskKey = MediaCacheManager.shared.cacheKey(
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
-            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
+            path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        let fallbackKey = !item.connectionID.isEmpty ? MediaCacheManager.shared.cacheKey(
-            for: item.shareName,
-            path: item.isVideo ? "\(item.path)_chunkthumb_v1" : item.path,
-            dimension: maxDimension,
-            connectionID: ""
-        ) : nil
-        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
+        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
             thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
             return diskCached
         }
@@ -227,21 +224,34 @@ actor SMBClientActor {
                 return nil
             }
             
-            // Videos are processed via streamVideoThumbnail in SMBDirectManager
-            if item.isVideo { return nil }
-            
             // Photo Thumbnail Handling
-            let data = try await client.contents(atPath: item.path)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil
             }
             
-            guard let image = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
-                return nil
+            // Extract and cache metadata immediately while image bytes are in memory!
+            if metadataCache.object(forKey: item.id as NSString) == nil {
+                let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+                metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
-            thumbnailCache.setObject(image, forKey: memoryCacheKey)
-            MediaCacheManager.shared.saveThumbnail(image, for: diskKey)
+            
+            // Offload CPU-bound image downsampling and disk caching off the actor lock
+            // Standardize downsampling to master thumbnail dimension (420px)
+            let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                guard let decoded = Self.downsample(data: data, maxDimension: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
+                    return nil
+                }
+                MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
+                return decoded
+            }.value
+            
+            if let image {
+                thumbnailCache.setObject(image, forKey: memoryCacheKey)
+            }
             return image
         } catch {
             if !Task.isCancelled {
@@ -291,14 +301,18 @@ actor SMBClientActor {
         MediaCacheManager.shared.evictVideosIfNeeded(keeping: [localURL])
         
         // Upgrade thumbnail cache with real video frame now that it's downloaded
-        let diskKey = MediaCacheManager.shared.cacheKey(
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: "\(item.path)_vidstream_v7",
-            dimension: 260,
+            dimension: MediaCacheManager.standardThumbnailDimension,
             connectionID: item.connectionID
         )
-        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: localURL, maxDimension: 260, preferredTime: CMTime(seconds: 5.0, preferredTimescale: 600)) {
-            let memoryCacheKey = "\(item.id)_thumb_260" as NSString
+        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
+            from: localURL,
+            maxDimension: MediaCacheManager.standardThumbnailDimension,
+            preferredTime: MediaCacheManager.defaultVideoThumbnailTime
+        ) {
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
         }
@@ -306,24 +320,54 @@ actor SMBClientActor {
         return localURL
     }
     
+    /// Flushes all in-memory caches to immediately release RAM during system memory pressure warnings
     func clearMemoryCache() {
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
+        metadataCache.removeAllObjects()
     }
     
-    /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads)
+    /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads).
+    /// Features automatic retry (up to 3 attempts with exponential backoff) and forces socket reconnection
+    /// if a transient socket drop, broken pipe, or timeout occurs during playback.
     func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
-        let client = try await ensureConnected(to: item.shareName)
-        let end = offset + Int64(length)
-        let range: Range<Int64> = offset..<end
-        return try await client.contents(atPath: item.path, range: range)
+        let maxAttempts = 3
+        var lastError: Error?
+        
+        for attempt in 1...maxAttempts {
+            try Task.checkCancellation()
+            do {
+                // If retrying, force reconnecting the share to renew dead or timed-out sockets
+                let client = try await ensureConnected(to: item.shareName, forceReconnect: attempt > 1)
+                try Task.checkCancellation()
+                
+                let end = offset + Int64(length)
+                let range: Range<Int64> = offset..<end
+                return try await client.contents(atPath: item.path, range: range) { _, _ in
+                    !Task.isCancelled
+                }
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                lastError = error
+                
+                // Exponential backoff before retry: 250ms on first failure, 500ms on second
+                if attempt < maxAttempts {
+                    let backoffMs = UInt64(attempt * 250)
+                    try? await Task.sleep(nanoseconds: backoffMs * 1_000_000)
+                }
+            }
+        }
+        
+        throw lastError ?? URLError(.cannotConnectToHost)
     }
     
     /// Queries the remote file size directly if item.size was 0
     func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.size > 0 { return item.size }
+        if Task.isCancelled { return 0 }
         do {
             let client = try await ensureConnected(to: item.shareName)
+            if Task.isCancelled { return 0 }
             let attrs = try await client.attributesOfItem(atPath: item.path)
             return Self.extractFileSize(from: attrs)
         } catch {
@@ -351,11 +395,20 @@ actor SMBClientActor {
             let client = try await ensureConnected(to: item.shareName)
             if Task.isCancelled { return nil }
             
-            let data = try await client.contents(atPath: item.path)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
             if Task.isCancelled { return nil }
             
+            // Ensure metadata is cached from downloaded full image bytes
+            if metadataCache.object(forKey: item.id as NSString) == nil {
+                let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+                metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
+            }
+            
             guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
-            fullImageCache.setObject(image, forKey: cacheKey)
+            let pixelCost = Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+            fullImageCache.setObject(image, forKey: cacheKey, cost: max(data.count, pixelCost))
             return image
         } catch {
             if !Task.isCancelled {
@@ -386,12 +439,38 @@ actor SMBClientActor {
                 fileFormat: (item.name as NSString).pathExtension.uppercased()
             )
         }
+        
+        // 1. Check in-memory metadata cache (populated during thumbnail or full image fetch)
+        let cacheKey = item.id as NSString
+        if let cached = metadataCache.object(forKey: cacheKey)?.value {
+            return cached
+        }
+        
         do {
             let client = try await ensureConnected(to: item.shareName)
             if Task.isCancelled { return nil }
-            let data = try await client.contents(atPath: item.path)
+            
+            // 2. Fast single-packet fetch: Read first 64 KB range to extract EXIF header
+            let rangeData = try? await client.contents(atPath: item.path, range: 0..<65536) { _, _ in
+                !Task.isCancelled
+            }
+            if let rangeData, !rangeData.isEmpty {
+                let meta = ImageMetadataExtractor.extract(from: rangeData, fileName: item.name, fileSize: item.formattedSize)
+                if meta.dimensions != nil || meta.cameraModel != nil || meta.dateTaken != nil {
+                    metadataCache.setObject(PictureEXIFBox(meta), forKey: cacheKey)
+                    return meta
+                }
+            }
+            
+            // 3. Fallback to full contents only if EXIF header was located deeper in the file
             if Task.isCancelled { return nil }
-            return ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+            let data = try await client.contents(atPath: item.path) { _, _ in
+                !Task.isCancelled
+            }
+            if Task.isCancelled { return nil }
+            let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
+            metadataCache.setObject(PictureEXIFBox(meta), forKey: cacheKey)
+            return meta
         } catch {
             return nil
         }

@@ -1,0 +1,6 @@
+<!-- A · Diagonal ends -->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <path d="M300 180H740L655 350H300Z" fill="#8FE3C8"/>
+  <path d="M300 430H640L565 580H300Z" fill="#FFBFA0"/>
+  <path d="M300 180H470V844L300 759Z" fill="#A99BFF"/>
+</svg>

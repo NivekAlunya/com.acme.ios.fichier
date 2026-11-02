@@ -9,8 +9,8 @@ import OSLog
 struct MediaGridView: View {
     var manager: SMBDirectManager
     var onSelectFolder: ((MediaItem) -> Void)? = nil
-    var onStartSlideshow: (() -> Void)? = nil
-    let onSelectPicture: (MediaItem) -> Void
+    var onStartSlideshow: (([MediaItem]) -> Void)? = nil
+    let onSelectPicture: (MediaItem, [MediaItem]) -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @AppStorage("gallery_view_mode") private var viewMode: ViewMode = .grid
@@ -20,6 +20,13 @@ struct MediaGridView: View {
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
     @State private var searchText = ""
     @State private var lastPinchScale: CGFloat = 1.0
+    @State private var lastPinchTime: Date = .distantPast
+    
+    // MARK: - Pinch Gesture Configuration
+    // Increased distance thresholds to prevent accidental mode switches
+    private static let pinchZoomInRatioThreshold: CGFloat = 1.45
+    private static let pinchZoomOutRatioThreshold: CGFloat = 0.65
+    private static let pinchCooldownSeconds: TimeInterval = 0.30
     @State private var showFavoritesOnly = false
     @State private var mediaFilter: MediaFilter = .all
     @State private var isSelectionMode = false
@@ -27,6 +34,7 @@ struct MediaGridView: View {
     @State private var isBatchProcessing = false
     @State private var batchProgressMessage: String?
     @State private var batchStatusToast: String?
+    @State private var batchTask: Task<Void, Never>?
     @State private var shareSheetItems: [Any]?
     @State private var showingSettings = false
     
@@ -36,33 +44,31 @@ struct MediaGridView: View {
     
     // MARK: - Filtered and Sorted Data
     
-    private var filteredFolders: [MediaItem] {
-        let list = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
+    private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
+        let listFolders = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
-        return sortItems(list)
-    }
-    
-    private var filteredPictures: [MediaItem] {
-        var list = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
+        let sortedFolders = sortItems(listFolders)
+        
+        var listPictures = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
             $0.name.localizedCaseInsensitiveContains(searchText)
         }
         if showFavoritesOnly {
-            list = list.filter { FavoritesManager.shared.isFavorite($0) }
+            listPictures = listPictures.filter { FavoritesManager.shared.isFavorite($0) }
         }
         switch mediaFilter {
         case .all:
             break
         case .photos:
-            list = list.filter { !$0.isVideo }
+            listPictures = listPictures.filter { !$0.isVideo }
         case .videos:
-            list = list.filter { $0.isVideo }
+            listPictures = listPictures.filter { $0.isVideo }
         }
-        return sortItems(list)
+        let sortedPictures = sortItems(listPictures)
+        return (sortedFolders, sortedPictures)
     }
     
-    private var mediaSectionHeader: LocalizedStringResource {
-        let count = filteredPictures.count
+    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
         switch mediaFilter {
         case .all: return .Strings.gallerySectionMediaCount(count)
         case .photos: return .Strings.gallerySectionPhotosCount(count)
@@ -92,6 +98,8 @@ struct MediaGridView: View {
     }
     
     var body: some View {
+        let (displayFolders, displayPictures) = filterAndSortData()
+        
         ZStack(alignment: .bottom) {
             Group {
                 if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
@@ -109,7 +117,7 @@ struct MediaGridView: View {
                             .buttonStyle(.borderedProminent)
                         }
                     }
-                } else if !searchText.isEmpty && filteredPictures.isEmpty && filteredFolders.isEmpty {
+                } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
                     ContentUnavailableView(
@@ -120,12 +128,15 @@ struct MediaGridView: View {
                 } else {
                     switch viewMode {
                     case .grid:
-                        gridContent
+                        gridContent(folders: displayFolders, pictures: displayPictures)
+                            .transition(.opacity)
                     case .list:
-                        listContent
+                        listContent(folders: displayFolders, pictures: displayPictures)
+                            .transition(.opacity)
                     }
                 }
             }
+            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
             
             // Bottom Action Bar when in Selection Mode
             if isSelectionMode {
@@ -135,6 +146,7 @@ struct MediaGridView: View {
                     isProcessing: isBatchProcessing,
                     progressMessage: batchProgressMessage,
                     showSaveToPhotos: manager.currentLocation?.kind != .photos,
+                    onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
                     onShare: { batchShare() }
@@ -176,8 +188,8 @@ struct MediaGridView: View {
         .toolbar {
             if isSelectionMode {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
-                        toggleAllSelection()
+                    Button(selectedItems.count == displayPictures.count && !displayPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
+                        toggleAllSelection(for: displayPictures)
                     }
                 }
                 
@@ -198,7 +210,7 @@ struct MediaGridView: View {
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
-                        if !filteredPictures.isEmpty {
+                        if !displayPictures.isEmpty {
                             Button(.Strings.galleryButtonSelect) {
                                 withAnimation {
                                     isSelectionMode = true
@@ -207,10 +219,10 @@ struct MediaGridView: View {
                         }
                         
                         // Slideshow trigger & duration menu
-                        if !filteredPictures.isEmpty {
+                        if !displayPictures.isEmpty {
                             Menu {
                                 Button {
-                                    onStartSlideshow?()
+                                    onStartSlideshow?(displayPictures)
                                 } label: {
                                     Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
                                 }
@@ -236,14 +248,14 @@ struct MediaGridView: View {
                             } label: {
                                 Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
                             } primaryAction: {
-                                onStartSlideshow?()
+                                onStartSlideshow?(displayPictures)
                             }
                         }
                         
                         // Unified View, Sort & Grid Size Menu
                         Menu {
                             Section(.Strings.galleryMenuLayout) {
-                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode) {
+                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
                                     Label(.Strings.galleryViewModeGrid, systemImage: "square.grid.2x2").tag(ViewMode.grid)
                                     Label(.Strings.galleryViewModeList, systemImage: "list.bullet").tag(ViewMode.list)
                                 }
@@ -337,11 +349,58 @@ struct MediaGridView: View {
                 }
             }
         }
+        .task {
+            await manager.refreshMediaCacheSize()
+        }
+        .onDisappear {
+            batchTask?.cancel()
+            batchTask = nil
+        }
+        .background {
+            // Hardware Keyboard Shortcuts for iPad and Mac
+            Group {
+                // Space: Start slideshow of pictures in current folder
+                Button("") {
+                    if !displayPictures.isEmpty {
+                        onStartSlideshow?(displayPictures)
+                    }
+                }
+                .keyboardShortcut(.space, modifiers: [])
+                
+                // Escape: Cancel batch selection mode
+                Button("") {
+                    if isSelectionMode {
+                        withAnimation {
+                            isSelectionMode = false
+                            selectedItems.removeAll()
+                            cancelBatchTask()
+                        }
+                    }
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                
+                // Cmd+A: Select All / Deselect All (when in selection mode)
+                Button("") {
+                    if isSelectionMode {
+                        toggleAllSelection(for: displayPictures)
+                    } else if !displayPictures.isEmpty {
+                        withAnimation {
+                            isSelectionMode = true
+                            selectedItems = Set(displayPictures)
+                        }
+                    }
+                }
+                .keyboardShortcut("a", modifiers: [.command])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
     }
     
     // MARK: - Grid Mode
     
-    private var gridContent: some View {
+    @ViewBuilder
+    private func gridContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 Color.clear
@@ -349,15 +408,15 @@ struct MediaGridView: View {
                     .id("topOfGrid")
                 
                 VStack(alignment: .leading, spacing: 16) {
-                    if !filteredFolders.isEmpty {
+                    if !folders.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(.Strings.gallerySectionSubfoldersCount(filteredFolders.count))
+                            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal, 12)
                             
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
-                                ForEach(filteredFolders) { subfolder in
+                                ForEach(folders) { subfolder in
                                     Button {
                                         onSelectFolder?(subfolder)
                                     } label: {
@@ -391,10 +450,10 @@ struct MediaGridView: View {
                         }
                     }
                     
-                    if !filteredPictures.isEmpty {
+                    if !pictures.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
-                                Text(mediaSectionHeader)
+                                Text(mediaSectionHeader(for: pictures.count))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundColor(.secondary)
                                 
@@ -407,7 +466,7 @@ struct MediaGridView: View {
                             .padding(.horizontal, 12)
                             
                             LazyVGrid(columns: gridColumns, spacing: 10) {
-                                ForEach(filteredPictures) { pic in
+                                ForEach(pictures) { pic in
                                     MediaThumbnailCell(
                                         manager: manager,
                                         item: pic,
@@ -419,7 +478,7 @@ struct MediaGridView: View {
                                         if isSelectionMode {
                                             toggleSelection(for: pic)
                                         } else {
-                                            onSelectPicture(pic)
+                                            onSelectPicture(pic, pictures)
                                         }
                                     }
                                     .onLongPressGesture {
@@ -436,7 +495,7 @@ struct MediaGridView: View {
                             .padding(.horizontal, 12)
                             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
                         }
-                    } else if !filteredFolders.isEmpty {
+                    } else if !folders.isEmpty {
                         ContentUnavailableView(
                             String(localized: .Strings.galleryNoPicturesTitle),
                             systemImage: "photo",
@@ -463,33 +522,50 @@ struct MediaGridView: View {
                     await manager.refreshSharesAndFolders()
                 }
             }
-            .simultaneousGesture(
-                MagnifyGesture()
-                    .onChanged { value in
-                        let scale = value.magnification
-                        let ratio = scale / lastPinchScale
-                        
-                        // Pinch out (fingers spreading) -> enlarge thumbnails
-                        if ratio > 1.25 {
-                            zoomInGrid()
-                            lastPinchScale = scale
-                        }
-                        // Pinch in (fingers coming together) -> shrink thumbnails
-                        else if ratio < 0.78 {
-                            zoomOutGrid()
-                            lastPinchScale = scale
-                        }
-                    }
-                    .onEnded { _ in
-                        lastPinchScale = 1.0
-                    }
-            )
+            .simultaneousGesture(pinchGesture)
         }
     }
     
-    // MARK: - Pinch Zoom Helpers
+    // MARK: - Pinch Gesture & Zoom Helpers
     
-    private func zoomInGrid() {
+    private var pinchGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let scale = value.magnification
+                let ratio = scale / lastPinchScale
+                
+                let now = Date()
+                guard now.timeIntervalSince(lastPinchTime) >= Self.pinchCooldownSeconds else { return }
+                
+                // Pinch out (fingers spreading) -> enlarge thumbnails / switch from list to compact
+                if ratio > Self.pinchZoomInRatioThreshold {
+                    zoomIn()
+                    lastPinchScale = scale
+                    lastPinchTime = now
+                }
+                // Pinch in (fingers coming together) -> shrink thumbnails / switch from compact to list
+                else if ratio < Self.pinchZoomOutRatioThreshold {
+                    zoomOut()
+                    lastPinchScale = scale
+                    lastPinchTime = now
+                }
+            }
+            .onEnded { _ in
+                lastPinchScale = 1.0
+            }
+    }
+    
+    private func zoomIn() {
+        if viewMode == .list {
+            // Stage progression: List -> Compact Grid
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                viewMode = .grid
+                gridSize = .compact
+            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            return
+        }
+        
         switch gridSize {
         case .compact:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
@@ -502,7 +578,12 @@ struct MediaGridView: View {
         }
     }
     
-    private func zoomOutGrid() {
+    private func zoomOut() {
+        if viewMode == .list {
+            // Already at the most compact stage
+            return
+        }
+        
         switch gridSize {
         case .large:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
@@ -511,18 +592,23 @@ struct MediaGridView: View {
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .compact
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         case .compact:
-            break
+            // Stage progression: Compact Grid -> List
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                viewMode = .list
+            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
     }
     
     // MARK: - List Mode
     
-    private var listContent: some View {
+    @ViewBuilder
+    private func listContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
         ScrollViewReader { proxy in
             List {
-                if !filteredFolders.isEmpty {
-                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(filteredFolders.count))) {
-                        ForEach(filteredFolders) { subfolder in
+                if !folders.isEmpty {
+                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(folders.count))) {
+                        ForEach(folders) { subfolder in
                             Button {
                                 onSelectFolder?(subfolder)
                             } label: {
@@ -550,14 +636,14 @@ struct MediaGridView: View {
                     .id("topOfList")
                 }
                 
-                if !filteredPictures.isEmpty {
-                    Section(String(localized: mediaSectionHeader)) {
-                        ForEach(filteredPictures) { pic in
+                if !pictures.isEmpty {
+                    Section(String(localized: mediaSectionHeader(for: pictures.count))) {
+                        ForEach(pictures) { pic in
                             Button {
                                 if isSelectionMode {
                                     toggleSelection(for: pic)
                                 } else {
-                                    onSelectPicture(pic)
+                                    onSelectPicture(pic, pictures)
                                 }
                             } label: {
                                 MediaListRowCell(
@@ -581,7 +667,7 @@ struct MediaGridView: View {
                             )
                         }
                     }
-                    .id(filteredFolders.isEmpty ? "topOfList" : "picturesSection")
+                    .id(folders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
             .id(currentDirectoryID)
@@ -600,6 +686,7 @@ struct MediaGridView: View {
                     await manager.refreshSharesAndFolders()
                 }
             }
+            .simultaneousGesture(pinchGesture)
         }
     }
     
@@ -614,11 +701,11 @@ struct MediaGridView: View {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
     
-    private func toggleAllSelection() {
-        if selectedItems.count == filteredPictures.count && !filteredPictures.isEmpty {
+    private func toggleAllSelection(for pictures: [MediaItem]) {
+        if selectedItems.count == pictures.count && !pictures.isEmpty {
             selectedItems.removeAll()
         } else {
-            selectedItems = Set(filteredPictures)
+            selectedItems = Set(pictures)
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
@@ -641,70 +728,181 @@ struct MediaGridView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
     
+    /// Cancels any currently active batch save or batch share operation.
+    private func cancelBatchTask() {
+        batchTask?.cancel()
+        batchTask = nil
+        isBatchProcessing = false
+        batchProgressMessage = nil
+    }
+    
+    /// Exports selected media files to the user's Photos library concurrently (up to 3 parallel workers).
     private func batchSaveToPhotos() {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
         isBatchProcessing = true
+        batchTask?.cancel()
         
-        Task {
+        batchTask = Task { @MainActor in
+            var completedCount = 0
             var savedCount = 0
-            for (idx, item) in items.enumerated() {
-                batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(idx + 1, items.count))
-                do {
-                    if item.isVideo {
-                        let localURL = try await manager.fetchVideoURL(for: item)
-                        try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
-                    } else {
-                        if let image = await manager.downloadImage(for: item) {
-                            try await PhotoLibrarySaver.saveImageToPhotos(image)
+            var failedCount = 0
+            let total = items.count
+            
+            // Bounded concurrency pool (up to 3 parallel downloads to maximize network throughput without saturating memory)
+            await withTaskGroup(of: Bool.self) { group in
+                var iterator = items.makeIterator()
+                let maxConcurrent = 3
+                
+                // Seed initial workers
+                for _ in 0..<min(maxConcurrent, total) {
+                    if let nextItem = iterator.next() {
+                        group.addTask { [manager = self.manager] in
+                            await self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                         }
                     }
-                    savedCount += 1
-                } catch {
-                    AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
                 }
+                
+                // As each worker finishes, update progress and schedule the next queued item
+                while let success = await group.next() {
+                    guard !Task.isCancelled else { break }
+                    completedCount += 1
+                    if success {
+                        savedCount += 1
+                    } else {
+                        failedCount += 1
+                    }
+                    batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(completedCount, total))
+                    
+                    if let nextItem = iterator.next() {
+                        group.addTask { [manager = self.manager] in
+                            await self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
+                        }
+                    }
+                }
+            }
+            
+            guard !Task.isCancelled else {
+                isBatchProcessing = false
+                batchProgressMessage = nil
+                return
             }
             
             isBatchProcessing = false
             batchProgressMessage = nil
+            
             withAnimation {
-                batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
+                if failedCount > 0 && savedCount > 0 {
+                    batchStatusToast = String(localized: "Saved \(savedCount) of \(total) items to Photos", comment: "Toast message when batch save completes with partial failures")
+                } else if failedCount > 0 && savedCount == 0 {
+                    batchStatusToast = String(localized: "Failed to save items to Photos", comment: "Toast message when batch save fails completely")
+                } else {
+                    batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
+                }
                 isSelectionMode = false
                 selectedItems.removeAll()
             }
             
             try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
             withAnimation {
                 batchStatusToast = nil
             }
         }
     }
     
+    private nonisolated func saveSingleMediaItemToPhotos(_ item: MediaItem, manager: SMBDirectManager) async -> Bool {
+        do {
+            if item.isVideo {
+                let localURL = try await manager.fetchVideoURL(for: item)
+                try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+            } else {
+                guard let image = await manager.downloadImage(for: item) else {
+                    return false
+                }
+                try await PhotoLibrarySaver.saveImageToPhotos(image)
+            }
+            return true
+        } catch {
+            AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    /// Prepares selected media items for the system share sheet concurrently.
     private func batchShare() {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
         isBatchProcessing = true
         batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
+        batchTask?.cancel()
         
-        Task {
+        batchTask = Task { @MainActor in
             var shareables: [Any] = []
-            for item in items {
-                if item.isVideo {
-                    if let localURL = try? await manager.fetchVideoURL(for: item) {
-                        shareables.append(localURL)
-                    }
-                } else {
-                    if let image = await manager.downloadImage(for: item) {
-                        shareables.append(image)
+            let total = items.count
+            var completedCount = 0
+            
+            // Use bounded concurrent workers to fetch and prepare shareables while preserving selection order
+            await withTaskGroup(of: (Int, Any?).self) { group in
+                let itemQueue = Array(items.enumerated())
+                var queueIndex = 0
+                let maxConcurrent = 3
+                
+                for _ in 0..<min(maxConcurrent, total) {
+                    if queueIndex < itemQueue.count {
+                        let (idx, item) = itemQueue[queueIndex]
+                        queueIndex += 1
+                        group.addTask { [manager = self.manager] in
+                            let result = await self.prepareSingleItemForShare(item, manager: manager)
+                            return (idx, result)
+                        }
                     }
                 }
+                
+                var indexedResults: [(Int, Any)] = []
+                while let (idx, result) = await group.next() {
+                    guard !Task.isCancelled else { break }
+                    completedCount += 1
+                    batchProgressMessage = "\(String(localized: .Strings.galleryBatchPreparingShare)) (\(completedCount)/\(total))"
+                    
+                    if let result {
+                        indexedResults.append((idx, result))
+                    }
+                    
+                    if queueIndex < itemQueue.count {
+                        let (nextIdx, nextItem) = itemQueue[queueIndex]
+                        queueIndex += 1
+                        group.addTask { [manager = self.manager] in
+                            let nextResult = await self.prepareSingleItemForShare(nextItem, manager: manager)
+                            return (nextIdx, nextResult)
+                        }
+                    }
+                }
+                
+                indexedResults.sort { $0.0 < $1.0 }
+                shareables = indexedResults.map { $0.1 }
             }
+            
+            guard !Task.isCancelled else {
+                isBatchProcessing = false
+                batchProgressMessage = nil
+                return
+            }
+            
             isBatchProcessing = false
             batchProgressMessage = nil
             
             if !shareables.isEmpty {
                 self.shareSheetItems = shareables
             }
+        }
+    }
+    
+    private nonisolated func prepareSingleItemForShare(_ item: MediaItem, manager: SMBDirectManager) async -> Any? {
+        if item.isVideo {
+            return try? await manager.fetchVideoURL(for: item)
+        } else {
+            return await manager.downloadImage(for: item)
         }
     }
 }
