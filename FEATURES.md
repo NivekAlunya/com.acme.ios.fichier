@@ -231,12 +231,12 @@ flowchart TD
 ## 7. Storage, Caching & Performance
 
 - **Two-Tier Cache Architecture**:
-  - **Memory Cache (`NSCache`)**: Fast LRU RAM cache for immediate scrolling and instantaneous UI updates.
-  - **Disk Cache (`MediaCacheManager`)**: Persistent disk cache with real-time size computation and one-tap manual cache clearing.
+  - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: Fast LRU in-memory RAM cache with `@unchecked Sendable` isolation over `NSCache` for immediate scrolling and instantaneous UI updates.
+  - **Standardized Master Disk Cache (`MediaCacheManager`)**: Persistent disk cache standardizing on a single 420px master thumbnail dimension (`standardThumbnailDimension`) to eliminate redundant re-encodings across grid sizes, with background FIFO eviction and one-tap manual cache clearing.
 - **Actor-Isolated SMB Concurrency (`SMBClientActor`)**:
   - Encapsulates C-based SMB protocol engine (`libsmb2`) within a dedicated Swift Actor to guarantee absolute thread safety without deadlocks or race conditions.
 - **Concurrency Throttling (`VideoThumbnailLimiter`)**:
-  - Prevents network saturation by limiting concurrent video thumbnail generation requests.
+  - Prevents network saturation by strictly limiting concurrent video thumbnail generation requests to 2, ensuring the SMB socket remains responsive for active playback.
 
 ---
 
@@ -246,4 +246,4 @@ flowchart TD
   - Built strictly using `actor`, `async/await`, `Task`, `@MainActor`, and `Sendable`.
   - Zero legacy synchronization primitives (no `NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`, or GCD queues).
 - **Strict Single Definition Rule**:
-  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file.
+  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (exactly 65 modular files).

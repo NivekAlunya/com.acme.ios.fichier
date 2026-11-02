@@ -22,7 +22,7 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
   - Filter by **All**, **Photos Only**, **Videos Only**, or **Favorites**.
   - Sort by **Name**, **Date Modified**, or **File Size** (ascending / descending).
   - Contextual photo and video paging preserves the user's active filter and sort order.
-- **29 Supported Media Formats**: Full support for standard formats (JPEG, PNG, HEIC, GIF, WebP, MP4, MOV, MKV, AVI) and professional Camera RAW formats (DNG, CR2, NEF, ARW, RW2, AVIF, JP2).
+- **31 Supported Media Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), and native streaming video (MP4, MOV, M4V). Extended containers (MKV, AVI, WebM) are specified in [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
 - **Multi-Selection & Batch Actions**: Batch AirDrop / Share Sheet export and batch save to Apple Photos (`MediaSelectionBottomBar`).
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
 
@@ -46,15 +46,28 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Speed Control & Resume**: Multi-speed playback (0.5x to 2.0x) and automatic position resumption (`VideoPlaybackStore`).
 
 ### ⚡ Two-Tier Caching System
-- **Memory Cache (`NSCache`)**: In-memory LRU cache for immediate UI responsiveness.
-- **Bounded Disk Cache**: Persistent disk cache managed by `MediaCacheManager` with real-time size computation, background 300MB FIFO eviction, and one-tap manual cache purging.
+- **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: In-memory LRU cache wrapping `NSCache` with `@unchecked Sendable` isolation for immediate UI responsiveness.
+- **Bounded Disk Cache (`MediaCacheManager`)**: Persistent disk cache with a unified 420px master thumbnail dimension (`standardThumbnailDimension`) eliminating redundant re-encodings across grid sizes, real-time size computation, background 300MB FIFO eviction, and one-tap manual cache purging.
+
+```mermaid
+flowchart LR
+    Request[Thumbnail Request] --> Tier1{Tier 1: RAM Cache<br/>ThreadSafeMemoryCache}
+    Tier1 -- Hit (0ms) --> Render[Render UI]
+    Tier1 -- Miss --> Tier2{Tier 2: Disk Cache<br/>MediaCacheManager}
+    Tier2 -- Hit (2-5ms) --> Promote[Promote to Tier 1] --> Render
+    Tier2 -- Miss --> Remote[Fetch via SMBClientActor / LocalActor]
+    Remote --> Downsample[Downsample to 420px Standard]
+    Downsample --> SaveDisk[Save to Tier 2 Disk]
+    Downsample --> SaveRAM[Save to Tier 1 RAM]
+    Downsample --> Render
+```
 
 ---
 
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 63 independent, modular Swift files.
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 65 independent, modular Swift files.
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -144,7 +157,8 @@ fichier/
         ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
         ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
         ├── PictureEXIFBox.swift            # Sendable EXIF container box
-        ├── SupportedMediaTypes.swift       # Centralized 29 media format definitions
+        ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
+        ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
         ├── VideoPlaybackRecord.swift       # Persisted playback progress model
         ├── VideoPlaybackStatus.swift       # Playback status enum (unplayed, inProgress, finished)
         └── VideoPlaybackStore.swift        # Persistent playback position store
@@ -154,14 +168,41 @@ fichier/
 
 ```mermaid
 flowchart TD
-    UI[SwiftUI Views<br/>MainActor] <--> Manager[SMBDirectManager<br/>MainActor / Observable]
-    Manager <--> SMBActor[SMBClientActor<br/>Global Actor Isolation]
-    Manager <--> LocalActor[LocalStorageActor<br/>Actor Isolation]
-    Manager <--> PhotoActor[PhotoLibraryActor<br/>Actor Isolation]
-    SMBActor <--> AMSMB2[AMSMB2 / libsmb2 C Engine]
-    AMSMB2 <--> Network[(Remote SMB Share)]
-    AVPlayer[AVPlayer] <--> ResourceLoader[SMBResourceLoaderDelegate]
-    ResourceLoader <--> SMBActor
+    subgraph MainActorContext["@MainActor UI & State Layer"]
+        V[SwiftUI Views<br/>VideoDetailView, MediaGridView, etc.]
+        M[SMBDirectManager<br/>@Observable UI Coordinator]
+        S[VideoPlaybackStore<br/>@Observable Playback Store]
+        F[FavoritesManager<br/>@Observable Favorites Store]
+    end
+
+    subgraph ActorBoundaries["Actor-Isolated Workers"]
+        A_SMB[SMBClientActor<br/>libsmb2 C engine wrapper]
+        A_LOC[LocalStorageActor<br/>Security-scoped bookmark worker]
+        A_PH[PhotoLibraryActor<br/>PHPhotoLibrary worker]
+        A_LIM[VideoThumbnailLimiter<br/>Concurrency throttle (Max: 2)]
+        A_TRK[ResourceLoadingTaskTracker<br/>Streaming task registry]
+    end
+
+    subgraph NativeFrameworks["OS & Protocol Layer"]
+        C_LIB[libsmb2 / TCP 445]
+        C_AV[AVPlayer / AVAssetResourceLoader]
+        C_FS[Local Filesystem / iCloud Drive]
+        C_PH[PhotoKit API]
+    end
+
+    V <--> M
+    M <--> S
+    M <--> F
+
+    M <--> A_SMB
+    M <--> A_LOC
+    M <--> A_PH
+    M <--> A_LIM
+    C_AV <--> A_TRK
+
+    A_SMB <--> C_LIB
+    A_LOC <--> C_FS
+    A_PH <--> C_PH
 ```
 
 ### Video Seeking & Scrubbing Workflow
@@ -239,6 +280,48 @@ flowchart TD
     F2 -- "Yes" --> F4 --> F5
     F5 -- "Yes" --> F6 --> F7
     F5 -- "No" --> F7
+```
+
+#### Seek & Scrub Resumption Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant V as VideoDetailView (@MainActor)
+    participant P as AVPlayer
+    participant L as SMBResourceLoaderDelegate
+    participant S as SMBClientActor
+
+    User->>V: Drag Scrubber Knob / Swipe Screen
+    V->>V: Capture wasPlaying, isScrubbing = true
+    V->>P: pause() (temporary to save socket bandwidth)
+    
+    loop Live Scrubbing
+        User->>V: Move finger
+        V->>V: Pacing gate (100ms throttle)
+        V->>P: seek(to: target, tolerance: 0.5s-1.5s)
+    end
+
+    User->>V: Release Touch (Touch Ended)
+    V->>V: Increment seekGeneration (invalidates stale seeks)
+    V->>V: Set isFinishingSeek = true, isPlaying = true, isBuffering = true
+    V->>P: play()
+    V->>P: seek(to: finalTarget, tolerance: 1.0s)
+    
+    P->>L: Resource Loader byte-range request (512 KB)
+    L->>S: fetchMediaRange(chunk: 512KB)
+    S-->>L: Return binary chunk
+    L-->>P: respond(with: data)
+    
+    P-->>V: Seek Completion Callback
+    alt thisGen == seekGeneration
+        V->>V: isFinishingSeek = false
+        V->>P: Confirm player.play() if paused
+        V->>V: isBuffering = false (when timeControlStatus == .playing)
+    else thisGen < seekGeneration
+        V->>V: Ignore obsolete completion
+    end
 ```
 
 ---
