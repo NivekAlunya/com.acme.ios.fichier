@@ -973,8 +973,8 @@ public struct VideoDetailView: View {
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         currentPlaybackSeconds = targetSeconds
         
-        // Use 0.2s tolerance for seamless playback continuation, or .zero for stationary frame inspection
-        let tolerance: CMTime = resumePlaying ? CMTime(seconds: 0.2, preferredTimescale: 600) : .zero
+        // Use 0.35s tolerance for seamless playback continuation without seek stalls, or .zero for stationary frame inspection
+        let tolerance: CMTime = resumePlaying ? CMTime(seconds: 0.35, preferredTimescale: 600) : .zero
         
         // Fail-safe watchdog: ensure buffering indicator and playback state recover within 800ms
         seekWatchdogTask = Task { @MainActor in
@@ -1390,7 +1390,8 @@ public struct VideoDetailView: View {
                 case .waitingToPlayAtSpecifiedRate:
                     if waitingStartTime == nil {
                         waitingStartTime = Date()
-                    } else if let start = waitingStartTime, Date().timeIntervalSince(start) > 0.35 {
+                    } else if let start = waitingStartTime, Date().timeIntervalSince(start) > 0.85 {
+                        // Allow 850ms of grace time for AVPlayer to fill audio/video buffers before showing buffering popup
                         if !self.isBuffering && !self.isScrubbingTimeline && !self.isScrubbingWithGesture {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 self.isBuffering = true

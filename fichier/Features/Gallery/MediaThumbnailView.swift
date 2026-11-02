@@ -83,23 +83,21 @@ public struct MediaThumbnailView: View {
             if item.isVideo {
                 let playbackStatus = VideoPlaybackStore.shared.status(for: item)
                 
-                // Progress bar along the bottom edge
+                // Progress bar along the bottom edge (using scaleEffect instead of GeometryReader to prevent container expansion in list cells)
                 if case .inProgress(let progress) = playbackStatus, progress > 0 {
-                    GeometryReader { geo in
-                        let barWidth = geo.size.width
-                        let barHeight: CGFloat = isCompact ? 2.5 : 3.5
+                    let barHeight: CGFloat = isCompact ? 2.5 : 3.5
+                    VStack(spacing: 0) {
+                        Spacer()
                         ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(Color.black.opacity(0.4))
-                                .frame(height: barHeight)
+                            Color.black.opacity(0.4)
                             
-                            Rectangle()
-                                .fill(Color.blue)
-                                .frame(width: max(0, min(barWidth, barWidth * progress)), height: barHeight)
+                            Color.blue
+                                .scaleEffect(x: max(0, min(1, CGFloat(progress))), y: 1, anchor: .leading)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .frame(height: barHeight)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                    .allowsHitTesting(false)
                 }
                 
                 // Video Playback Status Badge (Bottom-Trailing)

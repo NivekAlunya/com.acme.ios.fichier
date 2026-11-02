@@ -518,12 +518,14 @@ public final class SMBDirectManager {
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+            return cached
+        }
+        
         // Photos Library asset thumbnail
         if item.phAssetIdentifier != nil {
-            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) {
-                return cached
-            }
             if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                 return thumb
@@ -533,20 +535,15 @@ public final class SMBDirectManager {
         
         // Local or iCloud Drive file thumbnail
         if item.localURL != nil {
-            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) {
-                return cached
-            }
-            
             // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
             let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
-            let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
                 path: subPath,
                 dimension: maxDimension,
                 connectionID: item.connectionID
             )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
+            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
                 worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
                 return diskCached
             }
@@ -565,32 +562,27 @@ public final class SMBDirectManager {
             return nil
         }
         
-        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) {
-            return cached
-        }
-        
         // Video thumbnail streaming & caching
         if item.isVideo {
-            let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
                 path: "\(item.path)_vidstream_v7",
                 dimension: maxDimension,
                 connectionID: item.connectionID
             )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
+            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
                 worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
                 return diskCached
             }
             
             guard !Task.isCancelled else { return nil }
             
-            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 10.0s with 0.0s fallback)
+            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 12.0s with 0.0s fallback)
             if MediaCacheManager.shared.hasCachedVideo(for: item) {
                 let localURL = MediaCacheManager.shared.localVideoURL(for: item)
                 if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
                     from: localURL,
-                    maxDimension: maxDimension
+                    maxDimension: MediaCacheManager.standardThumbnailDimension
                 ) {
                     worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                     MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
@@ -603,7 +595,7 @@ public final class SMBDirectManager {
             try? await Task.sleep(for: .milliseconds(60))
             guard !Task.isCancelled else { return nil }
             
-            if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension) {
+            if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                 MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
@@ -615,13 +607,13 @@ public final class SMBDirectManager {
         }
         
         // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
-        let (photoDiskKey, photoFallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+        let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey) {
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey, legacyKey: photoLegacyKey) {
             worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
             return diskCached
         }
@@ -629,7 +621,11 @@ public final class SMBDirectManager {
         try? await Task.sleep(for: .milliseconds(40))
         guard !Task.isCancelled else { return nil }
         
-        return await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+        let thumb = await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+        if let thumb {
+            worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+        }
+        return thumb
     }
     
     // MARK: - Streaming Helpers
@@ -655,8 +651,9 @@ public final class SMBDirectManager {
             if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                 return nil
             }
-            let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = self.worker.getCachedThumbnail(forKey: memoryCacheKey) {
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
+            let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+            if let cached = self.worker.getCachedThumbnail(forKey: memoryCacheKey) ?? self.worker.getCachedThumbnail(forKey: legacyMemoryKey) {
                 return cached
             }
             
@@ -666,14 +663,15 @@ public final class SMBDirectManager {
             }
             
             let asset = AVURLAsset(url: streamURL)
-            // Use an optimized 512 KB chunk size for thumbnail probing to read movie container headers in fewer SMB roundtrips
-            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 512 * 1024)
+            // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
+            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
+            let standardDim = MediaCacheManager.standardThumbnailDimension
+            generator.maximumSize = CGSize(width: standardDim, height: standardDim)
             generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
             generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
             

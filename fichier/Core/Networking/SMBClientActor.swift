@@ -187,26 +187,27 @@ actor SMBClientActor {
     
     /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
     /// If expectedFolderID doesn't match the current activeFolderID, it bails immediately.
-    func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = 260) async -> UIImage? {
+    func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
         }
         
-        // 1. In-Memory RAM Cache check (Tier 1)
-        let memoryCacheKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = thumbnailCache.object(forKey: memoryCacheKey) {
+        // 1. In-Memory RAM Cache check (Tier 1) - unified across all view modes
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        if let cached = thumbnailCache.object(forKey: memoryCacheKey) ?? thumbnailCache.object(forKey: legacyMemoryKey) {
             return cached
         }
         
         // 2. Persistent On-Disk Cache check (Tier 2 - Bypasses Wi-Fi / SMB completely!)
-        let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: item.path,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey) {
+        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
             thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
             return diskCached
         }
@@ -239,8 +240,9 @@ actor SMBClientActor {
             }
             
             // Offload CPU-bound image downsampling and disk caching off the actor lock
+            // Standardize downsampling to master thumbnail dimension (420px)
             let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                guard let decoded = Self.downsample(data: data, maxDimension: maxDimension) ?? AnimatedImageDecoder.decode(from: data) else {
+                guard let decoded = Self.downsample(data: data, maxDimension: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
                     return nil
                 }
                 MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
@@ -299,14 +301,18 @@ actor SMBClientActor {
         MediaCacheManager.shared.evictVideosIfNeeded(keeping: [localURL])
         
         // Upgrade thumbnail cache with real video frame now that it's downloaded
-        let diskKey = MediaCacheManager.shared.cacheKey(
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: "\(item.path)_vidstream_v7",
-            dimension: 260,
+            dimension: MediaCacheManager.standardThumbnailDimension,
             connectionID: item.connectionID
         )
-        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: localURL, maxDimension: 260, preferredTime: MediaCacheManager.defaultVideoThumbnailTime) {
-            let memoryCacheKey = "\(item.id)_thumb_260" as NSString
+        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
+            from: localURL,
+            maxDimension: MediaCacheManager.standardThumbnailDimension,
+            preferredTime: MediaCacheManager.defaultVideoThumbnailTime
+        ) {
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
         }

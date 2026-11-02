@@ -35,9 +35,15 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
+    // MARK: - Thumbnail Master Dimension
+    
+    /// The universal master dimension (in pixels) for all thumbnails cached on disk.
+    /// Eliminates redundant SMB fetches and re-encodings across List, Compact, Medium, and Large view modes.
+    public static let standardThumbnailDimension: CGFloat = 420
+    
     // MARK: - Key Hashing
     
-    public func cacheKey(for shareName: String, path: String, dimension: CGFloat, connectionID: String = "") -> String {
+    public func cacheKey(for shareName: String, path: String, dimension: CGFloat = MediaCacheManager.standardThumbnailDimension, connectionID: String = "") -> String {
         let raw: String
         if connectionID.isEmpty {
             raw = "\(shareName)::\(path)_\(Int(dimension))"
@@ -59,15 +65,22 @@ nonisolated public final class MediaCacheManager: Sendable {
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
-    public func thumbnailKeys(for shareName: String, path: String, dimension: CGFloat, connectionID: String = "") -> (primary: String, fallback: String?) {
-        let primary = cacheKey(for: shareName, path: path, dimension: dimension, connectionID: connectionID)
-        let fallback = !connectionID.isEmpty ? cacheKey(for: shareName, path: path, dimension: dimension, connectionID: "") : nil
-        return (primary, fallback)
+    public func thumbnailKeys(
+        for shareName: String,
+        path: String,
+        dimension: CGFloat = MediaCacheManager.standardThumbnailDimension,
+        connectionID: String = ""
+    ) -> (primary: String, fallback: String?, legacyDimensionKey: String?) {
+        let standardDim = Self.standardThumbnailDimension
+        let primary = cacheKey(for: shareName, path: path, dimension: standardDim, connectionID: connectionID)
+        let fallback = !connectionID.isEmpty ? cacheKey(for: shareName, path: path, dimension: standardDim, connectionID: "") : nil
+        let legacyDimKey = (Int(dimension) != Int(standardDim)) ? cacheKey(for: shareName, path: path, dimension: dimension, connectionID: connectionID) : nil
+        return (primary, fallback, legacyDimKey)
     }
     
     // MARK: - Thumbnail Disk Cache
     
-    public func getThumbnail(for key: String, fallbackKey: String? = nil) -> UIImage? {
+    public func getThumbnail(for key: String, fallbackKey: String? = nil, legacyKey: String? = nil) -> UIImage? {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
         if fileManager.fileExists(atPath: fileURL.path),
            let data = try? Data(contentsOf: fileURL),
@@ -90,13 +103,23 @@ nonisolated public final class MediaCacheManager: Sendable {
             }
         }
         
+        // Fallback to older dimension-specific cache (e.g. 140, 200, 280) if standard 420 hasn't been generated yet
+        if let legacyKey, legacyKey != key, legacyKey != fallbackKey {
+            let legacyURL = thumbnailsDirectory.appendingPathComponent("\(legacyKey).jpg")
+            if fileManager.fileExists(atPath: legacyURL.path),
+               let data = try? Data(contentsOf: legacyURL),
+               let image = UIImage(data: data) {
+                return image
+            }
+        }
+        
         return nil
     }
     
-    public func getThumbnailAsync(for key: String, fallbackKey: String? = nil) async -> UIImage? {
+    public func getThumbnailAsync(for key: String, fallbackKey: String? = nil, legacyKey: String? = nil) async -> UIImage? {
         await Task.detached(priority: .userInitiated) { [self] in
             guard !Task.isCancelled else { return nil }
-            return self.getThumbnail(for: key, fallbackKey: fallbackKey)
+            return self.getThumbnail(for: key, fallbackKey: fallbackKey, legacyKey: legacyKey)
         }.value
     }
     
@@ -152,13 +175,13 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     public func generateVideoThumbnail(
         from localURL: URL,
-        maxDimension: CGFloat,
+        maxDimension: CGFloat = standardThumbnailDimension,
         preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
+        generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
         generator.requestedTimeToleranceBefore = Self.defaultVideoThumbnailTolerance
         generator.requestedTimeToleranceAfter = Self.defaultVideoThumbnailTolerance
         

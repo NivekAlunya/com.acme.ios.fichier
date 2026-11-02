@@ -20,6 +20,13 @@ struct MediaGridView: View {
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
     @State private var searchText = ""
     @State private var lastPinchScale: CGFloat = 1.0
+    @State private var lastPinchTime: Date = .distantPast
+    
+    // MARK: - Pinch Gesture Configuration
+    // Increased distance thresholds to prevent accidental mode switches
+    private static let pinchZoomInRatioThreshold: CGFloat = 1.45
+    private static let pinchZoomOutRatioThreshold: CGFloat = 0.65
+    private static let pinchCooldownSeconds: TimeInterval = 0.30
     @State private var showFavoritesOnly = false
     @State private var mediaFilter: MediaFilter = .all
     @State private var isSelectionMode = false
@@ -122,11 +129,14 @@ struct MediaGridView: View {
                     switch viewMode {
                     case .grid:
                         gridContent(folders: displayFolders, pictures: displayPictures)
+                            .transition(.opacity)
                     case .list:
                         listContent(folders: displayFolders, pictures: displayPictures)
+                            .transition(.opacity)
                     }
                 }
             }
+            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
             
             // Bottom Action Bar when in Selection Mode
             if isSelectionMode {
@@ -245,7 +255,7 @@ struct MediaGridView: View {
                         // Unified View, Sort & Grid Size Menu
                         Menu {
                             Section(.Strings.galleryMenuLayout) {
-                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode) {
+                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
                                     Label(.Strings.galleryViewModeGrid, systemImage: "square.grid.2x2").tag(ViewMode.grid)
                                     Label(.Strings.galleryViewModeList, systemImage: "list.bullet").tag(ViewMode.list)
                                 }
@@ -512,33 +522,50 @@ struct MediaGridView: View {
                     await manager.refreshSharesAndFolders()
                 }
             }
-            .simultaneousGesture(
-                MagnifyGesture()
-                    .onChanged { value in
-                        let scale = value.magnification
-                        let ratio = scale / lastPinchScale
-                        
-                        // Pinch out (fingers spreading) -> enlarge thumbnails
-                        if ratio > 1.25 {
-                            zoomInGrid()
-                            lastPinchScale = scale
-                        }
-                        // Pinch in (fingers coming together) -> shrink thumbnails
-                        else if ratio < 0.78 {
-                            zoomOutGrid()
-                            lastPinchScale = scale
-                        }
-                    }
-                    .onEnded { _ in
-                        lastPinchScale = 1.0
-                    }
-            )
+            .simultaneousGesture(pinchGesture)
         }
     }
     
-    // MARK: - Pinch Zoom Helpers
+    // MARK: - Pinch Gesture & Zoom Helpers
     
-    private func zoomInGrid() {
+    private var pinchGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let scale = value.magnification
+                let ratio = scale / lastPinchScale
+                
+                let now = Date()
+                guard now.timeIntervalSince(lastPinchTime) >= Self.pinchCooldownSeconds else { return }
+                
+                // Pinch out (fingers spreading) -> enlarge thumbnails / switch from list to compact
+                if ratio > Self.pinchZoomInRatioThreshold {
+                    zoomIn()
+                    lastPinchScale = scale
+                    lastPinchTime = now
+                }
+                // Pinch in (fingers coming together) -> shrink thumbnails / switch from compact to list
+                else if ratio < Self.pinchZoomOutRatioThreshold {
+                    zoomOut()
+                    lastPinchScale = scale
+                    lastPinchTime = now
+                }
+            }
+            .onEnded { _ in
+                lastPinchScale = 1.0
+            }
+    }
+    
+    private func zoomIn() {
+        if viewMode == .list {
+            // Stage progression: List -> Compact Grid
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                viewMode = .grid
+                gridSize = .compact
+            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            return
+        }
+        
         switch gridSize {
         case .compact:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
@@ -551,7 +578,12 @@ struct MediaGridView: View {
         }
     }
     
-    private func zoomOutGrid() {
+    private func zoomOut() {
+        if viewMode == .list {
+            // Already at the most compact stage
+            return
+        }
+        
         switch gridSize {
         case .large:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
@@ -560,7 +592,11 @@ struct MediaGridView: View {
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .compact
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         case .compact:
-            break
+            // Stage progression: Compact Grid -> List
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                viewMode = .list
+            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         }
     }
     
@@ -650,6 +686,7 @@ struct MediaGridView: View {
                     await manager.refreshSharesAndFolders()
                 }
             }
+            .simultaneousGesture(pinchGesture)
         }
     }
     

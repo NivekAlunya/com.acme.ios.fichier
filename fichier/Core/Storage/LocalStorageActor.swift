@@ -191,23 +191,24 @@ public actor LocalStorageActor {
     
     /// Generates or loads a cached thumbnail for a local or iCloud file.
     /// Uses persistent on-disk caching (Tier 2) to avoid repeated AVAsset / CoreMedia decompression on local videos.
-    public func fetchThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
+    public func fetchThumbnail(for item: MediaItem, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
         guard let url = item.localURL else { return nil }
         
         // Check persistent disk cache before invoking heavy image/video decoding
         let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
-        let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: subPath,
             dimension: maxDimension,
             connectionID: item.connectionID
         )
-        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
             return diskCached
         }
         
+        let targetDimension = MediaCacheManager.standardThumbnailDimension
         if item.isVideo {
-            if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: maxDimension) {
+            if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: targetDimension) {
                 MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
@@ -216,7 +217,7 @@ public actor LocalStorageActor {
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxDimension
+                kCGImageSourceThumbnailMaxPixelSize: targetDimension
             ]
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
                   let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {

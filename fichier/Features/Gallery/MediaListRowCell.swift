@@ -39,6 +39,7 @@ struct MediaListRowCell: View {
                 isCompact: true
             )
             .frame(width: 52, height: 52)
+            .clipped()
             
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

@@ -32,7 +32,7 @@ enum GridSize: String, CaseIterable, Identifiable {
         switch self {
         case .compact: return 200
         case .medium: return 280
-        case .large: return 420
+        case .large: return MediaCacheManager.standardThumbnailDimension
         }
     }
     
