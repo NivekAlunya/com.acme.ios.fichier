@@ -58,6 +58,7 @@ public struct VideoDetailView: View {
     @State private var lastSeekTime: Date = Date.distantPast
     @State private var lastSeekTargetSeconds: Double = 0
     @State private var seekGeneration: Int = 0
+    @State private var isFinishingSeek: Bool = false
     @State private var stationarySeekTask: Task<Void, Never>?
     @State private var throttleSeekTask: Task<Void, Never>?
     @State private var seekWatchdogTask: Task<Void, Never>?
@@ -769,16 +770,18 @@ public struct VideoDetailView: View {
                 requestLiveFrameSeek(to: targetSeconds)
             },
             onScrubStateChanged: { isScrubbing in
-                isScrubbingTimeline = isScrubbing
                 if isScrubbing {
+                    guard !isScrubbingTimeline else { return }
+                    isScrubbingTimeline = true
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player?.timeControlStatus != .paused)
+                    wasPlayingBeforeScrub = (player?.timeControlStatus != .paused) || isPlaying
                     if wasPlayingBeforeScrub {
                         player?.pause()
                         isPlaying = false
                     }
                 } else {
+                    isScrubbingTimeline = false
                     scheduleControlsAutoHide()
                 }
             }
@@ -803,7 +806,7 @@ public struct VideoDetailView: View {
                     isScrubbingWithGesture = true
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player.timeControlStatus != .paused)
+                    wasPlayingBeforeScrub = (player.timeControlStatus != .paused) || isPlaying
                     if wasPlayingBeforeScrub {
                         player.pause()
                         isPlaying = false
@@ -839,47 +842,51 @@ public struct VideoDetailView: View {
     
     // MARK: - Live Frame Seeking While Scrubbing
     
+    /// Returns adaptive tolerance for live timeline scrubbing.
+    /// CRITICAL: Over an SMB network share, tight tolerances (< 0.5s) force AVPlayer to decode
+    /// all preceding P/B frames up from the nearest keyframe, generating dozens of byte requests.
+    /// Using keyframe tolerances (0.5s - 1.5s) allows AVPlayer to snap directly to I-frames in a single read.
     private func liveSeekTolerance(for targetSeconds: Double) -> CMTime {
         let delta = abs(targetSeconds - lastSeekTargetSeconds)
-        if delta < 0.75 {
-            return CMTime(seconds: 0.04, preferredTimescale: 600)
-        } else if delta < 3.0 {
-            return CMTime(seconds: 0.35, preferredTimescale: 600)
-        } else if delta < 10.0 {
+        if delta < 1.0 {
+            return CMTime(seconds: 0.5, preferredTimescale: 600)
+        } else if delta < 5.0 {
             return CMTime(seconds: 1.5, preferredTimescale: 600)
         } else {
             return .positiveInfinity
         }
     }
     
+    /// Dispatches live frame preview updates during active timeline dragging.
+    /// NOTE: Do NOT reduce `minInterval` below 100ms (10 fps) or decrease stationary hold below 250ms.
+    /// Pacing seeks at ~60fps (16ms) saturates the serial SMB socket with cancelled range requests,
+    /// causing severe network backpressure and playback freezes when scrubbing finishes.
     private func requestLiveFrameSeek(to targetSeconds: Double) {
         let now = Date()
         let elapsed = now.timeIntervalSince(lastSeekTime)
         
         // 1. Reset stationary debounce timer on any movement.
-        // When the user stops moving their finger (holding stationary without lifting),
-        // after 120ms this task triggers an exact zero-tolerance seek to display the exact frame.
+        // Wait 250ms of stationary hold before executing an exact zero-tolerance frame seek.
         stationarySeekTask?.cancel()
         stationarySeekTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             performStationaryExactSeek(to: targetSeconds)
         }
         
-        // 2. If a seek is in flight, buffer the latest target unless the in-flight seek is stale (>= 85ms),
-        // in which case we preempt the stale seek immediately so fast scrubbing samples more frames.
-        if isSeekingFrame && elapsed < 0.085 {
+        // 2. If a seek is in flight, buffer the latest target unless the in-flight seek is stale (>= 120ms)
+        if isSeekingFrame && elapsed < 0.12 {
             pendingSeekSeconds = targetSeconds
             return
         }
         
-        // 3. Pace live intermediate seeks at ~60fps (16ms) to sample maximum frames without flooding AVPlayer
-        let minInterval: TimeInterval = 0.016
+        // 3. Pace live intermediate seeks at ~100ms (10fps max) to prevent saturating the SMB socket
+        let minInterval: TimeInterval = 0.10
         
         if elapsed < minInterval {
             pendingSeekSeconds = targetSeconds
             if throttleSeekTask == nil {
-                let remaining = max(0.005, minInterval - elapsed)
+                let remaining = max(0.01, minInterval - elapsed)
                 throttleSeekTask = Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(Int(remaining * 1000)))
                     guard !Task.isCancelled else { return }
@@ -893,7 +900,7 @@ public struct VideoDetailView: View {
             return
         }
         
-        // 4. Dispatch live seek with adaptive tolerance for high-rate visual feedback while moving
+        // 4. Dispatch live seek with keyframe tolerance for high-rate visual feedback while moving
         executeLiveSeek(to: targetSeconds, tolerance: liveSeekTolerance(for: targetSeconds))
     }
     
@@ -954,6 +961,18 @@ public struct VideoDetailView: View {
         }
     }
     
+    /// Finalizes a scrub gesture or jumps to an absolute timestamp on the timeline.
+    ///
+    /// CRITICAL ARCHITECTURAL RULES (DO NOT MODIFY CASUALLY):
+    /// 1. `tolerance`: When resuming playback (`resumePlaying == true`), tolerance is kept at `1.0s`.
+    ///    Using `.zero` forces AVPlayer to decode dozens of P/B frames over SMB before rendering,
+    ///    causing severe latency and buffering popups. 1.0s snaps directly to the nearest keyframe.
+    /// 2. `resumePlaying`: Do NOT guard `player.play()` behind AVPlayer seek's `completed` boolean!
+    ///    AVFoundation returns `completed == false` whenever seeks coalesce or land with keyframe tolerance.
+    ///    `guard thisGeneration == self.seekGeneration` already protects against obsolete seeks.
+    /// 3. `isFinishingSeek`: Setting this flag protects `isPlaying = true` from being clobbered by
+    ///    `startContinuousPlaybackMonitoring` or `periodicTimeObserver` while AVPlayer transitions through
+    ///    `.waitingToPlayAtSpecifiedRate` over the network share.
     private func finishSeeking(at targetSeconds: Double, resumePlaying: Bool) {
         stationarySeekTask?.cancel()
         stationarySeekTask = nil
@@ -973,22 +992,24 @@ public struct VideoDetailView: View {
         let targetCM = CMTime(seconds: targetSeconds, preferredTimescale: 600)
         currentPlaybackSeconds = targetSeconds
         
-        // Use 0.35s tolerance for seamless playback continuation without seek stalls, or .zero for stationary frame inspection
-        let tolerance: CMTime = resumePlaying ? CMTime(seconds: 0.35, preferredTimescale: 600) : .zero
+        // 1.0s tolerance allows instant lock to nearest keyframe over SMB network shares
+        let tolerance: CMTime = resumePlaying ? CMTime(seconds: 1.0, preferredTimescale: 600) : .zero
         
-        // Fail-safe watchdog: ensure buffering indicator and playback state recover within 800ms
-        seekWatchdogTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(800))
-            guard !Task.isCancelled, thisGeneration == self.seekGeneration else { return }
-            if self.isBuffering {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.isBuffering = false
-                }
+        if resumePlaying {
+            isFinishingSeek = true
+            self.isPlaying = true
+            player.play()
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.isBuffering = true
             }
+        }
+        
+        // Fail-safe watchdog: ensures playback resumes if AVPlayer stalled in paused state during seek
+        seekWatchdogTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, thisGeneration == self.seekGeneration else { return }
             if resumePlaying && player.timeControlStatus != .playing {
                 player.play()
-                self.isPlaying = true
-                self.scheduleControlsAutoHide()
             }
         }
         
@@ -997,14 +1018,19 @@ public struct VideoDetailView: View {
                 guard thisGeneration == self.seekGeneration else { return }
                 self.seekWatchdogTask?.cancel()
                 self.seekWatchdogTask = nil
-                
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    self.isBuffering = false
-                }
+                self.isFinishingSeek = false
                 
                 if resumePlaying {
-                    player.play()
+                    if player.timeControlStatus == .paused {
+                        player.play()
+                    }
                     self.isPlaying = true
+                }
+                
+                if player.timeControlStatus == .playing || player.currentItem?.isPlaybackLikelyToKeepUp == true {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.isBuffering = false
+                    }
                 }
                 self.scheduleControlsAutoHide()
             }
@@ -1072,7 +1098,8 @@ public struct VideoDetailView: View {
         let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
         let maxLimit = dur > 0 ? dur : max(current + deltaSeconds, 0)
         let newTarget = min(max(0, current + deltaSeconds), maxLimit)
-        seekTo(newTarget, resumePlaying: isPlaying)
+        let resume = (player?.timeControlStatus != .paused) || isPlaying
+        seekTo(newTarget, resumePlaying: resume)
         withAnimation {
             showControls = true
         }
@@ -1315,13 +1342,18 @@ public struct VideoDetailView: View {
             
             let asset = AVURLAsset(url: streamURL)
             self.currentAsset = asset
-            let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem)
+            // PERFORMANCE: Use 512 KB streaming chunk size for video playback over SMB.
+            // 256 KB produces excessive network roundtrips over Wi-Fi when buffering after seeks;
+            // 512 KB cuts roundtrips in half and fills the initial AVPlayer buffer in ~2-3 network calls.
+            let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem, chunkSize: 512 * 1024)
             self.loaderDelegate = delegate
             
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
             let playerItem = AVPlayerItem(asset: asset)
+            // Preload 2.0 seconds ahead: balances smooth SMB playback while allowing instant seek resume (~2-4 chunk reads)
+            playerItem.preferredForwardBufferDuration = 2.0
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             self.player = avPlayer
@@ -1383,7 +1415,7 @@ public struct VideoDetailView: View {
                             self.isBuffering = false
                         }
                     }
-                    if self.isPlaying && !self.isScrubbingTimeline && !self.isScrubbingWithGesture {
+                    if self.isPlaying && !self.isScrubbingTimeline && !self.isScrubbingWithGesture && !self.isFinishingSeek {
                         self.isPlaying = false
                     }
                     
@@ -1470,7 +1502,9 @@ public struct VideoDetailView: View {
                 }
                 let isCurrentlyPlaying = (p.timeControlStatus != .paused)
                 let wasPlaying = self.isPlaying
-                self.isPlaying = isCurrentlyPlaying
+                if !self.isFinishingSeek {
+                    self.isPlaying = isCurrentlyPlaying
+                }
                 
                 // If the video is rendering frames or time is advancing, dismiss buffering popup
                 if self.isBuffering && (p.timeControlStatus == .playing || p.rate > 0 || current.isPlaybackLikelyToKeepUp) {

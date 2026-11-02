@@ -11,7 +11,9 @@ import Foundation
 public actor VideoThumbnailLimiter {
     private var activeCount = 0
     /// Maximum number of concurrent video thumbnail extraction operations.
-    /// Kept conservative (2) to ensure the single SMB socket remains responsive for active video playback and timeline seeking.
+    /// CRITICAL: Kept strictly conservative (2). Do NOT scale to 4 or 5 based on CPU core count.
+    /// All SMB traffic routes through a single TCP socket managed by SMBClientActor; exceeding 2 concurrent
+    /// streaming probes congests the socket and starves active video playback range requests, causing seek freezes.
     private let maxConcurrent: Int
     private var waiters: [(id: UUID, continuation: CheckedContinuation<Bool, Never>)] = []
     

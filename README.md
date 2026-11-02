@@ -34,12 +34,13 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Camera Roll Export**: One-tap export to Apple Photos (`PhotoLibrarySaver`) with proper permission handling.
 
 ### 🎬 Video Player & Streaming Engine
-- **Byte-Range On-Demand Streaming**: Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVPlayer byte requests and streams directly from SMB servers over TCP in fast 256KB chunks.
+- **Byte-Range On-Demand Streaming**: Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVPlayer byte requests and streams directly from SMB servers over TCP in fast 512KB chunks.
 - **Hardened Seeking & Frame Scrubbing**:
-  - Adaptive 0.2s seek tolerance for instant scrub resumption without stalling over SMB.
-  - Live preview frame scrubbing with stationary exact-frame debounce.
-  - Continuous reactive playback and buffer monitoring (`timeControlStatus`) with a 350ms debounce to prevent modal buffering popup flicker.
-  - Fail-safe 800ms seek watchdog guaranteeing playback resumption.
+  - Adaptive 0.5s - 1.5s seek tolerance for instant scrub resumption without stalling over SMB.
+  - Live preview frame scrubbing with stationary exact-frame debounce (250ms).
+  - Re-entrancy locking (`isFinishingSeek`) preventing background playback monitors from resetting playing state during network fill.
+  - Generational seek tracking (`seekGeneration`) ensuring only the latest user-intended target resumes playback.
+  - Pre-buffered 2.0s forward read-ahead window for smooth resumption without Wi-Fi roundtrip latency.
 - **Picture in Picture (PiP) & AirPlay**: Seamless background PiP and native AirPlay audio/video routing (`AirPlayButtonView`, `CustomVideoPlayerCoordinator`).
 - **Audio & Subtitle Track Selection**: Dedicated track manager for switching audio tracks and external/embedded subtitles (`VideoTrackManager`).
 - **Speed Control & Resume**: Multi-speed playback (0.5x to 2.0x) and automatic position resumption (`VideoPlaybackStore`).
@@ -161,6 +162,83 @@ flowchart TD
     AMSMB2 <--> Network[(Remote SMB Share)]
     AVPlayer[AVPlayer] <--> ResourceLoader[SMBResourceLoaderDelegate]
     ResourceLoader <--> SMBActor
+```
+
+### Video Seeking & Scrubbing Workflow
+
+```mermaid
+flowchart TD
+    subgraph Inputs["1. Seeking Triggers"]
+        A1["Timeline Bar Scrubbing<br/>(Drag on VideoTimelineBar)"]
+        A2["Timeline Bar Jump<br/>(Tap on VideoTimelineBar)"]
+        A3["Screen Swipe Scrubbing<br/>(Horizontal drag on video)"]
+        A4["Relative Jump<br/>(Keyboard arrows or +/-10s buttons)"]
+    end
+
+    subgraph StateCapture["2. State Capture & Pause"]
+        B1["Capture Initial State<br/>wasPlaying = (status != .paused) || isPlaying"]
+        B2{"Is continuous drag<br/>scrubbing?"}
+        B3["Pause AVPlayer temporarily<br/>(Mute audio & save bandwidth)"]
+        B4["Keep playing state<br/>(Direct seek without pause)"]
+    end
+
+    subgraph LiveScrub["3. Live Frame Scrubbing Pipeline"]
+        C1["requestLiveFrameSeek(target)"]
+        C2["Calculate Adaptive Tolerance<br/>(&lt;1s: 0.5s | &lt;5s: 1.5s | &gt;5s: inf)"]
+        C3["Pacing Gate<br/>(100ms throttle & 250ms stationary hold)"]
+        C4["executeLiveSeek(targetCM, tolerance)"]
+    end
+
+    subgraph Commit["4. Seek Finalization (finishSeeking)"]
+        D1["Cancel Pending Scrub Tasks"]
+        D2["Increment seekGeneration<br/>(Invalidates stale in-flight seeks)"]
+        D3{"resumePlaying<br/>true?"}
+        D4["Tolerance: 1.0s (Fast I-frame snap)<br/>Set isFinishingSeek = true<br/>Set isPlaying = true<br/>Trigger player.play()<br/>Show buffering spinner"]
+        D5["Tolerance: .zero (Exact frame inspection)<br/>Leave player paused<br/>isPlaying = false"]
+        D6["Dispatch player.seek(targetCM, tolerance)"]
+    end
+
+    subgraph Network["5. SMB Network Layer"]
+        E1["AVAssetResourceLoaderDelegate"]
+        E2["SMBClientActor.fetchMediaRange<br/>(512 KB streaming chunks)"]
+        E3["2.0s Pre-buffer Target<br/>(preferredForwardBufferDuration)"]
+    end
+
+    subgraph Resumption["6. Playback Synchronization"]
+        F1["Seek Completion Callback"]
+        F2{"thisGeneration ==<br/>seekGeneration?"}
+        F3["Ignore obsolete seek"]
+        F4["Release isFinishingSeek lock<br/>Cancel 2.5s watchdog"]
+        F5{"resumePlaying<br/>true?"}
+        F6["Confirm player.play()<br/>Ensure isPlaying = true"]
+        F7["timeControlStatus reaches .playing<br/>Dismiss buffering spinner<br/>Schedule controls auto-hide (3.5s)"]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+    A4 --> B1
+    B1 --> B2
+    B2 -- "Yes (Timeline/Swipe Drag)" --> B3
+    B2 -- "No (Tap / Relative Skip)" --> B4
+
+    B3 --> C1
+    C1 --> C2 --> C3 --> C4
+    C4 -.->|"User moves finger"| C1
+
+    C4 -- "Finger lifted (onEnded)" --> D1
+    B4 --> D1
+    D1 --> D2 --> D3
+    D3 -- "Yes" --> D4 --> D6
+    D3 -- "No" --> D5 --> D6
+
+    D6 --> E1 --> E2 --> E3 --> F1
+
+    F1 --> F2
+    F2 -- "No (Superseded)" --> F3
+    F2 -- "Yes" --> F4 --> F5
+    F5 -- "Yes" --> F6 --> F7
+    F5 -- "No" --> F7
 ```
 
 ---

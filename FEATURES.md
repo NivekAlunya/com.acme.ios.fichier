@@ -100,6 +100,83 @@ This document provides a comprehensive catalog of all features and capabilities 
 - **Interactive Timeline Bar (`VideoTimelineBar`)**:
   - Draggable scrubber knob with live elapsed time indicator.
   - Tap the duration label to toggle between total video duration and remaining time countdown (`-MM:SS`).
+- **Video Seeking & Scrubbing Workflow**:
+  - Comprehensive 6-stage lifecycle managing touch input, live preview, SMB range requests, generational seek invalidation, and playback resumption without state corruption:
+
+```mermaid
+flowchart TD
+    subgraph Inputs["1. Seeking Triggers"]
+        A1["Timeline Bar Scrubbing<br/>(Drag on VideoTimelineBar)"]
+        A2["Timeline Bar Jump<br/>(Tap on VideoTimelineBar)"]
+        A3["Screen Swipe Scrubbing<br/>(Horizontal drag on video)"]
+        A4["Relative Jump<br/>(Keyboard arrows or +/-10s buttons)"]
+    end
+
+    subgraph StateCapture["2. State Capture & Pause"]
+        B1["Capture Initial State<br/>wasPlaying = (status != .paused) || isPlaying"]
+        B2{"Is continuous drag<br/>scrubbing?"}
+        B3["Pause AVPlayer temporarily<br/>(Mute audio & save bandwidth)"]
+        B4["Keep playing state<br/>(Direct seek without pause)"]
+    end
+
+    subgraph LiveScrub["3. Live Frame Scrubbing Pipeline"]
+        C1["requestLiveFrameSeek(target)"]
+        C2["Calculate Adaptive Tolerance<br/>(&lt;1s: 0.5s | &lt;5s: 1.5s | &gt;5s: inf)"]
+        C3["Pacing Gate<br/>(100ms throttle & 250ms stationary hold)"]
+        C4["executeLiveSeek(targetCM, tolerance)"]
+    end
+
+    subgraph Commit["4. Seek Finalization (finishSeeking)"]
+        D1["Cancel Pending Scrub Tasks"]
+        D2["Increment seekGeneration<br/>(Invalidates stale in-flight seeks)"]
+        D3{"resumePlaying<br/>true?"}
+        D4["Tolerance: 1.0s (Fast I-frame snap)<br/>Set isFinishingSeek = true<br/>Set isPlaying = true<br/>Trigger player.play()<br/>Show buffering spinner"]
+        D5["Tolerance: .zero (Exact frame inspection)<br/>Leave player paused<br/>isPlaying = false"]
+        D6["Dispatch player.seek(targetCM, tolerance)"]
+    end
+
+    subgraph Network["5. SMB Network Layer"]
+        E1["AVAssetResourceLoaderDelegate"]
+        E2["SMBClientActor.fetchMediaRange<br/>(512 KB streaming chunks)"]
+        E3["2.0s Pre-buffer Target<br/>(preferredForwardBufferDuration)"]
+    end
+
+    subgraph Resumption["6. Playback Synchronization"]
+        F1["Seek Completion Callback"]
+        F2{"thisGeneration ==<br/>seekGeneration?"}
+        F3["Ignore obsolete seek"]
+        F4["Release isFinishingSeek lock<br/>Cancel 2.5s watchdog"]
+        F5{"resumePlaying<br/>true?"}
+        F6["Confirm player.play()<br/>Ensure isPlaying = true"]
+        F7["timeControlStatus reaches .playing<br/>Dismiss buffering spinner<br/>Schedule controls auto-hide (3.5s)"]
+    end
+
+    A1 --> B1
+    A2 --> B1
+    A3 --> B1
+    A4 --> B1
+    B1 --> B2
+    B2 -- "Yes (Timeline/Swipe Drag)" --> B3
+    B2 -- "No (Tap / Relative Skip)" --> B4
+
+    B3 --> C1
+    C1 --> C2 --> C3 --> C4
+    C4 -.->|"User moves finger"| C1
+
+    C4 -- "Finger lifted (onEnded)" --> D1
+    B4 --> D1
+    D1 --> D2 --> D3
+    D3 -- "Yes" --> D4 --> D6
+    D3 -- "No" --> D5 --> D6
+
+    D6 --> E1 --> E2 --> E3 --> F1
+
+    F1 --> F2
+    F2 -- "No (Superseded)" --> F3
+    F2 -- "Yes" --> F4 --> F5
+    F5 -- "Yes" --> F6 --> F7
+    F5 -- "No" --> F7
+```
 - **Continuous Playlist Navigation**:
   - Automatically advances to the next video in the folder upon playback completion.
   - **Smart EOF Rewind**: If a restored video reaches the end within 2 seconds of opening, it automatically rewinds to 0:00 rather than skipping ahead.
