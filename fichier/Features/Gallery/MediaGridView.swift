@@ -136,6 +136,7 @@ struct MediaGridView: View {
                     isProcessing: isBatchProcessing,
                     progressMessage: batchProgressMessage,
                     showSaveToPhotos: manager.currentLocation?.kind != .photos,
+                    onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
                     onShare: { batchShare() }
@@ -344,6 +345,45 @@ struct MediaGridView: View {
         .onDisappear {
             batchTask?.cancel()
             batchTask = nil
+        }
+        .background {
+            // Hardware Keyboard Shortcuts for iPad and Mac
+            Group {
+                // Space: Start slideshow of pictures in current folder
+                Button("") {
+                    if !displayPictures.isEmpty {
+                        onStartSlideshow?(displayPictures)
+                    }
+                }
+                .keyboardShortcut(.space, modifiers: [])
+                
+                // Escape: Cancel batch selection mode
+                Button("") {
+                    if isSelectionMode {
+                        withAnimation {
+                            isSelectionMode = false
+                            selectedItems.removeAll()
+                            cancelBatchTask()
+                        }
+                    }
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                
+                // Cmd+A: Select All / Deselect All (when in selection mode)
+                Button("") {
+                    if isSelectionMode {
+                        toggleAllSelection(for: displayPictures)
+                    } else if !displayPictures.isEmpty {
+                        withAnimation {
+                            isSelectionMode = true
+                            selectedItems = Set(displayPictures)
+                        }
+                    }
+                }
+                .keyboardShortcut("a", modifiers: [.command])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
         }
     }
     
@@ -651,29 +691,57 @@ struct MediaGridView: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
     
+    /// Cancels any currently active batch save or batch share operation.
+    private func cancelBatchTask() {
+        batchTask?.cancel()
+        batchTask = nil
+        isBatchProcessing = false
+        batchProgressMessage = nil
+    }
+    
+    /// Exports selected media files to the user's Photos library concurrently (up to 3 parallel workers).
     private func batchSaveToPhotos() {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
         isBatchProcessing = true
         batchTask?.cancel()
         
-        batchTask = Task {
+        batchTask = Task { @MainActor in
+            var completedCount = 0
             var savedCount = 0
-            for (idx, item) in items.enumerated() {
-                guard !Task.isCancelled else { break }
-                batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(idx + 1, items.count))
-                do {
-                    if item.isVideo {
-                        let localURL = try await manager.fetchVideoURL(for: item)
-                        try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
-                    } else {
-                        if let image = await manager.downloadImage(for: item) {
-                            try await PhotoLibrarySaver.saveImageToPhotos(image)
+            var failedCount = 0
+            let total = items.count
+            
+            // Bounded concurrency pool (up to 3 parallel downloads to maximize network throughput without saturating memory)
+            await withTaskGroup(of: Bool.self) { group in
+                var iterator = items.makeIterator()
+                let maxConcurrent = 3
+                
+                // Seed initial workers
+                for _ in 0..<min(maxConcurrent, total) {
+                    if let nextItem = iterator.next() {
+                        group.addTask { [manager = self.manager] in
+                            await self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                         }
                     }
-                    savedCount += 1
-                } catch {
-                    AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
+                }
+                
+                // As each worker finishes, update progress and schedule the next queued item
+                while let success = await group.next() {
+                    guard !Task.isCancelled else { break }
+                    completedCount += 1
+                    if success {
+                        savedCount += 1
+                    } else {
+                        failedCount += 1
+                    }
+                    batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(completedCount, total))
+                    
+                    if let nextItem = iterator.next() {
+                        group.addTask { [manager = self.manager] in
+                            await self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
+                        }
+                    }
                 }
             }
             
@@ -685,8 +753,15 @@ struct MediaGridView: View {
             
             isBatchProcessing = false
             batchProgressMessage = nil
+            
             withAnimation {
-                batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
+                if failedCount > 0 && savedCount > 0 {
+                    batchStatusToast = String(localized: "Saved \(savedCount) of \(total) items to Photos", comment: "Toast message when batch save completes with partial failures")
+                } else if failedCount > 0 && savedCount == 0 {
+                    batchStatusToast = String(localized: "Failed to save items to Photos", comment: "Toast message when batch save fails completely")
+                } else {
+                    batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
+                }
                 isSelectionMode = false
                 selectedItems.removeAll()
             }
@@ -699,6 +774,25 @@ struct MediaGridView: View {
         }
     }
     
+    private nonisolated func saveSingleMediaItemToPhotos(_ item: MediaItem, manager: SMBDirectManager) async -> Bool {
+        do {
+            if item.isVideo {
+                let localURL = try await manager.fetchVideoURL(for: item)
+                try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+            } else {
+                guard let image = await manager.downloadImage(for: item) else {
+                    return false
+                }
+                try await PhotoLibrarySaver.saveImageToPhotos(image)
+            }
+            return true
+        } catch {
+            AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    /// Prepares selected media items for the system share sheet concurrently.
     private func batchShare() {
         let items = Array(selectedItems)
         guard !items.isEmpty else { return }
@@ -706,19 +800,50 @@ struct MediaGridView: View {
         batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
         batchTask?.cancel()
         
-        batchTask = Task {
+        batchTask = Task { @MainActor in
             var shareables: [Any] = []
-            for item in items {
-                guard !Task.isCancelled else { break }
-                if item.isVideo {
-                    if let localURL = try? await manager.fetchVideoURL(for: item) {
-                        shareables.append(localURL)
-                    }
-                } else {
-                    if let image = await manager.downloadImage(for: item) {
-                        shareables.append(image)
+            let total = items.count
+            var completedCount = 0
+            
+            // Use bounded concurrent workers to fetch and prepare shareables while preserving selection order
+            await withTaskGroup(of: (Int, Any?).self) { group in
+                var itemQueue = Array(items.enumerated())
+                var queueIndex = 0
+                let maxConcurrent = 3
+                
+                for _ in 0..<min(maxConcurrent, total) {
+                    if queueIndex < itemQueue.count {
+                        let (idx, item) = itemQueue[queueIndex]
+                        queueIndex += 1
+                        group.addTask { [manager = self.manager] in
+                            let result = await self.prepareSingleItemForShare(item, manager: manager)
+                            return (idx, result)
+                        }
                     }
                 }
+                
+                var indexedResults: [(Int, Any)] = []
+                while let (idx, result) = await group.next() {
+                    guard !Task.isCancelled else { break }
+                    completedCount += 1
+                    batchProgressMessage = "\(String(localized: .Strings.galleryBatchPreparingShare)) (\(completedCount)/\(total))"
+                    
+                    if let result {
+                        indexedResults.append((idx, result))
+                    }
+                    
+                    if queueIndex < itemQueue.count {
+                        let (nextIdx, nextItem) = itemQueue[queueIndex]
+                        queueIndex += 1
+                        group.addTask { [manager = self.manager] in
+                            let nextResult = await self.prepareSingleItemForShare(nextItem, manager: manager)
+                            return (nextIdx, nextResult)
+                        }
+                    }
+                }
+                
+                indexedResults.sort { $0.0 < $1.0 }
+                shareables = indexedResults.map { $0.1 }
             }
             
             guard !Task.isCancelled else {
@@ -733,6 +858,14 @@ struct MediaGridView: View {
             if !shareables.isEmpty {
                 self.shareSheetItems = shareables
             }
+        }
+    }
+    
+    private nonisolated func prepareSingleItemForShare(_ item: MediaItem, manager: SMBDirectManager) async -> Any? {
+        if item.isVideo {
+            return try? await manager.fetchVideoURL(for: item)
+        } else {
+            return await manager.downloadImage(for: item)
         }
     }
 }

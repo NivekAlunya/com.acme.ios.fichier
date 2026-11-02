@@ -131,7 +131,8 @@ public struct RootSMBView: View {
             guard !Task.isCancelled else { return }
             connectingLocationID = nil
             if smbManager.isConnected {
-                preferredCompactColumn = .content
+                // If a folder was automatically restored or loaded, navigate directly to detail on compact layouts
+                preferredCompactColumn = smbManager.selectedFolder != nil ? .detail : .content
             }
         }
     }

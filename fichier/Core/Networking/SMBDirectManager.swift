@@ -42,6 +42,9 @@ public final class SMBDirectManager {
     public private(set) var currentConnectionID: String = ""
     private var loadFolderTask: Task<Void, Never>?
     
+    // In-memory cache of the last viewed folder per location to restore iPad split-view state seamlessly
+    private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
+    
     private let worker = SMBClientActor()
     nonisolated var clientActor: SMBClientActor { worker }
     private let localWorker = LocalStorageActor()
@@ -237,7 +240,11 @@ public final class SMBDirectManager {
                 self.folderTree = [rootItem]
                 self.isConnected = true
                 self.isLoading = false
-                await selectAndLoadFolder(rootItem)
+                
+                // Restore previously selected folder or default to root
+                let locID = location.id
+                let targetFolder = lastSelectedFolderPerLocation[locID] ?? rootItem
+                await selectAndLoadFolder(targetFolder)
             } catch {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
@@ -259,7 +266,12 @@ public final class SMBDirectManager {
                 self.isConnected = true
                 self.isLoading = false
                 
-                if let firstAlbum = albums.first {
+                // Restore previously selected album/folder if available
+                let locID = location.id
+                if let remembered = lastSelectedFolderPerLocation[locID],
+                   (albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id) {
+                    await selectAndLoadFolder(remembered)
+                } else if let firstAlbum = albums.first {
                     await selectAndLoadFolder(firstAlbum)
                 } else {
                     await selectAndLoadFolder(rootWithChildren)
@@ -319,6 +331,15 @@ public final class SMBDirectManager {
             self.pictures = []
             self.folderTree = discoveredShares
             self.isConnected = true
+            
+            // Auto-restore previously selected folder for this location, or auto-select if only 1 share
+            let locID = currentLocation?.id ?? connID
+            if let remembered = lastSelectedFolderPerLocation[locID],
+               discoveredShares.contains(where: { $0.shareName == remembered.shareName || $0.name == remembered.name }) {
+                await selectAndLoadFolder(remembered)
+            } else if discoveredShares.count == 1, let singleShare = discoveredShares.first {
+                await selectAndLoadFolder(singleShare)
+            }
         } catch {
             self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
             self.isConnected = false
@@ -388,6 +409,11 @@ public final class SMBDirectManager {
     // MARK: - Select Folder & Load Both Subfolders + Pictures
     
     public func selectAndLoadFolder(_ folder: MediaItem) async {
+        // Record this folder as the last active selection for the current location
+        if let locID = currentLocation?.id, !locID.isEmpty {
+            lastSelectedFolderPerLocation[locID] = folder
+        }
+        
         // 1. Cancel previous folder scan task immediately
         loadFolderTask?.cancel()
         
