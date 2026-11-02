@@ -137,21 +137,32 @@ nonisolated public final class MediaCacheManager: Sendable {
         return fileManager.fileExists(atPath: url.path)
     }
     
+    // MARK: - Video Thumbnail Timing Constants
+    
+    /// The default timestamp sampled for video thumbnails to capture a representative scene beyond introductory title cards/black frames.
+    public static let defaultVideoThumbnailTime = CMTime(seconds: 12.0, preferredTimescale: 600)
+    
+    /// The tolerance applied when sampling video thumbnail keyframes, allowing fast keyframe selection without decoding all preceding frames.
+    public static let defaultVideoThumbnailTolerance = CMTime(seconds: 2.5, preferredTimescale: 600)
+    
+    /// Fallback timestamp when the video is shorter than the default thumbnail time.
+    public static let fallbackVideoThumbnailTime = CMTime(seconds: 0.5, preferredTimescale: 600)
+    
     // MARK: - Video Thumbnail Generation
     
     public func generateVideoThumbnail(
         from localURL: URL,
         maxDimension: CGFloat,
-        preferredTime: CMTime = CMTime(seconds: 10.0, preferredTimescale: 600)
+        preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
-        generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
-        generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
+        generator.requestedTimeToleranceBefore = Self.defaultVideoThumbnailTolerance
+        generator.requestedTimeToleranceAfter = Self.defaultVideoThumbnailTolerance
         
-        // 1. Try preferred time (defaults to 10.0s):
+        // 1. Try preferred time (defaults to 12.0s):
         if let (cgImage, _) = try? await generator.image(at: preferredTime) {
             return UIImage(cgImage: cgImage)
         }

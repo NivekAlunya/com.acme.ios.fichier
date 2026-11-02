@@ -807,7 +807,7 @@ struct MediaGridView: View {
             
             // Use bounded concurrent workers to fetch and prepare shareables while preserving selection order
             await withTaskGroup(of: (Int, Any?).self) { group in
-                var itemQueue = Array(items.enumerated())
+                let itemQueue = Array(items.enumerated())
                 var queueIndex = 0
                 let maxConcurrent = 3
                 

@@ -17,11 +17,14 @@ actor SMBClientActor {
     private var currentConnectionID: String = ""
     private var currentShareName: String?
     private var activeFolderID: String?
-    nonisolated(unsafe) private let thumbnailCache = NSCache<NSString, UIImage>()
+    /// Thread-safe in-memory thumbnail cache allowing lockless, synchronous lookup without serializing behind SMB socket I/O
+    nonisolated private let thumbnailCache = ThreadSafeMemoryCache<NSString, UIImage>()
     private let fullImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 5
-        cache.totalCostLimit = 250 * 1024 * 1024
+        let physicalMemory = ProcessInfo.processInfo.physicalMemory
+        // Dynamically scale in-memory cache limit on low-RAM devices (~187 MB on 3 GB hardware) while capping at 250 MB on 4+ GB devices
+        cache.totalCostLimit = Int(min(Int64(250 * 1024 * 1024), Int64(physicalMemory / 16)))
         return cache
     }()
     private let metadataCache = NSCache<NSString, PictureEXIFBox>()
@@ -302,7 +305,7 @@ actor SMBClientActor {
             dimension: 260,
             connectionID: item.connectionID
         )
-        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: localURL, maxDimension: 260, preferredTime: CMTime(seconds: 5.0, preferredTimescale: 600)) {
+        if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: localURL, maxDimension: 260, preferredTime: MediaCacheManager.defaultVideoThumbnailTime) {
             let memoryCacheKey = "\(item.id)_thumb_260" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)

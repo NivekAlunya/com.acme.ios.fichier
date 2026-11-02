@@ -40,7 +40,8 @@ public final class SMBHostDiscovery {
         
         browser.stateUpdateHandler = { [weak self] state in
             guard let self else { return }
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 switch state {
                 case .ready:
                     AppLog.discovery.info("SMB browser is active and scanning (IPv4)")
@@ -58,7 +59,8 @@ public final class SMBHostDiscovery {
         
         browser.browseResultsChangedHandler = { [weak self] results, _ in
             guard let self else { return }
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 self.handleBrowseResults(results)
             }
         }
@@ -105,7 +107,8 @@ public final class SMBHostDiscovery {
         
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             guard let self, let connection else { return }
-            MainActor.assumeIsolated {
+            Task { @MainActor [weak self, weak connection] in
+                guard let self, let connection else { return }
                 switch state {
                 case .ready:
                     if let innerEndpoint = connection.currentPath?.remoteEndpoint,

@@ -674,25 +674,25 @@ public final class SMBDirectManager {
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: maxDimension * 2, height: maxDimension * 2)
-            generator.requestedTimeToleranceBefore = CMTime(seconds: 2.5, preferredTimescale: 600)
-            generator.requestedTimeToleranceAfter = CMTime(seconds: 2.5, preferredTimescale: 600)
+            generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
+            generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
             
             return await withTaskCancellationHandler {
                 await withTaskGroup(of: UIImage?.self) { group in
                     group.addTask {
-                        // 1. Try 10.0s frame first (representative preview)
+                        // 1. Try representative frame first using standardized thumbnail timestamp
                         do {
-                            let (cgImage, _) = try await generator.image(at: CMTime(seconds: 10.0, preferredTimescale: 600))
+                            let (cgImage, _) = try await generator.image(at: MediaCacheManager.defaultVideoThumbnailTime)
                             return UIImage(cgImage: cgImage)
                         } catch {
                             guard !Task.isCancelled else { return nil }
-                            // 2. Fallback: try .zero or 0.5s if video is shorter than 10s
+                            // 2. Fallback: try .zero or standardized fallback timestamp if video is shorter
                             generator.requestedTimeToleranceBefore = .positiveInfinity
                             generator.requestedTimeToleranceAfter = .positiveInfinity
                             if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {
                                 return UIImage(cgImage: cgImage)
                             }
-                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: CMTime(seconds: 0.5, preferredTimescale: 600)) {
+                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: MediaCacheManager.fallbackVideoThumbnailTime) {
                                 return UIImage(cgImage: cgImage)
                             }
                             return nil
