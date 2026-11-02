@@ -189,11 +189,29 @@ public actor LocalStorageActor {
     
     // MARK: - Thumbnail Generation
     
+    /// Generates or loads a cached thumbnail for a local or iCloud file.
+    /// Uses persistent on-disk caching (Tier 2) to avoid repeated AVAsset / CoreMedia decompression on local videos.
     public func fetchThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         guard let url = item.localURL else { return nil }
         
+        // Check persistent disk cache before invoking heavy image/video decoding
+        let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
+        let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: subPath,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
+            return diskCached
+        }
+        
         if item.isVideo {
-            return await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: maxDimension)
+            if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: maxDimension) {
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+            return nil
         } else {
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailWithTransform: true,
@@ -204,7 +222,9 @@ public actor LocalStorageActor {
                   let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
                 return UIImage(contentsOfFile: url.path)
             }
-            return UIImage(cgImage: cgImage)
+            let thumb = UIImage(cgImage: cgImage)
+            MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+            return thumb
         }
     }
     

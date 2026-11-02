@@ -537,8 +537,23 @@ public final class SMBDirectManager {
             if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) {
                 return cached
             }
+            
+            // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
+            let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
+            let (diskKey, fallbackKey) = MediaCacheManager.shared.thumbnailKeys(
+                for: item.shareName,
+                path: subPath,
+                dimension: maxDimension,
+                connectionID: item.connectionID
+            )
+            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey) {
+                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+                return diskCached
+            }
+            
             if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
@@ -651,7 +666,8 @@ public final class SMBDirectManager {
             }
             
             let asset = AVURLAsset(url: streamURL)
-            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
+            // Use an optimized 512 KB chunk size for thumbnail probing to read movie container headers in fewer SMB roundtrips
+            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 512 * 1024)
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             

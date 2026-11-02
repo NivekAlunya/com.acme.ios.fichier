@@ -147,7 +147,8 @@ public struct VideoDetailView: View {
                         .cornerRadius(6)
                         .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
                         .padding(.horizontal, 32)
-                        .padding(.bottom, showControls ? 68 : 24)
+                        // Adjusted bottom spacing to sit proportionately above the lower timeline bar
+                        .padding(.bottom, showControls ? 56 : 24)
                         .allowsHitTesting(false)
                         .animation(.easeInOut(duration: 0.2), value: showControls)
                 }
@@ -669,7 +670,8 @@ public struct VideoDetailView: View {
                             .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
                     )
                 }
-                .padding(.top, 10)
+                // Compact spacing between top safe area boundary and upper player toolbar
+                .padding(.top, 2)
             } else {
                 // Regular / Landscape layout: single row with centered overlay
                 HStack {
@@ -681,12 +683,12 @@ public struct VideoDetailView: View {
                     volumeBar
                         .padding(.trailing, 16)
                 }
-                .frame(minHeight: isRegular ? 84 : 64)
+                .frame(minHeight: isRegular ? 52 : 44)
                 .overlay(alignment: .center) {
                     centerToolsBar
-                        .padding(.top, isRegular ? 20 : 0)
                 }
-                .padding(.top, isRegular ? 20 : 10)
+                // Reduced top padding in regular/landscape to keep toolbar snug to safe area
+                .padding(.top, isRegular ? 4 : 2)
             }
         }
     }
@@ -782,7 +784,8 @@ public struct VideoDetailView: View {
             }
         )
         .padding(.horizontal, 24)
-        .padding(.bottom, 16)
+        // Snug spacing between bottom safe area boundary (Home Indicator) and timeline seek bar
+        .padding(.bottom, 2)
     }
     
     // MARK: - Swipe for Seeking (Controls timeline bar without popup HUD)
