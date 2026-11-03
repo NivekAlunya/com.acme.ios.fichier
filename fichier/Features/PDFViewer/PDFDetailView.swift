@@ -16,6 +16,7 @@ struct PDFDetailView: View {
     @State private var isLoading = true
     @State private var bytesReceived: Int64 = 0
     @State private var totalBytes: Int64 = 0
+    @State private var lastReportedBytes: Int64 = 0
     @State private var errorMessage: String?
     @State private var showControls = true
     @State private var currentPage = 1
@@ -262,6 +263,7 @@ struct PDFDetailView: View {
         errorMessage = nil
         bytesReceived = 0
         totalBytes = 0
+        lastReportedBytes = 0
         
         // Check if localURL is available
         if let local = item.localURL, FileManager.default.fileExists(atPath: local.path) {
@@ -290,8 +292,11 @@ struct PDFDetailView: View {
         do {
             let url = try await manager.fetchDocumentURL(for: item) { received, total in
                 Task { @MainActor in
-                    self.bytesReceived = received
-                    self.totalBytes = total
+                    if received == total || (received - self.lastReportedBytes) > 131_072 {
+                        self.bytesReceived = received
+                        self.totalBytes = total
+                        self.lastReportedBytes = received
+                    }
                 }
             }
             guard !Task.isCancelled else { return }

@@ -212,6 +212,16 @@ actor SMBClientActor {
             return diskCached
         }
         
+        // 3. For PDF documents already cached on disk in SMBDocuments, generate thumbnail directly from disk file
+        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
+            let docURL = MediaCacheManager.shared.localDocumentURL(for: item)
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: docURL, maxDimension: maxDimension) {
+                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
         if Task.isCancelled { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
@@ -224,6 +234,24 @@ actor SMBClientActor {
                 return nil
             }
             
+            // Remote PDF: Stream to temporary staging file to avoid loading entire 100MB+ document into RAM
+            if item.isPDF {
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                do {
+                    try await client.downloadItem(atPath: item.path, to: tempURL) { _, _ in
+                        !Task.isCancelled
+                    }
+                    if !Task.isCancelled, let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: tempURL, maxDimension: maxDimension) {
+                        thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                        MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                        return thumb
+                    }
+                } catch {
+                    return nil
+                }
+            }
+            
             // Photo Thumbnail Handling
             let data = try await client.contents(atPath: item.path) { _, _ in
                 !Task.isCancelled
@@ -234,21 +262,14 @@ actor SMBClientActor {
             }
             
             // Extract and cache metadata immediately while image bytes are in memory!
-            if !item.isPDF && metadataCache.object(forKey: item.id as NSString) == nil {
+            if metadataCache.object(forKey: item.id as NSString) == nil {
                 let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
             
-            // Offload CPU-bound image/PDF downsampling and disk caching off the actor lock
+            // Offload CPU-bound image downsampling and disk caching off the actor lock
             // Standardize downsampling to master thumbnail dimension (420px)
             let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                if item.isPDF {
-                    guard let decoded = MediaCacheManager.shared.generatePDFThumbnail(from: data, maxDimension: MediaCacheManager.standardThumbnailDimension) else {
-                        return nil
-                    }
-                    MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
-                    return decoded
-                }
                 guard let decoded = Self.downsample(data: data, maxDimension: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
                     return nil
                 }
@@ -296,9 +317,10 @@ actor SMBClientActor {
             
             // Promote temporary .part file to final local video file atomically
             if FileManager.default.fileExists(atPath: localURL.path) {
-                try? FileManager.default.removeItem(at: localURL)
+                _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: .usingBeforeProjectedSearch)
+            } else {
+                try FileManager.default.moveItem(at: partURL, to: localURL)
             }
-            try FileManager.default.moveItem(at: partURL, to: localURL)
         } catch {
             try? FileManager.default.removeItem(at: partURL)
             throw error
@@ -339,10 +361,14 @@ actor SMBClientActor {
         
         try? FileManager.default.removeItem(at: partURL)
         
+        var lastReportedBytes: Int64 = 0
         do {
             try await client.downloadItem(atPath: item.path, to: partURL) { bytes, total in
                 if Task.isCancelled { return false }
-                progress?(bytes, total)
+                if bytes == total || (bytes - lastReportedBytes) > 131_072 {
+                    progress?(bytes, total)
+                    lastReportedBytes = bytes
+                }
                 return true
             }
             
@@ -352,9 +378,10 @@ actor SMBClientActor {
             }
             
             if FileManager.default.fileExists(atPath: localURL.path) {
-                try? FileManager.default.removeItem(at: localURL)
+                _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: .usingBeforeProjectedSearch)
+            } else {
+                try FileManager.default.moveItem(at: partURL, to: localURL)
             }
-            try FileManager.default.moveItem(at: partURL, to: localURL)
         } catch {
             try? FileManager.default.removeItem(at: partURL)
             throw error

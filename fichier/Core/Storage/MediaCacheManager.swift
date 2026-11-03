@@ -188,6 +188,18 @@ nonisolated public final class MediaCacheManager: Sendable {
     }
     
     public func generatePDFThumbnail(from data: Data, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        // For large data buffers (> 5 MB), stage to a temporary file so PDFDocument takes advantage of
+        // virtual memory mapping (mmap) rather than inflating heap memory during page rasterization
+        if data.count > 5 * 1024 * 1024 {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+            do {
+                try data.write(to: tempURL, options: .atomic)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                return generatePDFThumbnail(from: tempURL, maxDimension: maxDimension)
+            } catch {
+                // Fall back to in-memory decoding if temporary write fails
+            }
+        }
         guard let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return nil }
         let size = CGSize(width: maxDimension, height: maxDimension)
         return page.thumbnail(of: size, for: .mediaBox)
