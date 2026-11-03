@@ -27,10 +27,12 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
 
 ### 📄 PDF & Document Viewer
-- **Native Apple PDFKit Engine**: Built using `PDFKit` (`PDFView`, `PDFThumbnailView`) for hardware-accelerated, high-fidelity vector rendering.
-- **Continuous Smooth Scrolling & Pinch-to-Zoom**: Seamless vertical multi-page continuous flow with dynamic pinch-to-zoom and double-tap zoom capabilities (`PDFKitRepresentedView`).
-- **Interactive Thumbnail Scrubber**: Real-time thumbnail preview bar (`PDFThumbnailScrubberView`) linked bidirectionally with the main document canvas.
-- **Dynamic Reading HUD**: Glassmorphic overlay with live page counter (`Page X of Y`), document title, file size, favorite bookmarking, and native Share Sheet export (`PDFDetailView`). Single-tap anywhere toggles the HUD for distraction-free reading.
+- **Dual Reading Modes**:
+  - **Single Page Continuous Scroll**: Native vertical scrolling with dynamic pinch-to-zoom and double-tap zoom capabilities (`PDFKitRepresentedView`).
+  - **Two-Page Book Mode**: Spread-based layout (`PDFSpreadPageView`, `PDFSpread`) with an interactive 1:1 finger swipe carousel (`TabView`), dynamic spread indicators (`Pages X–Y of Z`), and an optional **First Page as Cover** layout toggle.
+- **Reading Mode Persistence**: Reading mode preferences (`isBookMode`, `displaysAsBook`) are automatically saved via `@AppStorage` and globally configurable in **App Settings** (`AppSettingsView`).
+- **Leading-Edge Thumbnail Sidebar**: Vertically scrollable glassmorphic thumbnail sidebar (`PDFLeadingThumbnailSidebarView`, `PDFThumbnailItemCell`) with automatic active page/spread tracking, auto-centering scroll synchronization, and one-tap page jumps.
+- **Dynamic Reading HUD & Keyboard Shortcuts**: Glassmorphic overlay with dynamic page/spread indicator (`Page X of Y` or `Pages X–Y of Z`), document title, file size, favorite bookmarking, and native Share Sheet export (`PDFDetailView`). Full keyboard navigation (`b` for book mode, `←` / `→` for page turning, `Esc` to dismiss).
 - **Zero-Latency Local Caching**: On-demand atomic download from SMB servers to the dedicated document cache directory (`SMBDocuments`) with live percentage and byte progress indicator.
 - **Instant Grid Preview**: High-resolution 420px first-page master thumbnail generation stored in the two-tier cache for 0ms gallery loading.
 
@@ -75,7 +77,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 69 independent, modular Swift files.
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 80 independent, modular Swift files (75 application files + 5 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -129,8 +131,14 @@ fichier/
 │   ├── PDFViewer/                          # Native PDF Document Viewing
 │   │   ├── PDFDetailView.swift             # Fullscreen document viewer HUD & download progress
 │   │   ├── PDFKitCoordinator.swift         # Delegate & notification coordinator for PDFView
-│   │   ├── PDFKitRepresentedView.swift     # UIViewRepresentable hosting PDFView
-│   │   └── PDFThumbnailScrubberView.swift  # UIViewRepresentable hosting PDFThumbnailView
+│   │   ├── PDFKitRepresentedView.swift     # UIViewRepresentable hosting PDFView (Single Page)
+│   │   ├── PDFLeadingThumbnailSidebarView.swift # Floating vertical thumbnail sidebar on leading edge
+│   │   ├── PDFPageCanvasRepresentable.swift# UIViewRepresentable wrapper for vector page canvas
+│   │   ├── PDFPageCanvasView.swift         # CoreGraphics vector PDF page rendering view
+│   │   ├── PDFSpread.swift                 # Page spread model & builder for book layout
+│   │   ├── PDFSpreadPageView.swift         # Spread page view (single or two-page spread)
+│   │   ├── PDFThumbnailItemCell.swift      # Asynchronous thumbnail card with active ring
+│   │   └── PDFThumbnailScrubberView.swift  # Embedded PDFThumbnailView wrapper
 │   │
 │   ├── Settings/                           # App preferences and storage management
 │   │   └── AppSettingsView.swift           # Settings form, cache manager, about section
@@ -151,31 +159,38 @@ fichier/
 │       ├── VideoTrackOption.swift          # Audio / subtitle track model
 │       └── VideoVolumeBar.swift            # Custom interactive volume control
 │
-└── Core/                                   # Shared services, models & actors
-    ├── Logging/
-    │   └── AppLog.swift                    # Centralized os.Logger categories
-    │
-    ├── Networking/                         # Protocol engine and credential storage
-    │   ├── SMBClientActor.swift            # Thread-safe actor wrapping libsmb2 operations
-    │   ├── SMBDirectManager.swift          # Observable UI state manager & prefetch coordinator
-    │   ├── SMBHostDiscovery.swift          # NWBrowser Bonjour mDNS scanner
-    │   └── SMBKeychain.swift               # Apple Keychain wrapper for SMB credentials
-    │
-    └── Storage/                            # Disk cache, favorites, metadata & models
-        ├── AnimatedImageDecoder.swift      # ImageIO multi-frame GIF & WebP decoder
-        ├── FavoritesManager.swift          # UserDefaults-backed favorite items store
-        ├── ImageMetadataExtractor.swift    # ImageIO CGImageSource EXIF parser
-        ├── LocalStorageActor.swift         # Sandboxed local & iCloud folder actor
-        ├── MediaCacheManager.swift         # Persistent disk cache & file manager
-        ├── MediaItem.swift                 # Immutable file/folder representation
-        ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
-        ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
-        ├── PictureEXIFBox.swift            # Sendable EXIF container box
-        ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
-        ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
-        ├── VideoPlaybackRecord.swift       # Persisted playback progress model
-        ├── VideoPlaybackStatus.swift       # Playback status enum (unplayed, inProgress, finished)
-        └── VideoPlaybackStore.swift        # Persistent playback position store
+├── Core/                                   # Shared services, models & actors
+│   ├── Logging/
+│   │   └── AppLog.swift                    # Centralized os.Logger categories
+│   │
+│   ├── Networking/                         # Protocol engine and credential storage
+│   │   ├── SMBClientActor.swift            # Thread-safe actor wrapping libsmb2 operations
+│   │   ├── SMBDirectManager.swift          # Observable UI state manager & prefetch coordinator
+│   │   ├── SMBHostDiscovery.swift          # NWBrowser Bonjour mDNS scanner
+│   │   └── SMBKeychain.swift               # Apple Keychain wrapper for SMB credentials
+│   │
+│   └── Storage/                            # Disk cache, favorites, metadata & models
+│       ├── AnimatedImageDecoder.swift      # ImageIO multi-frame GIF & WebP decoder
+│       ├── FavoritesManager.swift          # UserDefaults-backed favorite items store
+│       ├── ImageMetadataExtractor.swift    # ImageIO CGImageSource EXIF parser
+│       ├── LocalStorageActor.swift         # Sandboxed local & iCloud folder actor
+│       ├── MediaCacheManager.swift         # Persistent disk cache & file manager
+│       ├── MediaItem.swift                 # Immutable file/folder representation
+│       ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
+│       ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
+│       ├── PictureEXIFBox.swift            # Sendable EXIF container box
+│       ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
+│       ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
+│       ├── VideoPlaybackRecord.swift       # Persisted playback progress model
+│       ├── VideoPlaybackStatus.swift       # Playback status enum (unplayed, inProgress, finished)
+│       └── VideoPlaybackStore.swift        # Persistent playback position store
+│
+└── Tests/                                  # Unit test suites
+    ├── MediaCacheManagerTests.swift        # Cache key, dimension, and eviction tests
+    ├── PDFKitCoordinatorTests.swift        # PDF navigation, coordinator, and observer tests
+    ├── PDFSpreadTests.swift                # Spread builder and cover layout tests
+    ├── PDFThumbnailSidebarTests.swift      # Thumbnail sidebar model and callback tests
+    └── SupportedMediaTypesTests.swift      # File extension and format detection tests
 ```
 
 ### Concurrency Architecture

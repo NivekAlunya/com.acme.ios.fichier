@@ -200,16 +200,33 @@ flowchart TD
 
 ## 5. PDF & Document Viewer Engine
 
-- **Native Apple PDFKit Integration**:
-  - Hardware-accelerated vector document rendering via Apple's `PDFKit` (`PDFView`).
-  - Seamless continuous vertical page flow (`.singlePageContinuous`, `.vertical`) with auto-scaling to device width (`autoScales = true`).
-  - Native gesture support for pinch-to-zoom and multi-level zoom without vector quality degradation.
-- **Interactive Thumbnail Page Scrubber (`PDFThumbnailScrubberView`)**:
-  - Embedded `PDFThumbnailView` horizontally mounted in a glassmorphic bottom bar.
-  - Linked bidirectionally with the active document: tapping any page thumbnail instantly scrolls the document, while scrolling the document dynamically updates and tracks the active thumbnail.
+- **Dual Presentation Modes**:
+  - **Single Page Continuous Scroll Mode (`PDFKitRepresentedView`)**:
+    - Hardware-accelerated vector document rendering via Apple's `PDFKit` (`PDFView`).
+    - Seamless continuous vertical page flow (`.singlePageContinuous`, `.vertical`) with auto-scaling to device width (`autoScales = true`).
+    - Native gesture support for pinch-to-zoom and multi-level zoom without vector quality degradation.
+  - **Two-Page Book View Mode (`PDFSpreadPageView`, `PDFSpread`)**:
+    - Dual-page spread display rendered side-by-side using high-precision vector canvas views (`PDFPageCanvasView`, `PDFPageCanvasRepresentable`).
+    - Interactive 1:1 finger swipe carousel (`TabView` with `.page(indexDisplayMode: .never)`), matching the fluid feel of `PictureDetailView`.
+    - Spread builder algorithm (`PDFSpread.buildSpreads`) pairing pages into spreads with an optional **First Page as Cover** toggle (`displaysAsBook`).
+    - Multi-page dynamic spread indicator: displays `Pages X–Y of Z` (or `Page 1 of Z` for cover) in a glassmorphic bottom pill.
+- **Leading-Edge Thumbnail Navigation (`PDFLeadingThumbnailSidebarView`, `PDFThumbnailItemCell`)**:
+  - Vertically scrolling glassmorphic sidebar floating along the leading (left) edge.
+  - Asynchronously renders crisp thumbnails for each page via `PDFPage.thumbnail(of:for:)`.
+  - Automatically synchronizes scroll position to center the active page thumbnail as the user swipes or scrolls (`ScrollViewReader`).
+  - Active page or spread is visually highlighted with a vibrant blue outline and rounded indicator ring.
+  - Direct tap-to-navigate with tactile haptic feedback (`UISelectionFeedbackGenerator`).
+- **Persistent Reading Mode & Preferences**:
+  - Reading mode selection (`isBookMode`) and cover page preference (`displaysAsBook`) automatically persist across app launches and document changes via `@AppStorage` (`pdf_is_book_mode`, `pdf_displays_as_book`).
+  - Dedicated **PDF Reader** section in global app settings (`AppSettingsView`) allowing users to configure default presentation mode and cover layout.
 - **Dynamic Glassmorphic HUD & Controls (`PDFDetailView`)**:
-  - **Top Bar**: Semi-transparent dark gradient bar displaying filename, file size, live `Page X of Y` indicator, favorite bookmarking toggle, and close button.
-  - **Single-Tap HUD Toggle**: Tapping anywhere on the document canvas smoothly toggles top and bottom controls with animation (`easeInOut(duration: 0.2)`).
+  - **Top Bar**: Semi-transparent dark gradient bar displaying filename, file size, live page/spread indicator, reading mode quick-toggle menu, favorite bookmarking toggle, and close button.
+  - **Centered Bottom Pill**: Minimalist glassmorphic capsule displaying live page status (`Page X of Y` or `Pages X–Y of Z`).
+  - **Single-Tap HUD Toggle**: Tapping anywhere on the document canvas smoothly toggles all controls and sidebars with animation (`easeInOut(duration: 0.2)`).
+- **Full Keyboard Navigation**:
+  - `b`: Toggle between Single Page and Book View modes.
+  - `←` / `→`: Navigate to previous / next page or spread.
+  - `Esc`: Dismiss the viewer.
 - **Native Document Export & Sharing**:
   - Direct integration with native `ShareLink` allowing one-tap AirDrop, Mail, or Files export of cached PDF files.
 - **On-Demand Progressive SMB Caching**:
