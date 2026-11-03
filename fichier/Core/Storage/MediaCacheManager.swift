@@ -196,7 +196,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     // MARK: - Video Thumbnail Timing Constants
     
     /// The default timestamp sampled for video thumbnails to capture a representative scene beyond introductory title cards/black frames.
-    public static let defaultVideoThumbnailTime = CMTime(seconds: 12.0, preferredTimescale: 600)
+    public static let defaultVideoThumbnailTime = CMTime(seconds: 15.0, preferredTimescale: 600)
     
     /// The tolerance applied when sampling video thumbnail keyframes, allowing fast keyframe selection without decoding all preceding frames.
     public static let defaultVideoThumbnailTolerance = CMTime(seconds: 2.5, preferredTimescale: 600)
