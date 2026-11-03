@@ -293,4 +293,4 @@ flowchart TD
   - Built strictly using `actor`, `async/await`, `Task`, `@MainActor`, and `Sendable`.
   - Zero legacy synchronization primitives (no `NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`, or GCD queues).
 - **Strict Single Definition Rule**:
-  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (84 modular application files and 5 unit test suites across all domains).
+  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (85 modular application files and 8 unit test suites across all domains).

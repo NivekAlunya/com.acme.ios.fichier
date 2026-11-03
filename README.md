@@ -78,7 +78,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 89 independent, modular Swift files (84 application files + 5 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 93 independent, modular Swift files (85 application files + 8 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -136,6 +136,7 @@ fichier/
 │   │   ├── PDFLeadingThumbnailSidebarView.swift # Floating vertical thumbnail sidebar on leading edge
 │   │   ├── PDFPageCanvasRepresentable.swift# UIViewRepresentable wrapper for vector page canvas
 │   │   ├── PDFPageCanvasView.swift         # CoreGraphics vector PDF page rendering view
+│   │   ├── PDFReadingMode.swift            # Reading mode enum (continuous, book, twoUp)
 │   │   ├── PDFSpread.swift                 # Page spread model & builder for book layout
 │   │   ├── PDFSpreadPageView.swift         # Spread page view (single or two-page spread)
 │   │   ├── PDFThumbnailItemCell.swift      # Asynchronous thumbnail card with active ring
@@ -198,9 +199,12 @@ fichier/
 └── Tests/                                  # Unit test suites
     ├── MediaCacheManagerTests.swift        # Cache key, dimension, and eviction tests
     ├── PDFKitCoordinatorTests.swift        # PDF navigation, coordinator, and observer tests
+    ├── PDFReadingModeTests.swift           # Reading mode cases, properties, and identifier tests
     ├── PDFSpreadTests.swift                # Spread builder and cover layout tests
     ├── PDFThumbnailSidebarTests.swift      # Thumbnail sidebar model and callback tests
-    └── SupportedMediaTypesTests.swift      # File extension and format detection tests
+    ├── SupportedMediaTypesTests.swift      # File extension and format detection tests
+    ├── VideoPlaybackStateTests.swift       # Playback state enum, equality, and transition tests
+    └── VideoSeekCoordinatorTests.swift     # Seek generation, tolerance, and scrub lifecycle tests
 ```
 
 ### Concurrency Architecture

@@ -118,7 +118,8 @@ public final class VideoPlayerController {
                     startContinuousPlaybackMonitoring(for: avPlayer)
                 } catch {
                     guard !Task.isCancelled else { return }
-                    let desc = String(localized: .Strings.videoPlayerErrorPlayback(error.localizedDescription))
+                    let sanitized = self.sanitizeErrorDescription(error.localizedDescription)
+                    let desc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
                     self.errorMessage = desc
                     self.playbackState = .failed(desc)
                 }
@@ -254,7 +255,8 @@ public final class VideoPlayerController {
                 let playbackError = p.error ?? currentItem?.error
                 if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
                     let desc = playbackError?.localizedDescription ?? "Playback error"
-                    let localizedDesc = String(localized: .Strings.videoPlayerErrorPlayback(desc))
+                    let sanitized = self.sanitizeErrorDescription(desc)
+                    let localizedDesc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
                     self.errorMessage = localizedDesc
                     self.playbackState = .failed(localizedDesc)
                     break
@@ -661,7 +663,8 @@ public final class VideoPlayerController {
               let current = player?.currentItem,
               item == current else { return }
         if let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error {
-            let desc = String(localized: .Strings.videoPlayerErrorPlayback(error.localizedDescription))
+            let sanitized = sanitizeErrorDescription(error.localizedDescription)
+            let desc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
             self.errorMessage = desc
             self.playbackState = .failed(desc)
         }
@@ -674,5 +677,23 @@ public final class VideoPlayerController {
             VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
         }
         VideoPlaybackStore.shared.flush()
+    }
+    
+    // MARK: - Error Sanitization
+    
+    private func sanitizeErrorDescription(_ rawDescription: String) -> String {
+        // Redact IP addresses (e.g. 192.168.1.100)
+        var sanitized = rawDescription.replacingOccurrences(
+            of: #"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b"#,
+            with: "<host>",
+            options: .regularExpression
+        )
+        // Redact SMB URLs/credentials (e.g. smb://user:pass@host/share)
+        sanitized = sanitized.replacingOccurrences(
+            of: #"smb://[^\s/]+"#,
+            with: "smb://<server>",
+            options: .regularExpression
+        )
+        return sanitized
     }
 }

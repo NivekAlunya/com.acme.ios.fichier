@@ -13,7 +13,7 @@ public struct VideoDetailView: View {
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @State private var controller: VideoPlayerController
+    @State private var controller: VideoPlayerController?
     
     public init(
         manager: StorageLocationManager,
@@ -21,21 +21,35 @@ public struct VideoDetailView: View {
         initialItem: MediaItem
     ) {
         self.manager = manager
-        self.videos = videos
+        let sanitized = videos.filter { $0.isVideo }
+        self.videos = sanitized.isEmpty ? [initialItem] : sanitized
         self.initialItem = initialItem
-        self._controller = State(
-            initialValue: VideoPlayerController(
-                manager: manager,
-                videos: videos,
-                initialItem: initialItem
-            )
-        )
     }
     
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
+            if let controller {
+                videoContent(controller: controller)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .statusBarHidden(true)
+        .onAppear {
+            if controller == nil {
+                controller = VideoPlayerController(
+                    manager: manager,
+                    videos: videos,
+                    initialItem: initialItem
+                )
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func videoContent(controller: VideoPlayerController) -> some View {
+        ZStack {
             VideoPlayerCanvasView(controller: controller)
             
             // Active Subtitle Text Overlay
@@ -67,8 +81,6 @@ public struct VideoDetailView: View {
                 }
             )
         }
-        .preferredColorScheme(.dark)
-        .statusBarHidden(true)
         .task(id: controller.currentItem.id) {
             controller.setupPlayer(for: controller.currentItem)
         }
@@ -88,13 +100,13 @@ public struct VideoDetailView: View {
             controller.tearDownPlayer(deactivateAudioSession: true)
         }
         .background {
-            keyboardShortcuts
+            keyboardShortcuts(controller: controller)
         }
     }
     
     // MARK: - Hardware Keyboard Shortcuts
     
-    private var keyboardShortcuts: some View {
+    private func keyboardShortcuts(controller: VideoPlayerController) -> some View {
         Group {
             Button("") {
                 controller.tearDownPlayer(deactivateAudioSession: true)
