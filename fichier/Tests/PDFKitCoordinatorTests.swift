@@ -53,5 +53,37 @@ final class PDFKitCoordinatorTests: XCTestCase {
         coordinator.detach()
         XCTAssertNil(coordinator.pdfView)
     }
+    
+    func testPageRangeChangeCallback() {
+        var rangeFirst = 0
+        var rangeLast = 0
+        var rangeTotal = 0
+        
+        let coordinator = PDFKitCoordinator(
+            onPageRangeChange: { first, last, total in
+                rangeFirst = first
+                rangeLast = last
+                rangeTotal = total
+            }
+        )
+        
+        let pdfView = PDFView()
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200))
+        let data = renderer.pdfData { context in
+            context.beginPage()
+            context.beginPage()
+            context.beginPage()
+        }
+        let doc = PDFDocument(data: data)
+        pdfView.document = doc
+        
+        coordinator.attach(to: pdfView)
+        
+        XCTAssertEqual(rangeTotal, 3)
+        XCTAssertGreaterThanOrEqual(rangeFirst, 1)
+        XCTAssertGreaterThanOrEqual(rangeLast, rangeFirst)
+        
+        coordinator.detach()
+    }
 }
 #endif

@@ -317,7 +317,12 @@ actor SMBClientActor {
             
             // Promote temporary .part file to final local video file atomically
             if FileManager.default.fileExists(atPath: localURL.path) {
-                _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: .usingBeforeProjectedSearch)
+                do {
+                    _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: [])
+                } catch {
+                    try? FileManager.default.removeItem(at: localURL)
+                    try FileManager.default.moveItem(at: partURL, to: localURL)
+                }
             } else {
                 try FileManager.default.moveItem(at: partURL, to: localURL)
             }
@@ -361,14 +366,10 @@ actor SMBClientActor {
         
         try? FileManager.default.removeItem(at: partURL)
         
-        var lastReportedBytes: Int64 = 0
         do {
             try await client.downloadItem(atPath: item.path, to: partURL) { bytes, total in
                 if Task.isCancelled { return false }
-                if bytes == total || (bytes - lastReportedBytes) > 131_072 {
-                    progress?(bytes, total)
-                    lastReportedBytes = bytes
-                }
+                progress?(bytes, total)
                 return true
             }
             
@@ -378,7 +379,12 @@ actor SMBClientActor {
             }
             
             if FileManager.default.fileExists(atPath: localURL.path) {
-                _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: .usingBeforeProjectedSearch)
+                do {
+                    _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: [])
+                } catch {
+                    try? FileManager.default.removeItem(at: localURL)
+                    try FileManager.default.moveItem(at: partURL, to: localURL)
+                }
             } else {
                 try FileManager.default.moveItem(at: partURL, to: localURL)
             }

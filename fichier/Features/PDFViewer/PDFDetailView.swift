@@ -20,9 +20,20 @@ struct PDFDetailView: View {
     @State private var errorMessage: String?
     @State private var showControls = true
     @State private var currentPage = 1
+    @State private var endVisiblePage = 1
     @State private var totalPages = 1
+    @State private var isBookMode = false
+    @State private var displaysAsBook = true
     @State private var activePDFView: PDFView?
     @State private var reloadAttempt = 0
+    
+    private var pageInfoText: String {
+        if isBookMode && currentPage != endVisiblePage && endVisiblePage > currentPage {
+            return "Pages \(currentPage)–\(endVisiblePage) of \(totalPages)"
+        } else {
+            return "Page \(currentPage) of \(totalPages)"
+        }
+    }
     
     var body: some View {
         ZStack {
@@ -31,8 +42,15 @@ struct PDFDetailView: View {
             if let document {
                 PDFKitRepresentedView(
                     document: document,
+                    isBookMode: isBookMode,
+                    displaysAsBook: displaysAsBook,
                     onPageChange: { cur, total in
                         self.currentPage = cur
+                        self.totalPages = max(1, total)
+                    },
+                    onPageRangeChange: { first, last, total in
+                        self.currentPage = first
+                        self.endVisiblePage = last
                         self.totalPages = max(1, total)
                     },
                     onTap: {
@@ -65,6 +83,20 @@ struct PDFDetailView: View {
         .task(id: "\(item.id)-\(reloadAttempt)") {
             await loadDocument()
         }
+        .background {
+            Group {
+                Button("") { dismiss() }
+                    .keyboardShortcut(.escape, modifiers: [])
+                Button("") {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isBookMode.toggle()
+                    }
+                }
+                .keyboardShortcut("b", modifiers: [])
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+        }
     }
     
     // MARK: - Top HUD
@@ -94,13 +126,61 @@ struct PDFDetailView: View {
                 HStack(spacing: 6) {
                     Text(item.formattedSize)
                     Text("•")
-                    Text("Page \(currentPage) of \(totalPages)")
+                    Text(pageInfoText)
                 }
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.7))
             }
             
             Spacer()
+            
+            // Book Mode (Two Pages Side-by-Side) Toggle & Options
+            Menu {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isBookMode = false
+                    }
+                } label: {
+                    Label(
+                        String(localized: "Single Page", comment: "Single page continuous scroll"),
+                        systemImage: !isBookMode ? "checkmark" : "doc.text"
+                    )
+                }
+                
+                Button {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isBookMode = true
+                    }
+                } label: {
+                    Label(
+                        String(localized: "Book View (Two Pages)", comment: "Two pages side-by-side book display"),
+                        systemImage: isBookMode ? "checkmark" : "book"
+                    )
+                }
+                
+                if isBookMode {
+                    Divider()
+                    Toggle(isOn: $displaysAsBook) {
+                        Label(
+                            String(localized: "First Page as Cover", comment: "Display first page standalone as cover"),
+                            systemImage: "book.closed"
+                        )
+                    }
+                }
+            } label: {
+                Image(systemName: isBookMode ? "book.fill" : "book")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(isBookMode ? Color.blue : Color.white)
+                    .frame(width: 32, height: 32)
+                    .background(Color.black.opacity(0.6))
+                    .clipShape(Circle())
+            } primaryAction: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isBookMode.toggle()
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isBookMode ? String(localized: "Switch to Single Page View", comment: "Accessibility label") : String(localized: "Switch to Book View", comment: "Accessibility label"))
             
             Button {
                 FavoritesManager.shared.toggleFavorite(item)
@@ -146,7 +226,7 @@ struct PDFDetailView: View {
     private var bottomHUD: some View {
         VStack(spacing: 10) {
             // Page Indicator Pill
-            Text("Page \(currentPage) of \(totalPages)")
+            Text(pageInfoText)
                 .font(.system(size: 12, weight: .semibold))
                 .monospacedDigit()
                 .foregroundColor(.white)

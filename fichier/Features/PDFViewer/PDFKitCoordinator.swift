@@ -10,11 +10,17 @@ import PDFKit
 final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDelegate {
     weak var pdfView: PDFView?
     var onPageChange: ((Int, Int) -> Void)?
+    var onPageRangeChange: ((Int, Int, Int) -> Void)?
     var onTap: (() -> Void)?
     private var pageObserver: (any NSObjectProtocol)?
     
-    init(onPageChange: ((Int, Int) -> Void)? = nil, onTap: (() -> Void)? = nil) {
+    init(
+        onPageChange: ((Int, Int) -> Void)? = nil,
+        onPageRangeChange: ((Int, Int, Int) -> Void)? = nil,
+        onTap: (() -> Void)? = nil
+    ) {
         self.onPageChange = onPageChange
+        self.onPageRangeChange = onPageRangeChange
         self.onTap = onTap
         super.init()
     }
@@ -61,13 +67,24 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     func updatePageInfo() {
         guard let pdfView = self.pdfView, let doc = pdfView.document else { return }
         let total = doc.pageCount
-        let current: Int
-        if let page = pdfView.currentPage {
-            current = doc.index(for: page) + 1
+        let visibleIndices = pdfView.visiblePages.compactMap { doc.index(for: $0) }.sorted()
+        
+        let firstPage: Int
+        let lastPage: Int
+        if let first = visibleIndices.first, let last = visibleIndices.last {
+            firstPage = first + 1
+            lastPage = last + 1
+        } else if let page = pdfView.currentPage {
+            let idx = doc.index(for: page) + 1
+            firstPage = idx
+            lastPage = idx
         } else {
-            current = 1
+            firstPage = 1
+            lastPage = 1
         }
-        onPageChange?(current, total)
+        
+        onPageChange?(firstPage, total)
+        onPageRangeChange?(firstPage, lastPage, total)
     }
     
     @objc func handleSingleTap() {
