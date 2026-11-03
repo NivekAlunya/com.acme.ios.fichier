@@ -46,6 +46,7 @@ final class PDFKitCoordinatorTests: XCTestCase {
         pdfView.document = doc
         
         coordinator.attach(to: pdfView)
+        coordinator.updatePageInfo()
         
         XCTAssertEqual(totalPages, 2)
         XCTAssertEqual(currentPage, 1)
@@ -78,10 +79,38 @@ final class PDFKitCoordinatorTests: XCTestCase {
         pdfView.document = doc
         
         coordinator.attach(to: pdfView)
+        coordinator.updatePageInfo()
         
         XCTAssertEqual(rangeTotal, 3)
         XCTAssertGreaterThanOrEqual(rangeFirst, 1)
         XCTAssertGreaterThanOrEqual(rangeLast, rangeFirst)
+        
+        coordinator.detach()
+    }
+    
+    func testNavigationMethods() {
+        let coordinator = PDFKitCoordinator(isBookMode: true)
+        let pdfView = PDFView()
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200))
+        let data = renderer.pdfData { context in
+            context.beginPage()
+            context.beginPage()
+            context.beginPage()
+        }
+        let doc = PDFDocument(data: data)
+        pdfView.document = doc
+        coordinator.attach(to: pdfView)
+        
+        coordinator.goToPage(index: 1)
+        XCTAssertNotNil(coordinator.pdfView)
+        
+        coordinator.goToNext()
+        coordinator.goToPrevious()
+        
+        coordinator.updateScrollState()
+        
+        let pan = UIPanGestureRecognizer()
+        coordinator.handlePanGesture(pan)
         
         coordinator.detach()
     }

@@ -13,6 +13,7 @@ struct PDFKitRepresentedView: UIViewRepresentable {
     let onPageChange: ((Int, Int) -> Void)?
     var onPageRangeChange: ((Int, Int, Int) -> Void)? = nil
     let onTap: (() -> Void)?
+    var onCoordinatorCreated: ((PDFKitCoordinator) -> Void)? = nil
     let onPDFViewCreated: ((PDFView) -> Void)?
     
     func makeUIView(context: Context) -> PDFView {
@@ -23,10 +24,11 @@ struct PDFKitRepresentedView: UIViewRepresentable {
         pdfView.displaysAsBook = displaysAsBook
         pdfView.displayDirection = isBookMode ? .horizontal : .vertical
         pdfView.backgroundColor = .systemBackground
-        pdfView.usePageViewController(false)
         
         context.coordinator.attach(to: pdfView)
-        onPDFViewCreated?(pdfView)
+        Task { @MainActor in
+            onPDFViewCreated?(pdfView)
+        }
         
         return pdfView
     }
@@ -34,7 +36,9 @@ struct PDFKitRepresentedView: UIViewRepresentable {
     func updateUIView(_ uiView: PDFView, context: Context) {
         if uiView.document != document {
             uiView.document = document
-            context.coordinator.updatePageInfo()
+            Task { @MainActor [weak coordinator = context.coordinator] in
+                coordinator?.updatePageInfo()
+            }
         }
         
         let targetDisplayMode: PDFDisplayMode = isBookMode ? .twoUp : .singlePageContinuous
@@ -56,20 +60,29 @@ struct PDFKitRepresentedView: UIViewRepresentable {
         
         if modeChanged {
             uiView.autoScales = true
-            context.coordinator.updatePageInfo()
+            Task { @MainActor [weak coordinator = context.coordinator] in
+                coordinator?.updatePageInfo()
+            }
         }
         
+        context.coordinator.isBookMode = isBookMode
+        context.coordinator.updateScrollState()
         context.coordinator.onPageChange = onPageChange
         context.coordinator.onPageRangeChange = onPageRangeChange
         context.coordinator.onTap = onTap
     }
     
     func makeCoordinator() -> PDFKitCoordinator {
-        PDFKitCoordinator(
+        let coordinator = PDFKitCoordinator(
+            isBookMode: isBookMode,
             onPageChange: onPageChange,
             onPageRangeChange: onPageRangeChange,
             onTap: onTap
         )
+        Task { @MainActor in
+            onCoordinatorCreated?(coordinator)
+        }
+        return coordinator
     }
     
     static func dismantleUIView(_ uiView: PDFView, coordinator: PDFKitCoordinator) {

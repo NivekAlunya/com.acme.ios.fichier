@@ -22,10 +22,26 @@ struct PDFDetailView: View {
     @State private var currentPage = 1
     @State private var endVisiblePage = 1
     @State private var totalPages = 1
-    @State private var isBookMode = false
-    @State private var displaysAsBook = true
+    @AppStorage("pdf_is_book_mode") private var isBookMode = false
+    @AppStorage("pdf_displays_as_book") private var displaysAsBook = true
+    @State private var currentSpreadIndex = 0
     @State private var activePDFView: PDFView?
+    @State private var coordinator: PDFKitCoordinator?
     @State private var reloadAttempt = 0
+    
+    private var spreads: [PDFSpread] {
+        guard let document else { return [] }
+        return PDFSpread.buildSpreads(pageCount: document.pageCount, displaysAsBook: displaysAsBook)
+    }
+    
+    private func syncCurrentSpread() {
+        if let match = spreads.firstIndex(where: { $0.pageIndices.contains(currentPage - 1) }) {
+            currentSpreadIndex = match
+            let spread = spreads[match]
+            self.currentPage = spread.firstPageNumber
+            self.endVisiblePage = spread.lastPageNumber
+        }
+    }
     
     private var pageInfoText: String {
         if isBookMode && currentPage != endVisiblePage && endVisiblePage > currentPage {
@@ -40,33 +56,110 @@ struct PDFDetailView: View {
             Color.black.ignoresSafeArea()
             
             if let document {
-                PDFKitRepresentedView(
-                    document: document,
-                    isBookMode: isBookMode,
-                    displaysAsBook: displaysAsBook,
-                    onPageChange: { cur, total in
-                        self.currentPage = cur
-                        self.totalPages = max(1, total)
-                    },
-                    onPageRangeChange: { first, last, total in
-                        self.currentPage = first
-                        self.endVisiblePage = last
-                        self.totalPages = max(1, total)
-                    },
-                    onTap: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showControls.toggle()
+                if isBookMode {
+                    // Book Mode: Interactive 1:1 finger swipe TabView (like PictureDetailView)
+                    TabView(selection: $currentSpreadIndex) {
+                        ForEach(spreads) { spread in
+                            PDFSpreadPageView(
+                                document: document,
+                                spread: spread,
+                                onTap: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showControls.toggle()
+                                    }
+                                }
+                            )
+                            .tag(spread.id)
                         }
-                    },
-                    onPDFViewCreated: { view in
-                        self.activePDFView = view
                     }
-                )
-                .ignoresSafeArea()
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .ignoresSafeArea()
+                    .onChange(of: currentSpreadIndex) { _, newIndex in
+                        guard newIndex >= 0 && newIndex < spreads.count else { return }
+                        let spread = spreads[newIndex]
+                        self.currentPage = spread.firstPageNumber
+                        self.endVisiblePage = spread.lastPageNumber
+                        UISelectionFeedbackGenerator().selectionChanged()
+                    }
+                } else {
+                    // Continuous Single-Page Mode
+                    PDFKitRepresentedView(
+                        document: document,
+                        isBookMode: false,
+                        displaysAsBook: false,
+                        onPageChange: { cur, total in
+                            Task { @MainActor in
+                                if self.currentPage != cur {
+                                    self.currentPage = cur
+                                }
+                                let maxTotal = max(1, total)
+                                if self.totalPages != maxTotal {
+                                    self.totalPages = maxTotal
+                                }
+                            }
+                        },
+                        onPageRangeChange: { first, last, total in
+                            Task { @MainActor in
+                                if self.currentPage != first {
+                                    self.currentPage = first
+                                }
+                                if self.endVisiblePage != last {
+                                    self.endVisiblePage = last
+                                }
+                                let maxTotal = max(1, total)
+                                if self.totalPages != maxTotal {
+                                    self.totalPages = maxTotal
+                                }
+                            }
+                        },
+                        onTap: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showControls.toggle()
+                            }
+                        },
+                        onCoordinatorCreated: { coord in
+                            self.coordinator = coord
+                        },
+                        onPDFViewCreated: { view in
+                            self.activePDFView = view
+                        }
+                    )
+                    .ignoresSafeArea()
+                }
             } else if isLoading {
                 loadingOverlay
             } else if let error = errorMessage {
                 errorOverlay(error: error)
+            }
+            
+            // Leading-Edge Thumbnail Sidebar
+            if totalPages > 1, let document {
+                HStack {
+                    PDFLeadingThumbnailSidebarView(
+                        document: document,
+                        currentPage: currentPage,
+                        endVisiblePage: endVisiblePage,
+                        onPageSelected: { targetPage in
+                            if isBookMode {
+                                if let match = spreads.firstIndex(where: { $0.pageIndices.contains(targetPage - 1) }) {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        currentSpreadIndex = match
+                                    }
+                                }
+                            } else {
+                                coordinator?.goToPage(index: targetPage - 1)
+                            }
+                        }
+                    )
+                    .padding(.leading, 12)
+                    .padding(.top, 70)
+                    .padding(.bottom, 80)
+                    
+                    Spacer()
+                }
+                .opacity(showControls ? 1.0 : 0.0)
+                .animation(.easeInOut(duration: 0.2), value: showControls)
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
             
             // HUD Overlays
@@ -83,6 +176,14 @@ struct PDFDetailView: View {
         .task(id: "\(item.id)-\(reloadAttempt)") {
             await loadDocument()
         }
+        .onChange(of: displaysAsBook) { _, _ in
+            syncCurrentSpread()
+        }
+        .onChange(of: isBookMode) { _, newMode in
+            if newMode {
+                syncCurrentSpread()
+            }
+        }
         .background {
             Group {
                 Button("") { dismiss() }
@@ -90,9 +191,32 @@ struct PDFDetailView: View {
                 Button("") {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         isBookMode.toggle()
+                        if isBookMode {
+                            syncCurrentSpread()
+                        }
                     }
                 }
                 .keyboardShortcut("b", modifiers: [])
+                Button("") {
+                    if isBookMode {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            currentSpreadIndex = max(0, currentSpreadIndex - 1)
+                        }
+                    } else {
+                        coordinator?.goToPrevious()
+                    }
+                }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+                Button("") {
+                    if isBookMode {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            currentSpreadIndex = min(spreads.count - 1, currentSpreadIndex + 1)
+                        }
+                    } else {
+                        coordinator?.goToNext()
+                    }
+                }
+                .keyboardShortcut(.rightArrow, modifiers: [])
             }
             .opacity(0)
             .allowsHitTesting(false)
@@ -150,6 +274,7 @@ struct PDFDetailView: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         isBookMode = true
+                        syncCurrentSpread()
                     }
                 } label: {
                     Label(
@@ -177,6 +302,9 @@ struct PDFDetailView: View {
             } primaryAction: {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     isBookMode.toggle()
+                    if isBookMode {
+                        syncCurrentSpread()
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -211,6 +339,7 @@ struct PDFDetailView: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
         .background(
             LinearGradient(
                 colors: [Color.black.opacity(0.75), Color.black.opacity(0.0)],
@@ -224,44 +353,27 @@ struct PDFDetailView: View {
     // MARK: - Bottom HUD
     
     private var bottomHUD: some View {
-        VStack(spacing: 10) {
-            // Page Indicator Pill
-            Text(pageInfoText)
-                .font(.system(size: 12, weight: .semibold))
-                .monospacedDigit()
-                .foregroundColor(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(Color.black.opacity(0.7)))
-                .overlay(
-                    Capsule().stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-                )
-            
-            // Thumbnail Scrubber Bar
-            if totalPages > 1, let activePDFView {
-                PDFThumbnailScrubberView(pdfView: activePDFView)
-                    .frame(height: 64)
-                    .padding(.horizontal, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.black.opacity(0.75))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-                            )
-                    )
-                    .padding(.horizontal, 16)
-            }
-        }
-        .padding(.bottom, 20)
-        .background(
-            LinearGradient(
-                colors: [Color.black.opacity(0.0), Color.black.opacity(0.85)],
-                startPoint: .top,
-                endPoint: .bottom
+        Text(pageInfoText)
+            .font(.system(size: 12, weight: .semibold))
+            .monospacedDigit()
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(
+                Capsule().stroke(Color.white.opacity(0.2), lineWidth: 0.5)
             )
-            .ignoresSafeArea(edges: .bottom)
-        )
+            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 20)
+            .background(
+                LinearGradient(
+                    colors: [Color.black.opacity(0.0), Color.black.opacity(0.85)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .bottom)
+            )
     }
     
     // MARK: - Loading Overlay
@@ -351,6 +463,7 @@ struct PDFDetailView: View {
             if let doc = PDFDocument(url: local) {
                 self.document = doc
                 self.totalPages = max(1, doc.pageCount)
+                self.syncCurrentSpread()
                 self.isLoading = false
                 return
             }
@@ -363,6 +476,7 @@ struct PDFDetailView: View {
                 self.localFileURL = cachedURL
                 self.document = doc
                 self.totalPages = max(1, doc.pageCount)
+                self.syncCurrentSpread()
                 self.isLoading = false
                 return
             }
@@ -384,6 +498,7 @@ struct PDFDetailView: View {
             if let doc = PDFDocument(url: url) {
                 self.document = doc
                 self.totalPages = max(1, doc.pageCount)
+                self.syncCurrentSpread()
                 self.isLoading = false
             } else {
                 self.errorMessage = String(localized: "Unable to parse PDF content", comment: "Invalid PDF format")
