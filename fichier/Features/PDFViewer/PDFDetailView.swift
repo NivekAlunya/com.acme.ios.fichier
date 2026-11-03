@@ -7,7 +7,7 @@ import SwiftUI
 import PDFKit
 
 struct PDFDetailView: View {
-    var manager: SMBDirectManager
+    var manager: StorageLocationManager
     let item: MediaItem
     
     @Environment(\.dismiss) private var dismiss
@@ -22,8 +22,15 @@ struct PDFDetailView: View {
     @State private var currentPage = 1
     @State private var endVisiblePage = 1
     @State private var totalPages = 1
-    @AppStorage("pdf_is_book_mode") private var isBookMode = false
-    @AppStorage("pdf_displays_as_book") private var displaysAsBook = true
+    @AppStorage("pdf_reading_mode") private var readingMode: PDFReadingMode = .continuous
+    
+    private var isBookMode: Bool {
+        readingMode.isBookMode
+    }
+    
+    private var displaysAsBook: Bool {
+        readingMode.displaysAsBook
+    }
     @State private var currentSpreadIndex = 0
     @State private var activePDFView: PDFView?
     @State private var coordinator: PDFKitCoordinator?
@@ -176,11 +183,8 @@ struct PDFDetailView: View {
         .task(id: "\(item.id)-\(reloadAttempt)") {
             await loadDocument()
         }
-        .onChange(of: displaysAsBook) { _, _ in
-            syncCurrentSpread()
-        }
-        .onChange(of: isBookMode) { _, newMode in
-            if newMode {
+        .onChange(of: readingMode) { _, newMode in
+            if newMode.isBookMode {
                 syncCurrentSpread()
             }
         }
@@ -190,8 +194,8 @@ struct PDFDetailView: View {
                     .keyboardShortcut(.escape, modifiers: [])
                 Button("") {
                     withAnimation(.easeInOut(duration: 0.25)) {
-                        isBookMode.toggle()
-                        if isBookMode {
+                        readingMode = isBookMode ? .continuous : .book
+                        if readingMode.isBookMode {
                             syncCurrentSpread()
                         }
                     }
@@ -260,35 +264,18 @@ struct PDFDetailView: View {
             
             // Book Mode (Two Pages Side-by-Side) Toggle & Options
             Menu {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        isBookMode = false
-                    }
-                } label: {
-                    Label(
-                        String(localized: "Single Page", comment: "Single page continuous scroll"),
-                        systemImage: !isBookMode ? "checkmark" : "doc.text"
-                    )
-                }
-                
-                Button {
-                    withAnimation(.easeInOut(duration: 0.25)) {
-                        isBookMode = true
-                        syncCurrentSpread()
-                    }
-                } label: {
-                    Label(
-                        String(localized: "Book View (Two Pages)", comment: "Two pages side-by-side book display"),
-                        systemImage: isBookMode ? "checkmark" : "book"
-                    )
-                }
-                
-                if isBookMode {
-                    Divider()
-                    Toggle(isOn: $displaysAsBook) {
+                ForEach(PDFReadingMode.allCases) { mode in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            readingMode = mode
+                            if mode.isBookMode {
+                                syncCurrentSpread()
+                            }
+                        }
+                    } label: {
                         Label(
-                            String(localized: "First Page as Cover", comment: "Display first page standalone as cover"),
-                            systemImage: "book.closed"
+                            mode.localizedTitle,
+                            systemImage: readingMode == mode ? "checkmark" : mode.iconName
                         )
                     }
                 }
@@ -301,8 +288,8 @@ struct PDFDetailView: View {
                     .clipShape(Circle())
             } primaryAction: {
                 withAnimation(.easeInOut(duration: 0.25)) {
-                    isBookMode.toggle()
-                    if isBookMode {
+                    readingMode = isBookMode ? .continuous : .book
+                    if readingMode.isBookMode {
                         syncCurrentSpread()
                     }
                 }

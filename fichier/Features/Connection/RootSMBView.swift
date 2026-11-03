@@ -6,7 +6,7 @@
 import SwiftUI
 
 public struct RootSMBView: View {
-    @State private var smbManager = SMBDirectManager()
+    @State private var smbManager = StorageLocationManager()
     @State private var activePictureForViewer: MediaItem?
     @State private var activeVideoForViewer: MediaItem?
     @State private var activePDFForViewer: MediaItem?

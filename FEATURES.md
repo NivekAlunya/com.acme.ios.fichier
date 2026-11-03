@@ -90,6 +90,11 @@ This document provides a comprehensive catalog of all features and capabilities 
 
 ## 4. Video Player & Streaming Engine
 
+- **Decoupled Architecture (Video Player 2.0)**:
+  - **Playback Controller (`VideoPlayerController`)**: `@Observable @MainActor` coordinator managing `AVPlayer`, 512KB chunk streaming over SMB, periodic time observation, volume/mute state, and audio session configuration.
+  - **Explicit State Machine (`VideoPlaybackState`)**: Strict `Sendable` enum (`.idle`, `.loading`, `.buffering`, `.playing`, `.paused`, `.failed`) preventing race conditions and contradictory playback flags.
+  - **Seek Coordinator (`VideoSeekCoordinator`)**: Dedicated seeking pipeline isolating generational seek invalidation (`seekGeneration`), adaptive keyframe snapping (0.5s–1.5s), 100ms throttle pacing, 250ms stationary frame debounce, and 2.5s watchdog protection.
+  - **Single-Responsibility View Layer**: Decoupled into `VideoPlayerCanvasView`, `VideoPlayerHUDView`, `VideoPlayerTopBarView`, `VideoPlayerCenterControlsView`, `VideoPlayerBottomBarView`, `VideoPlayerToastBannerView`, and a lightweight container `VideoDetailView`. High-frequency time observer ticks (2 Hz) only invalidate the timeline progress bar rather than re-evaluating the video canvas or HUD.
 - **Progressive Byte-Range SMB Streaming**:
   - Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVFoundation streaming queries and fetches raw byte ranges directly from the SMB server over TCP port 445.
   - Instant playback startup for large files (including 50GB+ 4K HDR videos) without downloading the complete file.
@@ -288,4 +293,4 @@ flowchart TD
   - Built strictly using `actor`, `async/await`, `Task`, `@MainActor`, and `Sendable`.
   - Zero legacy synchronization primitives (no `NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`, or GCD queues).
 - **Strict Single Definition Rule**:
-  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (exactly 69 modular files).
+  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (85 modular application files and 8 unit test suites across all domains).

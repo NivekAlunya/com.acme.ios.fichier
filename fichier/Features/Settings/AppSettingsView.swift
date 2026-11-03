@@ -18,8 +18,7 @@ struct AppSettingsView: View {
     @AppStorage("gallery_grid_size") private var gridSize: GridSize = .medium
     
     // PDF Reader Settings
-    @AppStorage("pdf_is_book_mode") private var isBookMode: Bool = false
-    @AppStorage("pdf_displays_as_book") private var displaysAsBook: Bool = true
+    @AppStorage("pdf_reading_mode") private var readingMode: PDFReadingMode = .continuous
     
     // Cache State
     @State private var cacheSizeString: String = "…"
@@ -125,15 +124,10 @@ struct AppSettingsView: View {
                 
                 // 5. PDF Reader Defaults
                 Section(String(localized: "PDF Reader", comment: "PDF Reader settings section")) {
-                    Picker(String(localized: "Default Reading Mode", comment: "Default PDF reading mode"), selection: $isBookMode) {
-                        Label(String(localized: "Single Page", comment: "Single page continuous scroll"), systemImage: "doc.text")
-                            .tag(false)
-                        Label(String(localized: "Book View (Two Pages)", comment: "Two pages side-by-side"), systemImage: "book")
-                            .tag(true)
-                    }
-                    
-                    if isBookMode {
-                        Toggle(String(localized: "First Page as Cover", comment: "Display first page standalone as cover"), isOn: $displaysAsBook)
+                    Picker(String(localized: "Default Reading Mode", comment: "Default PDF reading mode"), selection: $readingMode) {
+                        ForEach(PDFReadingMode.allCases) { mode in
+                            Label(mode.localizedTitle, systemImage: mode.iconName).tag(mode)
+                        }
                     }
                 }
                 

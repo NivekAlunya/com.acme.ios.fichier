@@ -6,7 +6,7 @@
 import SwiftUI
 
 public struct MediaThumbnailView: View {
-    public var manager: SMBDirectManager
+    public var manager: StorageLocationManager
     public let item: MediaItem
     public var maxDimension: CGFloat = 260
     public var cornerRadius: CGFloat = 10
@@ -18,7 +18,7 @@ public struct MediaThumbnailView: View {
     @State private var retryCount: Int = 0
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         item: MediaItem,
         maxDimension: CGFloat = 260,
         cornerRadius: CGFloat = 10,

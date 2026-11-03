@@ -43,7 +43,8 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **EXIF Inspector**: Inspect camera metadata (Camera model, Lens, Aperture, Shutter Speed, ISO, Focal Length, Dimensions, Modified Date) extracted on-demand via `ImageIO`.
 - **Camera Roll Export**: One-tap export to Apple Photos (`PhotoLibrarySaver`) with proper permission handling.
 
-### 🎬 Video Player & Streaming Engine
+### 🎬 Video Player & Streaming Engine (Video Player 2.0)
+- **Decoupled State-Machine Architecture**: Built with `@Observable @MainActor` coordinator (`VideoPlayerController`), an explicit `Sendable` playback state machine (`VideoPlaybackState`), a hardened seek coordinator (`VideoSeekCoordinator`), and modular single-responsibility views.
 - **Byte-Range On-Demand Streaming**: Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVPlayer byte requests and streams directly from SMB servers over TCP in fast 512KB chunks.
 - **Hardened Seeking & Frame Scrubbing**:
   - Adaptive 0.5s - 1.5s seek tolerance for instant scrub resumption without stalling over SMB.
@@ -77,7 +78,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 80 independent, modular Swift files (75 application files + 5 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 93 independent, modular Swift files (85 application files + 8 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -135,6 +136,7 @@ fichier/
 │   │   ├── PDFLeadingThumbnailSidebarView.swift # Floating vertical thumbnail sidebar on leading edge
 │   │   ├── PDFPageCanvasRepresentable.swift# UIViewRepresentable wrapper for vector page canvas
 │   │   ├── PDFPageCanvasView.swift         # CoreGraphics vector PDF page rendering view
+│   │   ├── PDFReadingMode.swift            # Reading mode enum (continuous, book, twoUp)
 │   │   ├── PDFSpread.swift                 # Page spread model & builder for book layout
 │   │   ├── PDFSpreadPageView.swift         # Spread page view (single or two-page spread)
 │   │   ├── PDFThumbnailItemCell.swift      # Asynchronous thumbnail card with active ring
@@ -143,15 +145,24 @@ fichier/
 │   ├── Settings/                           # App preferences and storage management
 │   │   └── AppSettingsView.swift           # Settings form, cache manager, about section
 │   │
-│   └── VideoPlayer/                        # Video player & streaming engine
+│   └── VideoPlayer/                        # Video player & streaming engine (Video Player 2.0)
 │       ├── AirPlayButtonView.swift         # Native AVRoutePickerView wrapper
 │       ├── CustomVideoPlayerCoordinator.swift# AVPlayerViewController / PiP coordinator
 │       ├── CustomVideoPlayerView.swift     # UIViewRepresentable video canvas
 │       ├── PlayerUIView.swift              # Custom AVPlayerLayer hosting view
 │       ├── ResourceLoadingTaskTracker.swift# Actor-isolated task tracker for range requests
 │       ├── SMBResourceLoaderDelegate.swift # Custom AVAsset byte-range streaming delegate
-│       ├── VideoDetailView.swift           # Fullscreen player with gestures & HUD
+│       ├── VideoDetailView.swift           # Lightweight host container & keyboard shortcut binder
 │       ├── VideoPlaybackRate.swift         # Playback speed enum (0.5x – 2.0x)
+│       ├── VideoPlaybackState.swift        # Explicit Sendable playback state machine enum
+│       ├── VideoPlayerBottomBarView.swift  # Scrubber container hosting VideoTimelineBar
+│       ├── VideoPlayerCanvasView.swift     # Video canvas host with swipe & tap gesture recognizers
+│       ├── VideoPlayerCenterControlsView.swift # Buffering spinner, retry, and center play/pause
+│       ├── VideoPlayerController.swift     # Observable MainActor playback engine coordinator
+│       ├── VideoPlayerHUDView.swift        # Auto-hiding HUD overlay container
+│       ├── VideoPlayerToastBannerView.swift# Resume & save glassmorphic toast pills
+│       ├── VideoPlayerTopBarView.swift     # Responsive top HUD toolbar (close, title, volume, actions)
+│       ├── VideoSeekCoordinator.swift      # Scrubbing & seeking pipeline coordinator
 │       ├── VideoSubtitleDelegate.swift     # Sendable subtitle text delegate
 │       ├── VideoThumbnailLimiter.swift     # Actor-based concurrency throttle for video frames
 │       ├── VideoTimelineBar.swift          # Interactive scrubber & duration bar
@@ -165,7 +176,6 @@ fichier/
 │   │
 │   ├── Networking/                         # Protocol engine and credential storage
 │   │   ├── SMBClientActor.swift            # Thread-safe actor wrapping libsmb2 operations
-│   │   ├── SMBDirectManager.swift          # Observable UI state manager & prefetch coordinator
 │   │   ├── SMBHostDiscovery.swift          # NWBrowser Bonjour mDNS scanner
 │   │   └── SMBKeychain.swift               # Apple Keychain wrapper for SMB credentials
 │   │
@@ -179,6 +189,7 @@ fichier/
 │       ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
 │       ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
 │       ├── PictureEXIFBox.swift            # Sendable EXIF container box
+│       ├── StorageLocationManager.swift    # Unified Observable UI state manager & prefetch coordinator
 │       ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
 │       ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
 │       ├── VideoPlaybackRecord.swift       # Persisted playback progress model
@@ -188,9 +199,12 @@ fichier/
 └── Tests/                                  # Unit test suites
     ├── MediaCacheManagerTests.swift        # Cache key, dimension, and eviction tests
     ├── PDFKitCoordinatorTests.swift        # PDF navigation, coordinator, and observer tests
+    ├── PDFReadingModeTests.swift           # Reading mode cases, properties, and identifier tests
     ├── PDFSpreadTests.swift                # Spread builder and cover layout tests
     ├── PDFThumbnailSidebarTests.swift      # Thumbnail sidebar model and callback tests
-    └── SupportedMediaTypesTests.swift      # File extension and format detection tests
+    ├── SupportedMediaTypesTests.swift      # File extension and format detection tests
+    ├── VideoPlaybackStateTests.swift       # Playback state enum, equality, and transition tests
+    └── VideoSeekCoordinatorTests.swift     # Seek generation, tolerance, and scrub lifecycle tests
 ```
 
 ### Concurrency Architecture
@@ -199,7 +213,7 @@ fichier/
 flowchart TD
     subgraph MainActorContext["@MainActor UI & State Layer"]
         V[SwiftUI Views<br/>VideoDetailView, MediaGridView, etc.]
-        M[SMBDirectManager<br/>@Observable UI Coordinator]
+        M[StorageLocationManager<br/>@Observable UI Coordinator]
         S[VideoPlaybackStore<br/>@Observable Playback Store]
         F[FavoritesManager<br/>@Observable Favorites Store]
     end
@@ -232,6 +246,49 @@ flowchart TD
     A_SMB <--> C_LIB
     A_LOC <--> C_FS
     A_PH <--> C_PH
+```
+
+### Video Player 2.0 Architecture
+
+```mermaid
+flowchart TD
+    subgraph UI["SwiftUI View Layer (Strict 1 Type = 1 File)"]
+        Host["VideoDetailView<br/>(Slim Container ~140 lines)"]
+        Canvas["VideoPlayerCanvasView<br/>(AVPlayerLayer & Gestures)"]
+        HUD["VideoPlayerHUDView<br/>(Overlay Host & Auto-Hide)"]
+        TopBar["VideoPlayerTopBarView<br/>(Title, Close, Menu, PiP, AirPlay)"]
+        CenterControls["VideoPlayerCenterControlsView<br/>(Play/Pause, Chevrons, Spinner)"]
+        BottomBar["VideoPlayerBottomBarView<br/>(Timeline & Volume)"]
+        Toast["VideoPlayerToastBannerView<br/>(Resume & Saved Banners)"]
+    end
+
+    subgraph StateAndLogic["State & Controller Layer"]
+        Ctrl["VideoPlayerController<br/>(@Observable @MainActor Coordinator)"]
+        StateEnum["VideoPlaybackState<br/>(Explicit State Machine)"]
+        SeekCoord["VideoSeekCoordinator<br/>(Keyframe Snapping & Watchdog)"]
+    end
+
+    subgraph StreamingEngine["Streaming & Storage Engine"]
+        StreamLoader["SMBResourceLoaderDelegate<br/>(512KB Chunk Streamer)"]
+        TrackMgr["VideoTrackManager<br/>(Audio & Subtitles)"]
+        Store["VideoPlaybackStore<br/>(Saved Position Cache)"]
+    end
+
+    Host --> Ctrl
+    Host --> Canvas
+    Host --> HUD
+    HUD --> TopBar
+    HUD --> CenterControls
+    HUD --> BottomBar
+    HUD --> Toast
+
+    Ctrl --> StateEnum
+    Ctrl --> SeekCoord
+    Ctrl --> StreamLoader
+    Ctrl --> TrackMgr
+    Ctrl --> Store
+    Canvas -.->|Gestures| SeekCoord
+    BottomBar -.->|Scrubbing| SeekCoord
 ```
 
 ### Video Seeking & Scrubbing Workflow

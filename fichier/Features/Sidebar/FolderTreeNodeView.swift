@@ -10,14 +10,14 @@ struct FolderTreeNodeView: View {
     let node: MediaItem
     let level: Int
     @State private var isExpanded: Bool
-    var manager: SMBDirectManager
+    var manager: StorageLocationManager
     let onSelectFolder: (MediaItem) -> Void
     
     init(
         node: MediaItem,
         level: Int,
         isInitiallyExpanded: Bool = false,
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         onSelectFolder: @escaping (MediaItem) -> Void
     ) {
         self.node = node

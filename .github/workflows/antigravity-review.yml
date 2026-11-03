@@ -100,7 +100,7 @@ jobs:
 
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "Calling Gemini API with model '${GEMINI_MODEL}' (attempt $attempt of $MAX_RETRIES)..."
-            HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            HTTP_STATUS=$(curl -s --connect-timeout 15 --max-time 60 -o response.json -w "%{http_code}" \
               -H "Content-Type: application/json" \
               "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}" \
               -d @request.json)
@@ -108,10 +108,10 @@ jobs:
             if [ "$HTTP_STATUS" -eq 200 ]; then
               SUCCESS=true
               break
-            elif [ "$HTTP_STATUS" -eq 429 ] || [ "$HTTP_STATUS" -eq 503 ]; then
+            elif [ "$HTTP_STATUS" -eq 429 ] || [ "$HTTP_STATUS" -eq 500 ] || [ "$HTTP_STATUS" -eq 502 ] || [ "$HTTP_STATUS" -eq 503 ] || [ "$HTTP_STATUS" -eq 504 ] || [ "$HTTP_STATUS" -eq 000 ]; then
               if [ "$attempt" -lt "$MAX_RETRIES" ]; then
                 RETRY_DELAY=$((attempt * 15))
-                echo "⚠️ HTTP $HTTP_STATUS received (High Demand / Rate Limited). Retrying in ${RETRY_DELAY}s (attempt $attempt of $MAX_RETRIES)..."
+                echo "⚠️ Transient HTTP status '$HTTP_STATUS' received. Retrying in ${RETRY_DELAY}s (attempt $attempt of $MAX_RETRIES)..."
                 sleep $RETRY_DELAY
               fi
             else
