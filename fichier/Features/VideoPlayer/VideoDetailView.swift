@@ -775,7 +775,7 @@ public struct VideoDetailView: View {
                     isScrubbingTimeline = true
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player?.timeControlStatus != .paused) || isPlaying
+                    wasPlayingBeforeScrub = (player?.timeControlStatus != .paused) || isPlaying || isFinishingSeek
                     if wasPlayingBeforeScrub {
                         player?.pause()
                         isPlaying = false
@@ -806,7 +806,7 @@ public struct VideoDetailView: View {
                     isScrubbingWithGesture = true
                     hideControlsTask?.cancel()
                     lastSeekTargetSeconds = currentPlaybackSeconds
-                    wasPlayingBeforeScrub = (player.timeControlStatus != .paused) || isPlaying
+                    wasPlayingBeforeScrub = (player.timeControlStatus != .paused) || isPlaying || isFinishingSeek
                     if wasPlayingBeforeScrub {
                         player.pause()
                         isPlaying = false
@@ -1008,28 +1008,33 @@ public struct VideoDetailView: View {
         seekWatchdogTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled, thisGeneration == self.seekGeneration else { return }
-            if resumePlaying && player.timeControlStatus != .playing {
-                player.play()
+            if resumePlaying {
+                if player.timeControlStatus != .playing {
+                    player.play()
+                }
+                self.isFinishingSeek = false
             }
         }
         
         player.seek(to: targetCM, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
             Task { @MainActor in
                 guard thisGeneration == self.seekGeneration else { return }
-                self.seekWatchdogTask?.cancel()
-                self.seekWatchdogTask = nil
-                self.isFinishingSeek = false
                 
                 if resumePlaying {
-                    if player.timeControlStatus == .paused {
-                        player.play()
-                    }
+                    player.play()
                     self.isPlaying = true
+                } else {
+                    self.isFinishingSeek = false
                 }
                 
                 if player.timeControlStatus == .playing || player.currentItem?.isPlaybackLikelyToKeepUp == true {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.isBuffering = false
+                    }
+                    if player.timeControlStatus == .playing {
+                        self.isFinishingSeek = false
+                        self.seekWatchdogTask?.cancel()
+                        self.seekWatchdogTask = nil
                     }
                 }
                 self.scheduleControlsAutoHide()
@@ -1070,6 +1075,9 @@ public struct VideoDetailView: View {
     
     private func togglePlayPause() {
         guard let player = player else { return }
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        isFinishingSeek = false
         if player.timeControlStatus != .paused {
             player.pause()
             isPlaying = false
@@ -1223,6 +1231,9 @@ public struct VideoDetailView: View {
         isScrubbingTimeline = false
         isSeekingFrame = false
         pendingSeekSeconds = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        isFinishingSeek = false
         seekGeneration += 1
         player?.pause()
         player = nil
@@ -1398,6 +1409,9 @@ public struct VideoDetailView: View {
                 switch p.timeControlStatus {
                 case .playing:
                     waitingStartTime = nil
+                    self.isFinishingSeek = false
+                    self.seekWatchdogTask?.cancel()
+                    self.seekWatchdogTask = nil
                     if self.isBuffering {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             self.isBuffering = false
@@ -1410,9 +1424,13 @@ public struct VideoDetailView: View {
                     
                 case .paused:
                     waitingStartTime = nil
-                    if self.isBuffering {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            self.isBuffering = false
+                    // Only dismiss buffering if the playerItem has reached .readyToPlay.
+                    // During initial loading (.unknown or nil), keep isBuffering = true until frames arrive or an error occurs.
+                    if currentItem?.status == .readyToPlay {
+                        if self.isBuffering {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                self.isBuffering = false
+                            }
                         }
                     }
                     if self.isPlaying && !self.isScrubbingTimeline && !self.isScrubbingWithGesture && !self.isFinishingSeek {
@@ -1504,6 +1522,12 @@ public struct VideoDetailView: View {
                 let wasPlaying = self.isPlaying
                 if !self.isFinishingSeek {
                     self.isPlaying = isCurrentlyPlaying
+                }
+                
+                if p.timeControlStatus == .playing {
+                    self.isFinishingSeek = false
+                    self.seekWatchdogTask?.cancel()
+                    self.seekWatchdogTask = nil
                 }
                 
                 // If the video is rendering frames or time is advancing, dismiss buffering popup

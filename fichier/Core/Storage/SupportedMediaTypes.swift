@@ -18,7 +18,11 @@ nonisolated public enum SupportedMediaTypes: Sendable {
         "mp4", "mov", "m4v"
     ]
     
-    public static let allExtensions: Set<String> = imageExtensions.union(videoExtensions)
+    public static let documentExtensions: Set<String> = [
+        "pdf"
+    ]
+    
+    public static let allExtensions: Set<String> = imageExtensions.union(videoExtensions).union(documentExtensions)
     
     public static func isSupported(extension ext: String) -> Bool {
         allExtensions.contains(ext.lowercased())
@@ -30,6 +34,14 @@ nonisolated public enum SupportedMediaTypes: Sendable {
     
     public static func isImage(extension ext: String) -> Bool {
         imageExtensions.contains(ext.lowercased())
+    }
+    
+    public static func isDocument(extension ext: String) -> Bool {
+        documentExtensions.contains(ext.lowercased())
+    }
+    
+    public static func isPDF(extension ext: String) -> Bool {
+        ext.lowercased() == "pdf"
     }
     
     public static func isGIF(extension ext: String) -> Bool {

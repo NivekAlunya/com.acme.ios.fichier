@@ -7,6 +7,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import CryptoKit
+import PDFKit
 
 nonisolated public final class MediaCacheManager: Sendable {
     public static let shared = MediaCacheManager()
@@ -14,21 +15,25 @@ nonisolated public final class MediaCacheManager: Sendable {
     private var fileManager: FileManager { .default }
     private let thumbnailsDirectory: URL
     private let videosDirectory: URL
+    private let documentsDirectory: URL
     
     public init() {
         let fm = FileManager.default
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let thumbs = caches.appendingPathComponent("SMBThumbnails", isDirectory: true)
         let vids = caches.appendingPathComponent("SMBVideos", isDirectory: true)
+        let docs = caches.appendingPathComponent("SMBDocuments", isDirectory: true)
         
         self.thumbnailsDirectory = thumbs
         self.videosDirectory = vids
+        self.documentsDirectory = docs
         
         let attributes: [FileAttributeKey: Any] = [
             .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
         ]
         try? fm.createDirectory(at: thumbs, withIntermediateDirectories: true, attributes: attributes)
         try? fm.createDirectory(at: vids, withIntermediateDirectories: true, attributes: attributes)
+        try? fm.createDirectory(at: docs, withIntermediateDirectories: true, attributes: attributes)
         
         Task.detached(priority: .background) { [self] in
             self.performMaintenanceSweep()
@@ -160,10 +165,50 @@ nonisolated public final class MediaCacheManager: Sendable {
         return fileManager.fileExists(atPath: url.path)
     }
     
+    // MARK: - Document Cache URL Resolution
+    
+    public func localDocumentURL(for item: MediaItem) -> URL {
+        let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
+        let ext = (item.name as NSString).pathExtension.lowercased()
+        let safeExt = ext.isEmpty ? "pdf" : ext
+        return documentsDirectory.appendingPathComponent("\(key).\(safeExt)")
+    }
+    
+    public func hasCachedDocument(for item: MediaItem) -> Bool {
+        let url = localDocumentURL(for: item)
+        return fileManager.fileExists(atPath: url.path)
+    }
+    
+    // MARK: - PDF Thumbnail Generation
+    
+    public func generatePDFThumbnail(from url: URL, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        guard let doc = PDFDocument(url: url), let page = doc.page(at: 0) else { return nil }
+        let size = CGSize(width: maxDimension, height: maxDimension)
+        return page.thumbnail(of: size, for: .mediaBox)
+    }
+    
+    public func generatePDFThumbnail(from data: Data, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        // For large data buffers (> 5 MB), stage to a temporary file so PDFDocument takes advantage of
+        // virtual memory mapping (mmap) rather than inflating heap memory during page rasterization
+        if data.count > 5 * 1024 * 1024 {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+            do {
+                try data.write(to: tempURL, options: .atomic)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                return generatePDFThumbnail(from: tempURL, maxDimension: maxDimension)
+            } catch {
+                // Fall back to in-memory decoding if temporary write fails
+            }
+        }
+        guard let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return nil }
+        let size = CGSize(width: maxDimension, height: maxDimension)
+        return page.thumbnail(of: size, for: .mediaBox)
+    }
+    
     // MARK: - Video Thumbnail Timing Constants
     
     /// The default timestamp sampled for video thumbnails to capture a representative scene beyond introductory title cards/black frames.
-    public static let defaultVideoThumbnailTime = CMTime(seconds: 12.0, preferredTimescale: 600)
+    public static let defaultVideoThumbnailTime = CMTime(seconds: 15.0, preferredTimescale: 600)
     
     /// The tolerance applied when sampling video thumbnail keyframes, allowing fast keyframe selection without decoding all preceding frames.
     public static let defaultVideoThumbnailTolerance = CMTime(seconds: 2.5, preferredTimescale: 600)

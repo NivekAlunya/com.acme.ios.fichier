@@ -212,6 +212,16 @@ actor SMBClientActor {
             return diskCached
         }
         
+        // 3. For PDF documents already cached on disk in SMBDocuments, generate thumbnail directly from disk file
+        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
+            let docURL = MediaCacheManager.shared.localDocumentURL(for: item)
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: docURL, maxDimension: maxDimension) {
+                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
         if Task.isCancelled { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
@@ -222,6 +232,24 @@ actor SMBClientActor {
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil
+            }
+            
+            // Remote PDF: Stream to temporary staging file to avoid loading entire 100MB+ document into RAM
+            if item.isPDF {
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                do {
+                    try await client.downloadItem(atPath: item.path, to: tempURL) { _, _ in
+                        !Task.isCancelled
+                    }
+                    if !Task.isCancelled, let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: tempURL, maxDimension: maxDimension) {
+                        thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                        MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                        return thumb
+                    }
+                } catch {
+                    return nil
+                }
             }
             
             // Photo Thumbnail Handling
@@ -289,9 +317,15 @@ actor SMBClientActor {
             
             // Promote temporary .part file to final local video file atomically
             if FileManager.default.fileExists(atPath: localURL.path) {
-                try? FileManager.default.removeItem(at: localURL)
+                do {
+                    _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: [])
+                } catch {
+                    try? FileManager.default.removeItem(at: localURL)
+                    try FileManager.default.moveItem(at: partURL, to: localURL)
+                }
+            } else {
+                try FileManager.default.moveItem(at: partURL, to: localURL)
             }
-            try FileManager.default.moveItem(at: partURL, to: localURL)
         } catch {
             try? FileManager.default.removeItem(at: partURL)
             throw error
@@ -312,6 +346,61 @@ actor SMBClientActor {
             maxDimension: MediaCacheManager.standardThumbnailDimension,
             preferredTime: MediaCacheManager.defaultVideoThumbnailTime
         ) {
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
+            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+        }
+        
+        return localURL
+    }
+    
+    /// Fetches a document (PDF) to local disk cache so PDFView can render and search it smoothly
+    func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+        if MediaCacheManager.shared.hasCachedDocument(for: item) {
+            return localURL
+        }
+        
+        let client = try await ensureConnected(to: item.shareName)
+        let partURL = localURL.appendingPathExtension("part")
+        
+        try? FileManager.default.removeItem(at: partURL)
+        
+        do {
+            try await client.downloadItem(atPath: item.path, to: partURL) { bytes, total in
+                if Task.isCancelled { return false }
+                progress?(bytes, total)
+                return true
+            }
+            
+            if Task.isCancelled {
+                try? FileManager.default.removeItem(at: partURL)
+                throw CancellationError()
+            }
+            
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                do {
+                    _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: [])
+                } catch {
+                    try? FileManager.default.removeItem(at: localURL)
+                    try FileManager.default.moveItem(at: partURL, to: localURL)
+                }
+            } else {
+                try FileManager.default.moveItem(at: partURL, to: localURL)
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw error
+        }
+        
+        // Upgrade thumbnail cache with rendered PDF cover page
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: item.connectionID
+        )
+        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: MediaCacheManager.standardThumbnailDimension) {
             let memoryCacheKey = "\(item.id)_thumb" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)

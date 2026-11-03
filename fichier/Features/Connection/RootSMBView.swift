@@ -9,6 +9,7 @@ public struct RootSMBView: View {
     @State private var smbManager = SMBDirectManager()
     @State private var activePictureForViewer: MediaItem?
     @State private var activeVideoForViewer: MediaItem?
+    @State private var activePDFForViewer: MediaItem?
     @State private var activeContextMedia: [MediaItem] = []
     @State private var shouldAutoStartSlideshow = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -60,7 +61,7 @@ public struct RootSMBView: View {
                             }
                         },
                         onStartSlideshow: { currentDisplayPictures in
-                            let photosOnly = currentDisplayPictures.filter { !$0.isVideo }
+                            let photosOnly = currentDisplayPictures.filter { !$0.isVideo && !$0.isPDF }
                             if let first = photosOnly.first {
                                 activeContextMedia = currentDisplayPictures
                                 activePictureForViewer = first
@@ -69,7 +70,9 @@ public struct RootSMBView: View {
                         },
                         onSelectPicture: { item, currentDisplayPictures in
                             activeContextMedia = currentDisplayPictures
-                            if item.isVideo {
+                            if item.isPDF {
+                                activePDFForViewer = item
+                            } else if item.isVideo {
                                 activeVideoForViewer = item
                             } else {
                                 activePictureForViewer = item
@@ -95,7 +98,7 @@ public struct RootSMBView: View {
             let context = activeContextMedia.isEmpty ? smbManager.pictures : activeContextMedia
             PictureDetailView(
                 manager: smbManager,
-                pictures: context.filter { !$0.isVideo },
+                pictures: context.filter { !$0.isVideo && !$0.isPDF },
                 initialItem: pic,
                 autoStartSlideshow: shouldAutoStartSlideshow
             )
@@ -106,6 +109,12 @@ public struct RootSMBView: View {
                 manager: smbManager,
                 videos: context.filter { $0.isVideo },
                 initialItem: vid
+            )
+        }
+        .fullScreenCover(item: $activePDFForViewer) { pdf in
+            PDFDetailView(
+                manager: smbManager,
+                item: pdf
             )
         }
         .sheet(isPresented: $showingSettings) {

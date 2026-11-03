@@ -213,6 +213,12 @@ public actor LocalStorageActor {
                 return thumb
             }
             return nil
+        } else if item.isPDF {
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: url, maxDimension: targetDimension) {
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+            return nil
         } else {
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailWithTransform: true,

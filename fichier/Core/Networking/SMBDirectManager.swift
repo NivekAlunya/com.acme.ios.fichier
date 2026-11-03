@@ -618,6 +618,15 @@ public final class SMBDirectManager {
             return diskCached
         }
         
+        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
+            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: MediaCacheManager.standardThumbnailDimension) {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: photoDiskKey)
+                return thumb
+            }
+        }
+        
         try? await Task.sleep(for: .milliseconds(40))
         guard !Task.isCancelled else { return nil }
         
@@ -761,6 +770,13 @@ public final class SMBDirectManager {
             return localURL
         }
         return try await worker.fetchVideoURL(for: item, progress: progress)
+    }
+    
+    public func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        if let localURL = item.localURL {
+            return localURL
+        }
+        return try await worker.fetchDocumentURL(for: item, progress: progress)
     }
     
     public var mediaCacheSize: String = "…"
