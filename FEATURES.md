@@ -9,10 +9,11 @@ This document provides a comprehensive catalog of all features and capabilities 
 2. [Media Browsing & Gallery Explorer](#2-media-browsing--gallery-explorer)
 3. [Photo Viewer & Slideshow Engine](#3-photo-viewer--slideshow-engine)
 4. [Video Player & Streaming Engine](#4-video-player--streaming-engine)
-5. [Playback Options: Audio, Subtitles & Speed](#5-playback-options-audio-subtitles--speed)
-6. [System & External Display Integrations](#6-system--external-display-integrations)
-7. [Storage, Caching & Performance](#7-storage-caching--performance)
-8. [Swift 6 & Concurrency Architecture](#8-swift-6--concurrency-architecture)
+5. [PDF & Document Viewer Engine](#5-pdf--document-viewer-engine)
+6. [Playback Options: Audio, Subtitles & Speed](#6-playback-options-audio-subtitles--speed)
+7. [System & External Display Integrations](#7-system--external-display-integrations)
+8. [Storage, Caching & Performance](#8-storage-caching--performance)
+9. [Swift 6 & Concurrency Architecture](#9-swift-6--concurrency-architecture)
 
 ---
 
@@ -46,8 +47,10 @@ This document provides a comprehensive catalog of all features and capabilities 
 - **Pinch-to-Resize Grid Density (`GridSize`)**:
   - Interactive pinch gestures seamlessly transition between **Small**, **Medium**, and **Large** tile densities.
 - **Sorting & Filtering Engine**:
-  - **Filters**: *All Media*, *Photos Only*, *Videos Only*, or *Favorites*.
+  - **Filters**: *All Media*, *Photos Only*, *Videos Only*, *Documents Only*, or *Favorites*.
   - **Sorting**: Order files by *Name*, *Date Modified*, or *File Size* in *Ascending* or *Descending* order.
+- **Visual Badges & Type Indicators**:
+  - Distinctive badges on gallery cells: Video duration and circular watch-progress rings, **GIF** tags for animated media, and bright red **PDF** badges for documents.
 - **Multi-Selection & Batch Operations (`MediaSelectionBottomBar`)**:
   - Tap "Select" to enter multi-select mode.
   - Batch export to Apple Photos or share via system share sheet.
@@ -195,7 +198,30 @@ flowchart TD
 
 ---
 
-## 5. Playback Options: Audio, Subtitles & Speed
+## 5. PDF & Document Viewer Engine
+
+- **Native Apple PDFKit Integration**:
+  - Hardware-accelerated vector document rendering via Apple's `PDFKit` (`PDFView`).
+  - Seamless continuous vertical page flow (`.singlePageContinuous`, `.vertical`) with auto-scaling to device width (`autoScales = true`).
+  - Native gesture support for pinch-to-zoom and multi-level zoom without vector quality degradation.
+- **Interactive Thumbnail Page Scrubber (`PDFThumbnailScrubberView`)**:
+  - Embedded `PDFThumbnailView` horizontally mounted in a glassmorphic bottom bar.
+  - Linked bidirectionally with the active document: tapping any page thumbnail instantly scrolls the document, while scrolling the document dynamically updates and tracks the active thumbnail.
+- **Dynamic Glassmorphic HUD & Controls (`PDFDetailView`)**:
+  - **Top Bar**: Semi-transparent dark gradient bar displaying filename, file size, live `Page X of Y` indicator, favorite bookmarking toggle, and close button.
+  - **Single-Tap HUD Toggle**: Tapping anywhere on the document canvas smoothly toggles top and bottom controls with animation (`easeInOut(duration: 0.2)`).
+- **Native Document Export & Sharing**:
+  - Direct integration with native `ShareLink` allowing one-tap AirDrop, Mail, or Files export of cached PDF files.
+- **On-Demand Progressive SMB Caching**:
+  - Remote documents download atomically to a dedicated local directory (`SMBDocuments`) using temporary file staging (`.part`) to avoid corrupt cache states.
+  - Centered visual progress ring displaying live percentage completion and downloaded byte count.
+  - Once cached, future opens load instantly with zero network roundtrips.
+- **Master First-Page Thumbnail Generation**:
+  - Generates high-fidelity 420px first-page previews upon first discovery, cached in `MediaCacheManager` for 0ms gallery grid rendering.
+
+---
+
+## 6. Playback Options: Audio, Subtitles & Speed
 
 - **In-App Volume Control (`VideoVolumeBar`)**:
   - Custom draggable volume slider with live level feedback.
@@ -211,7 +237,7 @@ flowchart TD
 
 ---
 
-## 6. System & External Display Integrations
+## 7. System & External Display Integrations
 
 - **Picture-in-Picture (PiP)**:
   - Native PiP powered by `AVPictureInPictureController`.
@@ -219,7 +245,6 @@ flowchart TD
   - Player teardown is safely bypassed when PiP is active.
 - **AirPlay Streaming (`AirPlayButtonView`)**:
   - Integrated native `AVRoutePickerView` for wireless video and audio casting to Apple TV and AirPlay 2-compatible receivers.
-- **Camera Roll Export**:
   - Save remote SMB videos directly into the iOS Camera Roll with real-time progress indicators and confirmation toasts.
 - **Native Share Sheet**:
   - Share cached videos and media files using Apple's standard system share sheet.
@@ -228,7 +253,7 @@ flowchart TD
 
 ---
 
-## 7. Storage, Caching & Performance
+## 8. Storage, Caching & Performance
 
 - **Two-Tier Cache Architecture**:
   - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: Fast LRU in-memory RAM cache with `@unchecked Sendable` isolation over `NSCache` for immediate scrolling and instantaneous UI updates.
@@ -240,10 +265,10 @@ flowchart TD
 
 ---
 
-## 8. Swift 6 & Concurrency Architecture
+## 9. Swift 6 & Concurrency Architecture
 
 - **100% Modern Swift Concurrency**:
   - Built strictly using `actor`, `async/await`, `Task`, `@MainActor`, and `Sendable`.
   - Zero legacy synchronization primitives (no `NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`, or GCD queues).
 - **Strict Single Definition Rule**:
-  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (exactly 65 modular files).
+  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (exactly 69 modular files).

@@ -234,14 +234,21 @@ actor SMBClientActor {
             }
             
             // Extract and cache metadata immediately while image bytes are in memory!
-            if metadataCache.object(forKey: item.id as NSString) == nil {
+            if !item.isPDF && metadataCache.object(forKey: item.id as NSString) == nil {
                 let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
             
-            // Offload CPU-bound image downsampling and disk caching off the actor lock
+            // Offload CPU-bound image/PDF downsampling and disk caching off the actor lock
             // Standardize downsampling to master thumbnail dimension (420px)
             let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                if item.isPDF {
+                    guard let decoded = MediaCacheManager.shared.generatePDFThumbnail(from: data, maxDimension: MediaCacheManager.standardThumbnailDimension) else {
+                        return nil
+                    }
+                    MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
+                    return decoded
+                }
                 guard let decoded = Self.downsample(data: data, maxDimension: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
                     return nil
                 }
@@ -312,6 +319,55 @@ actor SMBClientActor {
             maxDimension: MediaCacheManager.standardThumbnailDimension,
             preferredTime: MediaCacheManager.defaultVideoThumbnailTime
         ) {
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
+            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+        }
+        
+        return localURL
+    }
+    
+    /// Fetches a document (PDF) to local disk cache so PDFView can render and search it smoothly
+    func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+        if MediaCacheManager.shared.hasCachedDocument(for: item) {
+            return localURL
+        }
+        
+        let client = try await ensureConnected(to: item.shareName)
+        let partURL = localURL.appendingPathExtension("part")
+        
+        try? FileManager.default.removeItem(at: partURL)
+        
+        do {
+            try await client.downloadItem(atPath: item.path, to: partURL) { bytes, total in
+                if Task.isCancelled { return false }
+                progress?(bytes, total)
+                return true
+            }
+            
+            if Task.isCancelled {
+                try? FileManager.default.removeItem(at: partURL)
+                throw CancellationError()
+            }
+            
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                try? FileManager.default.removeItem(at: localURL)
+            }
+            try FileManager.default.moveItem(at: partURL, to: localURL)
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw error
+        }
+        
+        // Upgrade thumbnail cache with rendered PDF cover page
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: item.connectionID
+        )
+        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: MediaCacheManager.standardThumbnailDimension) {
             let memoryCacheKey = "\(item.id)_thumb" as NSString
             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)

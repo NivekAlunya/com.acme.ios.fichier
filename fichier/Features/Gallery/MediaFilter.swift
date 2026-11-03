@@ -9,6 +9,7 @@ enum MediaFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case photos = "Photos"
     case videos = "Videos"
+    case documents = "Documents"
     
     var id: String { rawValue }
     
@@ -17,6 +18,7 @@ enum MediaFilter: String, CaseIterable, Identifiable {
         case .all: return .Strings.galleryFilterAll
         case .photos: return .Strings.galleryFilterPhotos
         case .videos: return .Strings.galleryFilterVideos
+        case .documents: return LocalizedStringResource("Documents", defaultValue: "Documents")
         }
     }
     
@@ -25,6 +27,7 @@ enum MediaFilter: String, CaseIterable, Identifiable {
         case .all: return "photo.on.rectangle.angled"
         case .photos: return "photo"
         case .videos: return "video"
+        case .documents: return "doc.text.fill"
         }
     }
 }

@@ -144,6 +144,16 @@ public struct MediaThumbnailView: View {
                     .clipShape(Capsule())
                     .padding(isCompact ? 2 : 6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            } else if item.isPDF {
+                Text("PDF")
+                    .font(.system(size: isCompact ? 7 : 8, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, isCompact ? 3 : 5)
+                    .padding(.vertical, isCompact ? 1 : 3)
+                    .background(Color.red.opacity(isCompact ? 0.85 : 0.8))
+                    .clipShape(Capsule())
+                    .padding(isCompact ? 2 : 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
         }
         .onAppear {

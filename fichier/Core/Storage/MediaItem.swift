@@ -116,4 +116,14 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         let ext = (name as NSString).pathExtension
         return SupportedMediaTypes.isGIF(extension: ext)
     }
+    
+    public var isPDF: Bool {
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isPDF(extension: ext)
+    }
+    
+    public var isDocument: Bool {
+        let ext = (name as NSString).pathExtension
+        return SupportedMediaTypes.isDocument(extension: ext)
+    }
 }

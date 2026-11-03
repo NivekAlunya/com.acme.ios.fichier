@@ -19,12 +19,20 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Adaptive Gallery Views**: Toggle between customizable multi-density **Grid** and detailed **List** view (`ViewMode`, `GridSize`).
 - **Pinch-to-Resize Grid**: Fluid pinch gestures dynamically change thumbnail density between small, medium, and large layouts.
 - **Filtering & Sorting**:
-  - Filter by **All**, **Photos Only**, **Videos Only**, or **Favorites**.
+  - Filter by **All**, **Photos Only**, **Videos Only**, **Documents Only**, or **Favorites**.
   - Sort by **Name**, **Date Modified**, or **File Size** (ascending / descending).
   - Contextual photo and video paging preserves the user's active filter and sort order.
-- **31 Supported Media Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), and native streaming video (MP4, MOV, M4V). Extended containers (MKV, AVI, WebM) are specified in [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
+- **32 Supported Media & Document Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), native streaming video (MP4, MOV, M4V), and native PDF documents (PDF). Extended containers (MKV, AVI, WebM) are specified in [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
 - **Multi-Selection & Batch Actions**: Batch AirDrop / Share Sheet export and batch save to Apple Photos (`MediaSelectionBottomBar`).
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
+
+### 📄 PDF & Document Viewer
+- **Native Apple PDFKit Engine**: Built using `PDFKit` (`PDFView`, `PDFThumbnailView`) for hardware-accelerated, high-fidelity vector rendering.
+- **Continuous Smooth Scrolling & Pinch-to-Zoom**: Seamless vertical multi-page continuous flow with dynamic pinch-to-zoom and double-tap zoom capabilities (`PDFKitRepresentedView`).
+- **Interactive Thumbnail Scrubber**: Real-time thumbnail preview bar (`PDFThumbnailScrubberView`) linked bidirectionally with the main document canvas.
+- **Dynamic Reading HUD**: Glassmorphic overlay with live page counter (`Page X of Y`), document title, file size, favorite bookmarking, and native Share Sheet export (`PDFDetailView`). Single-tap anywhere toggles the HUD for distraction-free reading.
+- **Zero-Latency Local Caching**: On-demand atomic download from SMB servers to the dedicated document cache directory (`SMBDocuments`) with live percentage and byte progress indicator.
+- **Instant Grid Preview**: High-resolution 420px first-page master thumbnail generation stored in the two-tier cache for 0ms gallery loading.
 
 ### 📸 Photo Viewer & Slideshow
 - **Deep Zoom & Pan**: Integrated `UIScrollView`-backed zoom (`ZoomableImageView`) providing 1:1 pixel rendering, double-tap zoom, and smooth deceleration.
@@ -67,7 +75,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 65 independent, modular Swift files.
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 69 independent, modular Swift files.
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -98,7 +106,7 @@ fichier/
 │   ├── Gallery/                            # Media browsing, grid, list & filtering
 │   │   ├── GridSize.swift                  # Small, Medium, Large grid layout enum
 │   │   ├── MediaActivityShareSheet.swift   # UIActivityViewController wrapper
-│   │   ├── MediaFilter.swift               # All, Photos, Videos filter enum
+│   │   ├── MediaFilter.swift               # All, Photos, Videos, Documents filter enum
 │   │   ├── MediaGridView.swift             # Main media gallery view & toolbars
 │   │   ├── MediaListRowCell.swift          # List row item with metadata
 │   │   ├── MediaSelectionBottomBar.swift   # Floating multi-selection action bar
@@ -117,6 +125,12 @@ fichier/
 │   │   ├── ZoomableImageCoordinator.swift  # UIScrollViewDelegate handling double-tap & zoom
 │   │   ├── ZoomableImageView.swift         # UIViewRepresentable wrapping UIScrollView
 │   │   └── ZoomablePicturePageView.swift   # Single-image container with tap handlers
+│   │
+│   ├── PDFViewer/                          # Native PDF Document Viewing
+│   │   ├── PDFDetailView.swift             # Fullscreen document viewer HUD & download progress
+│   │   ├── PDFKitCoordinator.swift         # Delegate & notification coordinator for PDFView
+│   │   ├── PDFKitRepresentedView.swift     # UIViewRepresentable hosting PDFView
+│   │   └── PDFThumbnailScrubberView.swift  # UIViewRepresentable hosting PDFThumbnailView
 │   │
 │   ├── Settings/                           # App preferences and storage management
 │   │   └── AppSettingsView.swift           # Settings form, cache manager, about section
@@ -338,6 +352,7 @@ sequenceDiagram
 
 ### Apple Native Frameworks
 - `SwiftUI`: User interface, state management, animations.
+- `PDFKit`: `PDFView` and `PDFThumbnailView` for hardware-accelerated document reading and page scrubbing.
 - `Network`: `NWBrowser` for Bonjour zero-configuration network discovery.
 - `AVFoundation` & `AVKit`: `AVPlayer`, `AVPlayerViewController`, `AVAssetResourceLoaderDelegate`, Picture in Picture.
 - `ImageIO` & `UniformTypeIdentifiers`: Fast EXIF parsing, image downsampling, and RAW decoding.

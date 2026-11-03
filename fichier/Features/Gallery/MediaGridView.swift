@@ -60,9 +60,11 @@ struct MediaGridView: View {
         case .all:
             break
         case .photos:
-            listPictures = listPictures.filter { !$0.isVideo }
+            listPictures = listPictures.filter { !$0.isVideo && !$0.isPDF }
         case .videos:
             listPictures = listPictures.filter { $0.isVideo }
+        case .documents:
+            listPictures = listPictures.filter { $0.isPDF }
         }
         let sortedPictures = sortItems(listPictures)
         return (sortedFolders, sortedPictures)
@@ -73,6 +75,7 @@ struct MediaGridView: View {
         case .all: return .Strings.gallerySectionMediaCount(count)
         case .photos: return .Strings.gallerySectionPhotosCount(count)
         case .videos: return .Strings.gallerySectionVideosCount(count)
+        case .documents: return LocalizedStringResource("gallery_section_documents_count", defaultValue: "\(count) Documents")
         }
     }
     
