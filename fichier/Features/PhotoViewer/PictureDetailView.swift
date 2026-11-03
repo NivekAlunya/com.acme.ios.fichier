@@ -6,7 +6,7 @@
 import SwiftUI
 
 public struct PictureDetailView: View {
-    var manager: SMBDirectManager
+    var manager: StorageLocationManager
     let pictures: [MediaItem]
     let initialItem: MediaItem
     let autoStartSlideshow: Bool
@@ -27,7 +27,7 @@ public struct PictureDetailView: View {
     @State private var isSaving = false
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         pictures: [MediaItem],
         initialItem: MediaItem,
         autoStartSlideshow: Bool = false

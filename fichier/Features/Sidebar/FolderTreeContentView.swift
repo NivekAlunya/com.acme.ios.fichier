@@ -6,12 +6,12 @@
 import SwiftUI
 
 public struct FolderTreeContentView: View {
-    @Bindable var manager: SMBDirectManager
+    @Bindable var manager: StorageLocationManager
     @Binding var showingAddRemote: Bool
     let onSelectFolder: (MediaItem) -> Void
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
         onSelectFolder: @escaping (MediaItem) -> Void
     ) {

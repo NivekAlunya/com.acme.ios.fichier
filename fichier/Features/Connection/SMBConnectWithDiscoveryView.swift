@@ -7,7 +7,7 @@ import SwiftUI
 
 struct SMBConnectWithDiscoveryView: View {
     @Environment(\.dismiss) private var dismiss
-    var smbManager: SMBDirectManager
+    var smbManager: StorageLocationManager
     @State private var discovery = SMBHostDiscovery()
     
     @State private var selectedHost = ""

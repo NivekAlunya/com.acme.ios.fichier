@@ -1,5 +1,5 @@
 //
-//  SMBDirectManager.swift
+//  StorageLocationManager.swift
 //  fichier
 //
 
@@ -11,7 +11,7 @@ import OSLog
 
 @Observable
 @MainActor
-public final class SMBDirectManager {
+public final class StorageLocationManager {
     public var isConnected = false
     public var isLoading = false
     public var errorMessage: String?

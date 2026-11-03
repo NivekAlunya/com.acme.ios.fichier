@@ -8,7 +8,7 @@ Rebuild the video player module from scratch into a decoupled, state-machine-dri
 
 > [!IMPORTANT]
 > **No External API or Interface Breaking Changes**:
-> The public interface `VideoDetailView(manager: SMBDirectManager, videos: [MediaItem], initialItem: MediaItem)` is preserved 100%. Presentation callers (such as `RootSMBView` and gallery views) require zero modifications.
+> The public interface `VideoDetailView(manager: StorageLocationManager, videos: [MediaItem], initialItem: MediaItem)` is preserved 100%. Presentation callers (such as `RootSMBView` and gallery views) require zero modifications.
 
 > [!NOTE]
 > **Swift 6 & Strict 1 Definition = 1 File**:

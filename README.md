@@ -175,7 +175,6 @@ fichier/
 │   │
 │   ├── Networking/                         # Protocol engine and credential storage
 │   │   ├── SMBClientActor.swift            # Thread-safe actor wrapping libsmb2 operations
-│   │   ├── SMBDirectManager.swift          # Observable UI state manager & prefetch coordinator
 │   │   ├── SMBHostDiscovery.swift          # NWBrowser Bonjour mDNS scanner
 │   │   └── SMBKeychain.swift               # Apple Keychain wrapper for SMB credentials
 │   │
@@ -189,6 +188,7 @@ fichier/
 │       ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
 │       ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
 │       ├── PictureEXIFBox.swift            # Sendable EXIF container box
+│       ├── StorageLocationManager.swift    # Unified Observable UI state manager & prefetch coordinator
 │       ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
 │       ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
 │       ├── VideoPlaybackRecord.swift       # Persisted playback progress model
@@ -209,7 +209,7 @@ fichier/
 flowchart TD
     subgraph MainActorContext["@MainActor UI & State Layer"]
         V[SwiftUI Views<br/>VideoDetailView, MediaGridView, etc.]
-        M[SMBDirectManager<br/>@Observable UI Coordinator]
+        M[StorageLocationManager<br/>@Observable UI Coordinator]
         S[VideoPlaybackStore<br/>@Observable Playback Store]
         F[FavoritesManager<br/>@Observable Favorites Store]
     end

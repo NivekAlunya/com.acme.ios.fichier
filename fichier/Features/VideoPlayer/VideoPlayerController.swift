@@ -11,7 +11,7 @@ import OSLog
 @Observable
 @MainActor
 public final class VideoPlayerController {
-    public let manager: SMBDirectManager
+    public let manager: StorageLocationManager
     public let videos: [MediaItem]
     public var currentItem: MediaItem
     public private(set) var currentlyLoadedItem: MediaItem?
@@ -51,7 +51,7 @@ public final class VideoPlayerController {
     private var periodicTimeObserverToken: Any?
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         videos: [MediaItem],
         initialItem: MediaItem
     ) {
@@ -128,7 +128,7 @@ public final class VideoPlayerController {
             let validItem = await manager.resolveValidItem(for: item)
             guard !Task.isCancelled else { return }
             
-            guard validItem.size > 0, let (streamURL, uniqueID) = SMBDirectManager.makeStreamURL(for: validItem.name) else {
+            guard validItem.size > 0, let (streamURL, uniqueID) = StorageLocationManager.makeStreamURL(for: validItem.name) else {
                 let desc = String(localized: .Strings.videoPlayerErrorInvalidStreamUrl)
                 self.errorMessage = desc
                 self.playbackState = .failed(desc)

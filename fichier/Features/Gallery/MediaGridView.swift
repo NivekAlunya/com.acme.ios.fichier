@@ -7,7 +7,7 @@ import SwiftUI
 import OSLog
 
 struct MediaGridView: View {
-    var manager: SMBDirectManager
+    var manager: StorageLocationManager
     var onSelectFolder: ((MediaItem) -> Void)? = nil
     var onStartSlideshow: (([MediaItem]) -> Void)? = nil
     let onSelectPicture: (MediaItem, [MediaItem]) -> Void
@@ -814,7 +814,7 @@ struct MediaGridView: View {
         }
     }
     
-    private nonisolated func saveSingleMediaItemToPhotos(_ item: MediaItem, manager: SMBDirectManager) async -> Bool {
+    private nonisolated func saveSingleMediaItemToPhotos(_ item: MediaItem, manager: StorageLocationManager) async -> Bool {
         do {
             if item.isVideo {
                 let localURL = try await manager.fetchVideoURL(for: item)
@@ -901,7 +901,7 @@ struct MediaGridView: View {
         }
     }
     
-    private nonisolated func prepareSingleItemForShare(_ item: MediaItem, manager: SMBDirectManager) async -> Any? {
+    private nonisolated func prepareSingleItemForShare(_ item: MediaItem, manager: StorageLocationManager) async -> Any? {
         if item.isVideo {
             return try? await manager.fetchVideoURL(for: item)
         } else {

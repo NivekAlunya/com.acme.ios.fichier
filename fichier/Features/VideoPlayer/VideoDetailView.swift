@@ -7,7 +7,7 @@ import SwiftUI
 import AVKit
 
 public struct VideoDetailView: View {
-    var manager: SMBDirectManager
+    var manager: StorageLocationManager
     let videos: [MediaItem]
     let initialItem: MediaItem
     
@@ -16,7 +16,7 @@ public struct VideoDetailView: View {
     @State private var controller: VideoPlayerController
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         videos: [MediaItem],
         initialItem: MediaItem
     ) {

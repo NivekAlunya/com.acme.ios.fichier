@@ -7,7 +7,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct LocationsSidebarView: View {
-    @Bindable var manager: SMBDirectManager
+    @Bindable var manager: StorageLocationManager
     @Binding var showingAddRemote: Bool
     @Binding var showingSettings: Bool
     let connectingLocationID: String?
@@ -18,7 +18,7 @@ public struct LocationsSidebarView: View {
     @State private var showingFolderErrorAlert = false
     
     public init(
-        manager: SMBDirectManager,
+        manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
         showingSettings: Binding<Bool>,
         connectingLocationID: String?,
