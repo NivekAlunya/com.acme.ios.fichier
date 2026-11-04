@@ -88,6 +88,17 @@ final class MediaItemTests: XCTestCase {
         XCTAssertNotEqual(parent1, parent2)
     }
     
+    func testMediaItemEqualityDetectsChildMetadataChange() {
+        let child1 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: false, size: 100)
+        let child2 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: false, size: 200)
+        
+        let parent1 = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [child1])
+        let parent2 = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [child2])
+        
+        // Same child IDs, but different child size -> should not be equal
+        XCTAssertNotEqual(parent1, parent2)
+    }
+    
     func testMediaItemEqualityDoesNotRecurseDeeply() {
         let child1 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true)
         let child2 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true)

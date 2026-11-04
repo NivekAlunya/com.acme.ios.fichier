@@ -260,7 +260,10 @@ public struct PictureDetailView: View {
                 }
                 
                 for await result in group {
-                    guard !Task.isCancelled, self.currentItem.id == targetID else { break }
+                    guard !Task.isCancelled, self.currentItem.id == targetID else {
+                        group.cancelAll()
+                        break
+                    }
                     if result.isMeta {
                         self.activeMetadata = result.meta
                     } else {
