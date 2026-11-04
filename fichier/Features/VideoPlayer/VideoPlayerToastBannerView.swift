@@ -36,7 +36,14 @@ public struct VideoPlayerToastBannerView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(.ultraThinMaterial))
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                        )
+                )
                 .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -51,7 +58,15 @@ public struct VideoPlayerToastBannerView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Capsule().fill(.ultraThinMaterial))
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                        )
+                )
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }

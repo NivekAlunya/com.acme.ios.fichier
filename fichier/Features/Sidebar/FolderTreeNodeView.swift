@@ -74,11 +74,6 @@ struct FolderTreeNodeView: View {
                 withAnimation(.snappy) {
                     isExpanded.toggle()
                 }
-                if isExpanded && node.children == nil {
-                    Task {
-                        await manager.loadSubfoldersForTree(at: node)
-                    }
-                }
             } label: {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -88,9 +83,11 @@ struct FolderTreeNodeView: View {
             }
             .buttonStyle(.plain)
             
-            // Folder selection button (loads media & navigates to detail view)
+            // Folder selection button (loads media, expands tree & navigates to detail view)
             Button {
-                isExpanded = true
+                withAnimation(.snappy) {
+                    isExpanded = true
+                }
                 onSelectFolder(node)
             } label: {
                 HStack(spacing: 8) {
@@ -115,6 +112,19 @@ struct FolderTreeNodeView: View {
             .buttonStyle(.plain)
         }
         .listRowBackground(isSelected ? Color.blue.opacity(0.14) : Color.clear)
+        .task(id: isExpanded) {
+            if isExpanded && node.children == nil {
+                await manager.loadSubfoldersForTree(at: node)
+            }
+        }
+        .onChange(of: manager.selectedFolder) { _, newSelected in
+            guard let newSelected else { return }
+            if !isExpanded && (newSelected.id == node.id || isAncestor(of: newSelected)) {
+                withAnimation(.snappy) {
+                    isExpanded = true
+                }
+            }
+        }
         
         // Render child subfolders recursively when expanded
         if isExpanded, let children = node.children {
@@ -122,11 +132,35 @@ struct FolderTreeNodeView: View {
                 FolderTreeNodeView(
                     node: child,
                     level: level + 1,
-                    isInitiallyExpanded: false,
+                    isInitiallyExpanded: shouldChildBeInitiallyExpanded(child),
                     manager: manager,
                     onSelectFolder: onSelectFolder
                 )
             }
         }
+    }
+    
+    private func isAncestor(of target: MediaItem) -> Bool {
+        guard target.locationID == node.locationID, target.rootName == node.rootName else { return false }
+        if node.path == "/" || node.path.isEmpty {
+            return target.path != node.path
+        }
+        // Directory boundary prefix check prevents false-positives like /Folder/Cat matching /Folder/Category
+        let nodeBoundary = node.path.hasSuffix("/") ? node.path : "\(node.path)/"
+        guard target.path.hasPrefix(nodeBoundary) else { return false }
+        let nodeComponents = node.normalizedComponents
+        let targetComponents = target.normalizedComponents
+        return targetComponents.starts(with: nodeComponents) && targetComponents.count > nodeComponents.count
+    }
+    
+    private func shouldChildBeInitiallyExpanded(_ child: MediaItem) -> Bool {
+        guard let selected = manager.selectedFolder else { return false }
+        if selected.id == child.id { return true }
+        guard selected.locationID == child.locationID, selected.rootName == child.rootName else { return false }
+        if child.path.isEmpty || child.path == "/" { return true }
+        // Directory boundary prefix check prevents false-positives across sibling folders
+        let childBoundary = child.path.hasSuffix("/") ? child.path : "\(child.path)/"
+        guard selected.path.hasPrefix(childBoundary) else { return false }
+        return selected.normalizedComponents.starts(with: child.normalizedComponents)
     }
 }

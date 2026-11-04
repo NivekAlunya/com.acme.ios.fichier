@@ -135,13 +135,8 @@ public struct VideoTimelineBar: View {
             .buttonStyle(.plain)
             .accessibilityLabel(showRemainingTime ? String(localized: "Remaining time, tap to show total duration", comment: "Accessibility label for remaining time button") : String(localized: "Total duration, tap to show remaining time", comment: "Accessibility label for total duration button"))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-            Capsule()
-                .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
-        )
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
     }
     
     private var rightTimeLabel: String {

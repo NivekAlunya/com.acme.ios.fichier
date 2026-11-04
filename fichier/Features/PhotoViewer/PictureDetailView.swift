@@ -108,11 +108,46 @@ public struct PictureDetailView: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
             
-            // Controls Overlay
+            // Floating HUD Overlays
             if showControls {
                 VStack {
+                    PictureViewerTopBarView(
+                        item: currentItem,
+                        currentIndex: currentIndex,
+                        totalCount: pictures.count,
+                        onDismiss: { dismiss() }
+                    )
+                    
                     Spacer()
-                    bottomUnifiedHUD
+                    
+                    PictureViewerBottomBarView(
+                        hasMultiplePictures: pictures.count > 1,
+                        isPlayingSlideshow: $isPlayingSlideshow,
+                        slideshowInterval: $slideshowInterval,
+                        transitionStyle: $transitionStyle,
+                        isFavorite: FavoritesManager.shared.isFavorite(currentItem),
+                        canSaveToCameraRoll: !currentItem.isPhotoAsset,
+                        isSaving: isSaving,
+                        currentImage: currentImage,
+                        currentName: currentItem.name,
+                        onPrevious: { withAnimation { goToPrevious() } },
+                        onNext: { withAnimation { goToNext() } },
+                        onShowInfo: {
+                            Task {
+                                if activeMetadata == nil {
+                                    self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+                                }
+                                showingInfoSheet = true
+                            }
+                        },
+                        onToggleFavorite: {
+                            FavoritesManager.shared.toggleFavorite(currentItem)
+                        },
+                        onSaveToCameraRoll: {
+                            saveToCameraRoll()
+                        }
+                    )
+                    .padding(.bottom, 20)
                 }
                 .transition(.opacity)
             }
@@ -160,13 +195,34 @@ public struct PictureDetailView: View {
         }
         // Photo loading, EXIF extraction, and prefetching with structured cancellation on photo switch
         .task(id: currentItem.id) {
+            let targetID = currentItem.id
             activeMetadata = nil
             currentImage = nil
             prefetchNext(after: currentItem)
-            if !currentItem.isVideo {
-                currentImage = await manager.downloadImage(for: currentItem)
+            
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    let meta = await manager.fetchMetadata(for: currentItem)
+                    if !Task.isCancelled {
+                        await MainActor.run {
+                            guard self.currentItem.id == targetID else { return }
+                            self.activeMetadata = meta
+                        }
+                    }
+                }
+                
+                if !currentItem.isVideo {
+                    group.addTask {
+                        let img = await manager.downloadImage(for: currentItem)
+                        if !Task.isCancelled {
+                            await MainActor.run {
+                                guard self.currentItem.id == targetID else { return }
+                                self.currentImage = img
+                            }
+                        }
+                    }
+                }
             }
-            activeMetadata = await manager.fetchMetadata(for: currentItem)
         }
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac
@@ -198,224 +254,6 @@ public struct PictureDetailView: View {
             .opacity(0)
             .allowsHitTesting(false)
         }
-    }
-    
-    // MARK: - Unified Bottom Floating HUD Card (2-Line Layout)
-    
-    private var bottomUnifiedHUD: some View {
-        HStack {
-            Spacer()
-            
-            HStack(spacing: 6) {
-                // Leading: Previous Photo Button (Full height)
-                if pictures.count > 1 {
-                    Button {
-                        withAnimation { goToPrevious() }
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 48)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Previous Photo", comment: "Accessibility label for previous photo"))
-                    
-                    Divider()
-                        .frame(height: 28)
-                        .background(Color.white.opacity(0.3))
-                }
-                
-                // Middle: 2 Lines (Line 1: Title & Counter, Line 2: Action Icons)
-                VStack(spacing: 6) {
-                    // Line 1: Title & Item Counter with generous breathing room
-                    HStack(spacing: 6) {
-                        Text(currentItem.name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(maxWidth: 220)
-                        
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.4))
-                        
-                        Text(.Strings.commonItemCounterAndSize(currentIndex + 1, pictures.count, currentItem.formattedSize))
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.7))
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 4)
-                    
-                    // Line 2: Close and Action Tools
-                    HStack(spacing: 8) {
-                        // 1. Close Button
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(width: 26, height: 26)
-                                .background(Color.white.opacity(0.2))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close photo viewer"))
-                        
-                        Divider()
-                            .frame(height: 16)
-                            .background(Color.white.opacity(0.25))
-                        
-                        // 2. Slideshow Play/Pause
-                        Button {
-                            withAnimation { isPlayingSlideshow.toggle() }
-                        } label: {
-                            Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(isPlayingSlideshow ? Color.orange : Color.white)
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(isPlayingSlideshow ? String(localized: "Pause Slideshow", comment: "Accessibility label to pause slideshow") : String(localized: "Start Slideshow", comment: "Accessibility label to start slideshow"))
-                        
-                        // 3. Slideshow Duration & Transition Style Menu
-                        Menu {
-                            Section(.Strings.slideshowSectionTransitionStyle) {
-                                Picker(.Strings.slideshowPickerStyle, selection: $transitionStyle) {
-                                    ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.slideshowPickerDuration) {
-                                Picker(.Strings.slideshowPickerSlideshowDuration, selection: $slideshowInterval) {
-                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 3) {
-                                Image(systemName: "timer")
-                                    .font(.system(size: 10))
-                                Text("\(Int(slideshowInterval))")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .monospacedDigit()
-                                    .lineLimit(1)
-                                    .fixedSize()
-                            }
-                            .fixedSize()
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 4)
-                            .background(Color.white.opacity(0.18))
-                            .clipShape(Capsule())
-                        }
-                        .accessibilityLabel(String(localized: "Slideshow Settings", comment: "Accessibility label for slideshow duration and transition menu"))
-                        
-                        // 4. EXIF Info Sheet
-                        Button {
-                            Task {
-                                if activeMetadata == nil {
-                                    self.activeMetadata = await manager.fetchMetadata(for: currentItem)
-                                }
-                                showingInfoSheet = true
-                            }
-                        } label: {
-                            Image(systemName: "info.circle")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(.white)
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(String(localized: "Photo Information", comment: "Accessibility label for photo EXIF info"))
-                        
-                        // 5. Favorite Button
-                        Button {
-                            FavoritesManager.shared.toggleFavorite(currentItem)
-                        } label: {
-                            Image(systemName: FavoritesManager.shared.isFavorite(currentItem) ? "heart.fill" : "heart")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(FavoritesManager.shared.isFavorite(currentItem) ? Color.red : Color.white)
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(FavoritesManager.shared.isFavorite(currentItem) ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite photo") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite photo"))
-                        
-                        if !currentItem.isPhotoAsset {
-                            // 6. Save to Camera Roll
-                            Button {
-                                saveToCameraRoll()
-                            } label: {
-                                if isSaving {
-                                    ProgressView().scaleEffect(0.65)
-                                        .frame(width: 28, height: 28)
-                                } else {
-                                    Image(systemName: "square.and.arrow.down")
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 28, height: 28)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(currentImage == nil || isSaving)
-                            .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save photo to Photos"))
-                        }
-                        
-                        // 7. ShareLink
-                        if let img = currentImage {
-                            ShareLink(
-                                item: Image(uiImage: img),
-                                preview: SharePreview(currentItem.name, image: Image(uiImage: img))
-                            ) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 15, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 28, height: 28)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(String(localized: "Share Photo", comment: "Accessibility label to share photo"))
-                        }
-                    }
-                }
-                .padding(.horizontal, 6)
-                
-                // Trailing: Next Photo Button (Full height)
-                if pictures.count > 1 {
-                    Divider()
-                        .frame(height: 28)
-                        .background(Color.white.opacity(0.3))
-                    
-                    Button {
-                        withAnimation { goToNext() }
-                    } label: {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 32, height: 48)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Next Photo", comment: "Accessibility label for next photo"))
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.4), radius: 10, y: 5)
-            )
-            
-            Spacer()
-        }
-        .padding(.bottom, 20)
     }
     
     private var activeTransition: AnyTransition {

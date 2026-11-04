@@ -26,13 +26,24 @@ public final class StorageLocationManager {
     public var currentLocation: StorageLocation?
     
     // Root tree of shared folders for Sidebar Tree
-    public var folderTree: [MediaItem] = []
+    public var folderTree: [MediaItem] = [] {
+        didSet {
+            updateParentFolder()
+        }
+    }
     
     // Subfolders of the currently selected folder
     public var currentFolders: [MediaItem] = []
     
     // Currently selected folder in the SplitView
-    public var selectedFolder: MediaItem?
+    public var selectedFolder: MediaItem? {
+        didSet {
+            updateParentFolder()
+        }
+    }
+    
+    /// Cached parent folder of the currently selected folder, if not at root level (O(1) access)
+    public private(set) var parentFolder: MediaItem?
     
     // Pictures in the currently selected folder
     public var pictures: [MediaItem] = []
@@ -513,6 +524,105 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - Parent Folder Navigation
+    
+    /// Returns true if the folder represents the top-level root of its storage location
+    public func isRootFolder(_ item: MediaItem) -> Bool {
+        if item.locationID == StorageLocation.photosLocationID {
+            return item.path.isEmpty
+        }
+        if item.localURL != nil {
+            return item.path.isEmpty
+        }
+        // SMB root share is "/" or empty
+        return item.path == "/" || item.path.isEmpty
+    }
+    
+    /// Recomputes and caches the parent folder of the currently selected folder
+    public func updateParentFolder() {
+        guard let current = selectedFolder else {
+            parentFolder = nil
+            return
+        }
+        
+        if isRootFolder(current) {
+            parentFolder = nil
+            return
+        }
+        
+        if let treeParent = findParentInTree(for: current, in: folderTree) {
+            parentFolder = treeParent
+            return
+        }
+        
+        parentFolder = deriveParentFolder(for: current)
+    }
+    
+    private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
+        for node in nodes {
+            guard let children = node.children else { continue }
+            if children.contains(where: { $0.id == target.id }) {
+                return node
+            }
+            if let found = findParentInTree(for: target, in: children) {
+                return found
+            }
+        }
+        return nil
+    }
+    
+    public func deriveParentFolder(for item: MediaItem) -> MediaItem? {
+        if item.locationID == StorageLocation.photosLocationID {
+            return folderTree.first ?? MediaItem(
+                locationID: StorageLocation.photosLocationID,
+                name: String(localized: .Strings.sidebarLocationPhotos),
+                rootName: "Photos",
+                path: "",
+                isDirectory: true
+            )
+        }
+        
+        if let localURL = item.localURL {
+            let parentURL = localURL.deletingLastPathComponent()
+            let parentPath = (item.path as NSString).deletingLastPathComponent
+            let parentName = parentPath.isEmpty ? item.rootName : parentURL.lastPathComponent
+            return MediaItem(
+                locationID: item.locationID,
+                name: parentName,
+                rootName: item.rootName,
+                path: parentPath,
+                isDirectory: true,
+                localURL: parentURL
+            )
+        }
+        
+        // SMB: Normalize Windows backslashes and filter traversal tokens
+        let normalizedPath = item.path.replacingOccurrences(of: "\\", with: "/")
+        let rawComponents = normalizedPath.split(separator: "/").map(String.init)
+        let safeComponents = rawComponents.filter { $0 != "." && $0 != ".." && !$0.isEmpty }
+        
+        if safeComponents.count <= 1 {
+            return MediaItem(
+                locationID: item.locationID,
+                name: item.rootName,
+                rootName: item.rootName,
+                path: "/",
+                isDirectory: true
+            )
+        } else {
+            let parentComponents = safeComponents.dropLast()
+            let parentPath = "/" + parentComponents.joined(separator: "/")
+            let parentName = parentComponents.last ?? item.rootName
+            return MediaItem(
+                locationID: item.locationID,
+                name: parentName,
+                rootName: item.rootName,
+                path: parentPath,
+                isDirectory: true
+            )
+        }
+    }
+    
     // MARK: - Download Picture / Thumbnail
     
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
@@ -724,7 +834,7 @@ public final class StorageLocationManager {
         }
     }
     
-    public func downloadImage(for item: MediaItem) async -> UIImage? {
+    nonisolated public func downloadImage(for item: MediaItem) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchImage(for: item)
@@ -735,7 +845,7 @@ public final class StorageLocationManager {
         return await worker.fetchFullImage(for: item)
     }
     
-    public func fetchFileSize(for item: MediaItem) async -> Int64 {
+    nonisolated public func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchFileSize(for: item)
         }
@@ -745,7 +855,7 @@ public final class StorageLocationManager {
         return await worker.fetchFileSize(for: item)
     }
     
-    public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
+    nonisolated public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchMetadata(for: item)

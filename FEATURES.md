@@ -41,6 +41,10 @@ This document provides a comprehensive catalog of all features and capabilities 
 - **Hierarchical Sidebar Tree Navigation**:
   - Recursive folder directory tree (`SidebarFolderTreeView` and `FolderTreeNodeView`) for deep directory structures.
   - Collapsible/expandable nodes showing directory hierarchy and nested file counts.
+  - Automatic expansion of ancestor nodes to synchronize tree state with selected gallery paths.
+- **Parent Folder Navigation**:
+  - Blue-tinted parent folder button (`arrow.up.folder`) located at the first position in the gallery toolbar to immediately traverse up to the parent directory.
+  - Automatically disabled at the root level of SMB shares, local storage, and the Photos library to eliminate layout jitter.
 - **Dual Presentation Modes (`ViewMode`)**:
   - **Grid View**: Multi-column visual gallery optimized for quick thumbnail scanning.
   - **List View**: Detailed row-based layout displaying filename, file size, modified date, and media format.
@@ -82,6 +86,10 @@ This document provides a comprehensive catalog of all features and capabilities 
     - Date and Time of Capture
 - **Animated Media Decoding**:
   - Full playback support for animated **GIF** and animated **WebP** formats via frame-by-frame `ImageIO` decoding.
+- **Decoupled Liquid Glass HUD Architecture (`PictureViewerTopBarView`, `PictureViewerBottomBarView`)**:
+  - **Top Bar**: Floating liquid glass layout placing the close button on its own isolated spot at the top-leading corner, paired with a metadata capsule displaying filename, item counter (`X of Y`), and formatted file size.
+  - **Bottom Toolbar**: Sleek single-row liquid glass action pill hosting slideshow play/pause, duration & style menu, EXIF inspector, favorites toggle, Camera Roll export, and native ShareLink, flanked by full-height previous/next chevrons.
+  - **Single-Tap HUD Toggle**: Tapping anywhere on the image canvas smoothly toggles all HUD controls with animation (`easeInOut(duration: 0.2)`).
 - **Export & Sharing**:
   - Export pictures directly to iOS Camera Roll with permission management.
   - Share via native `UIActivityViewController` / `ShareLink`.
@@ -293,4 +301,4 @@ flowchart TD
   - Built strictly using `actor`, `async/await`, `Task`, `@MainActor`, and `Sendable`.
   - Zero legacy synchronization primitives (no `NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`, or GCD queues).
 - **Strict Single Definition Rule**:
-  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (85 modular application files and 8 unit test suites across all domains).
+  - Every Swift `struct`, `class`, `actor`, and `enum` resides in its own dedicated source file (87 modular application files and 10 unit test suites across all domains).

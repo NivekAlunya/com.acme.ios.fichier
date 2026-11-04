@@ -213,6 +213,25 @@ struct MediaGridView: View {
             } else {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
+                        Button {
+                            if let parent = manager.parentFolder {
+                                navigateToFolder(parent)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.folder")
+                                .fontWeight(.semibold)
+                                .foregroundColor(manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
+                        }
+                        .tint(.blue)
+                        .disabled(manager.parentFolder == nil)
+                        .accessibilityLabel(
+                            if let parentName = manager.parentFolder?.name {
+                                String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
+                            } else {
+                                String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
+                            }
+                        )
+                        
                         if !displayPictures.isEmpty {
                             Button(.Strings.galleryButtonSelect) {
                                 withAnimation {
@@ -348,7 +367,7 @@ struct MediaGridView: View {
                             }
                             .accessibilityLabel(.Strings.settingsTitle)
                         }
-                    }
+                    }.padding(.horizontal)
                 }
             }
         }
@@ -400,6 +419,18 @@ struct MediaGridView: View {
         }
     }
     
+    // MARK: - Navigation Helpers
+    
+    private func navigateToFolder(_ folder: MediaItem) {
+        if let onSelectFolder {
+            onSelectFolder(folder)
+        } else {
+            Task {
+                await manager.selectAndLoadFolder(folder)
+            }
+        }
+    }
+    
     // MARK: - Grid Mode
     
     @ViewBuilder
@@ -421,7 +452,7 @@ struct MediaGridView: View {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
                                 ForEach(folders) { subfolder in
                                     Button {
-                                        onSelectFolder?(subfolder)
+                                        navigateToFolder(subfolder)
                                     } label: {
                                         HStack(spacing: 8) {
                                             Image(systemName: "folder.fill")
@@ -613,7 +644,7 @@ struct MediaGridView: View {
                     Section(String(localized: .Strings.gallerySectionSubfoldersCount(folders.count))) {
                         ForEach(folders) { subfolder in
                             Button {
-                                onSelectFolder?(subfolder)
+                                navigateToFolder(subfolder)
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "folder.fill")

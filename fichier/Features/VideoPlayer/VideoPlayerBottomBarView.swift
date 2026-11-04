@@ -13,20 +13,53 @@ public struct VideoPlayerBottomBarView: View {
     }
     
     public var body: some View {
-        VideoTimelineBar(
-            currentTime: controller.currentPlaybackSeconds,
-            duration: controller.totalDurationSeconds,
-            onSeek: { targetSeconds in
-                controller.onTimelineSeek(targetSeconds: targetSeconds)
-            },
-            onScrubbing: { targetSeconds in
-                controller.onTimelineScrubbing(targetSeconds: targetSeconds)
-            },
-            onScrubStateChanged: { isScrubbing in
-                controller.onTimelineScrubStateChanged(isScrubbing: isScrubbing)
+        VStack(spacing: 8) {
+            // Row 1: Prominent Video Title & File Info
+            HStack(spacing: 8) {
+                Text(controller.currentItem.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                
+                Spacer(minLength: 8)
+                
+                Text(.Strings.commonItemCounterAndSize(controller.currentIndex + 1, controller.videos.count, controller.currentItem.formattedSize))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.75))
+                    .lineLimit(1)
+                    .fixedSize()
             }
+            .padding(.horizontal, 4)
+            .padding(.top, 2)
+            
+            // Row 2: Playback Timeline Scrubber
+            VideoTimelineBar(
+                currentTime: controller.currentPlaybackSeconds,
+                duration: controller.totalDurationSeconds,
+                onSeek: { targetSeconds in
+                    controller.onTimelineSeek(targetSeconds: targetSeconds)
+                },
+                onScrubbing: { targetSeconds in
+                    controller.onTimelineScrubbing(targetSeconds: targetSeconds)
+                },
+                onScrubStateChanged: { isScrubbing in
+                    controller.onTimelineScrubStateChanged(isScrubbing: isScrubbing)
+                }
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
         )
         .padding(.horizontal, 24)
-        .padding(.bottom, 2)
+        .padding(.bottom, 6)
     }
 }

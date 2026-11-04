@@ -25,8 +25,16 @@ public struct VideoPlayerCenterControlsView: View {
                         .foregroundColor(.white.opacity(0.85))
                 }
                 .padding(20)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                        )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
                 .transition(.opacity)
             }
             
