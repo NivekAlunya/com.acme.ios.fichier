@@ -30,56 +30,34 @@ public struct VideoPlayerTopBarView: View {
         Group {
             if isCompactPortrait {
                 VStack(spacing: 8) {
-                    HStack(spacing: 8) {
+                    HStack {
                         closeButton
                         
-                        Spacer(minLength: 4)
-                        
-                        titleCapsule
-                        
-                        Spacer(minLength: 4)
+                        Spacer()
                         
                         volumeBar
                     }
                     .padding(.horizontal, 16)
                     
-                    HStack(spacing: 6) {
-                        if controller.videos.count > 1 {
-                            previousButton
-                            toolsDivider
-                        }
-                        
-                        actionToolsIcons(spacing: 12)
-                        
-                        if controller.videos.count > 1 {
-                            toolsDivider
-                            nextButton
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.ultraThinMaterial)
-                            .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
-                    )
+                    centerToolsBar
                 }
                 .padding(.top, 2)
             } else {
-                HStack {
+                HStack(spacing: 12) {
                     closeButton
                         .padding(.leading, 16)
                     
-                    Spacer()
+                    Spacer(minLength: 8)
+                    
+                    centerToolsBar
+                    
+                    Spacer(minLength: 8)
                     
                     volumeBar
                         .padding(.trailing, 16)
                 }
                 .frame(minHeight: isRegular ? 52 : 44)
-                .overlay(alignment: .center) {
-                    centerToolsBar
-                }
-                .padding(.top, isRegular ? 4 : 2)
+                .padding(.top, isRegular ? 6 : 2)
             }
         }
     }
@@ -91,9 +69,13 @@ public struct VideoPlayerTopBarView: View {
             Image(systemName: "xmark")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
+                .frame(width: 36, height: 36)
                 .background(.ultraThinMaterial)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
@@ -113,39 +95,12 @@ public struct VideoPlayerTopBarView: View {
             }
     }
     
-    private var titleTextContent: some View {
-        HStack(spacing: 6) {
-            Text(controller.currentItem.name)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 180)
-            
-            Text("•")
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.4))
-            
-            Text(.Strings.commonItemCounterAndSize(controller.currentIndex + 1, controller.videos.count, controller.currentItem.formattedSize))
-                .font(.system(size: 10))
-                .foregroundColor(.white.opacity(0.7))
-                .lineLimit(1)
-        }
-    }
-    
-    private var titleCapsule: some View {
-        titleTextContent
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(.ultraThinMaterial))
-    }
-    
     private var previousButton: some View {
         Button {
             controller.goToPrevious()
         } label: {
             Image(systemName: "chevron.left")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 36)
                 .contentShape(Rectangle())
@@ -159,7 +114,7 @@ public struct VideoPlayerTopBarView: View {
             controller.goToNext()
         } label: {
             Image(systemName: "chevron.right")
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 32, height: 36)
                 .contentShape(Rectangle())
@@ -170,7 +125,7 @@ public struct VideoPlayerTopBarView: View {
     
     private var toolsDivider: some View {
         Divider()
-            .frame(height: 22)
+            .frame(height: 20)
             .background(Color.white.opacity(0.3))
     }
     
@@ -181,23 +136,24 @@ public struct VideoPlayerTopBarView: View {
                 toolsDivider
             }
             
-            VStack(spacing: 4) {
-                titleTextContent
-                actionToolsIcons(spacing: 14)
-            }
-            .padding(.horizontal, 6)
+            actionToolsIcons(spacing: 12)
+                .padding(.horizontal, 4)
             
             if controller.videos.count > 1 {
                 toolsDivider
                 nextButton
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            Capsule()
                 .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
         )
     }
     

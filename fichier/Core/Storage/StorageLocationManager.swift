@@ -513,6 +513,101 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - Parent Folder Navigation
+    
+    /// Returns true if the folder represents the top-level root of its storage location
+    public func isRootFolder(_ item: MediaItem) -> Bool {
+        if item.locationID == StorageLocation.photosLocationID {
+            return item.path.isEmpty
+        }
+        if item.localURL != nil {
+            return item.path.isEmpty
+        }
+        // SMB root share is "/" or empty
+        return item.path == "/" || item.path.isEmpty
+    }
+    
+    /// Returns the parent folder of the currently selected folder, if not at root level
+    public var parentFolder: MediaItem? {
+        guard let current = selectedFolder else { return nil }
+        
+        if isRootFolder(current) {
+            return nil
+        }
+        
+        if let treeParent = findParentInTree(for: current, in: folderTree) {
+            return treeParent
+        }
+        
+        return deriveParentFolder(for: current)
+    }
+    
+    private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
+        for node in nodes {
+            if let children = node.children, children.contains(where: { $0.id == target.id }) {
+                return node
+            }
+            if let children = node.children, let found = findParentInTree(for: target, in: children) {
+                return found
+            }
+        }
+        return nil
+    }
+    
+    private func deriveParentFolder(for item: MediaItem) -> MediaItem? {
+        if item.locationID == StorageLocation.photosLocationID {
+            return folderTree.first ?? MediaItem(
+                locationID: StorageLocation.photosLocationID,
+                name: String(localized: .Strings.sidebarLocationPhotos),
+                rootName: "Photos",
+                path: "",
+                isDirectory: true
+            )
+        }
+        
+        if let localURL = item.localURL {
+            let parentURL = localURL.deletingLastPathComponent()
+            let parentPath = (item.path as NSString).deletingLastPathComponent
+            let parentName = parentPath.isEmpty ? item.rootName : parentURL.lastPathComponent
+            return MediaItem(
+                locationID: item.locationID,
+                name: parentName,
+                rootName: item.rootName,
+                path: parentPath,
+                isDirectory: true,
+                localURL: parentURL
+            )
+        }
+        
+        // SMB
+        let currentPath = item.path
+        if currentPath == "/" || currentPath.isEmpty {
+            return nil
+        }
+        let cleanedPath = currentPath.hasPrefix("/") ? String(currentPath.dropFirst()) : currentPath
+        let components = cleanedPath.split(separator: "/").map(String.init)
+        if components.count <= 1 {
+            return MediaItem(
+                locationID: item.locationID,
+                name: item.rootName,
+                rootName: item.rootName,
+                path: "/",
+                isDirectory: true
+            )
+        } else {
+            let parentComponents = components.dropLast()
+            let parentPath = "/" + parentComponents.joined(separator: "/")
+            let parentName = parentComponents.last ?? item.rootName
+            return MediaItem(
+                locationID: item.locationID,
+                name: parentName,
+                rootName: item.rootName,
+                path: parentPath,
+                isDirectory: true
+            )
+        }
+    }
+    
     // MARK: - Download Picture / Thumbnail
     
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {

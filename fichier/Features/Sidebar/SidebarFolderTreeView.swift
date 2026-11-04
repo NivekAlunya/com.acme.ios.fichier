@@ -16,7 +16,7 @@ struct SidebarFolderTreeView: View {
                     FolderTreeNodeView(
                         node: shareRootNode,
                         level: 0,
-                        isInitiallyExpanded: manager.selectedFolder?.shareName == shareRootNode.shareName,
+                        isInitiallyExpanded: isRootInitiallyExpanded(shareRootNode),
                         manager: manager,
                         onSelectFolder: onSelectFolder
                     )
@@ -27,6 +27,11 @@ struct SidebarFolderTreeView: View {
         .refreshable {
             await manager.refreshSharesAndFolders()
         }
+    }
+    
+    private func isRootInitiallyExpanded(_ root: MediaItem) -> Bool {
+        guard let selected = manager.selectedFolder else { return false }
+        return selected.shareName == root.shareName || selected.rootName == root.rootName
     }
     
     private var sectionHeaderTitle: String {

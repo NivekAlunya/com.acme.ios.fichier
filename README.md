@@ -15,7 +15,8 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Multiple Share / Drive Mounts**: Switch between available shares on connected servers on the fly with clean lifecycle teardown.
 
 ### 📁 Browsing & Organization
-- **Hierarchical Sidebar Tree**: Recursive folder tree navigation (`SidebarFolderTreeView`, `FolderTreeContentView`, and `FolderTreeNodeView`) for deep directory structures.
+- **Hierarchical Sidebar Tree**: Recursive folder tree navigation (`SidebarFolderTreeView`, `FolderTreeContentView`, and `FolderTreeNodeView`) for deep directory structures with automatic expansion of selected paths.
+- **Parent Folder Quick Navigation**: Blue-tinted parent folder button (`arrow.up.folder`) positioned at the first slot in the gallery toolbar for one-tap navigation back to the parent directory, disabled at root level to prevent toolbar layout shifts.
 - **Adaptive Gallery Views**: Toggle between customizable multi-density **Grid** and detailed **List** view (`ViewMode`, `GridSize`).
 - **Pinch-to-Resize Grid**: Fluid pinch gestures dynamically change thumbnail density between small, medium, and large layouts.
 - **Filtering & Sorting**:
@@ -78,7 +79,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 93 independent, modular Swift files (85 application files + 8 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 95 independent, modular Swift files (87 application files + 8 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -123,6 +124,8 @@ fichier/
 │   │   ├── PictureDetailView.swift         # Fullscreen pager & unified HUD
 │   │   ├── PictureEXIFData.swift           # Parsed EXIF property model
 │   │   ├── PictureInfoSheet.swift          # Modal EXIF sheet
+│   │   ├── PictureViewerBottomBarView.swift# Liquid glass bottom action toolbar
+│   │   ├── PictureViewerTopBarView.swift   # Top bar with close button & file info capsule
 │   │   ├── SlideDirection.swift            # Transition direction enum
 │   │   ├── SlideshowTransitionStyle.swift  # Slide, Dissolve, Ken Burns transition enum
 │   │   ├── ZoomableImageCoordinator.swift  # UIScrollViewDelegate handling double-tap & zoom
@@ -155,13 +158,13 @@ fichier/
 │       ├── VideoDetailView.swift           # Lightweight host container & keyboard shortcut binder
 │       ├── VideoPlaybackRate.swift         # Playback speed enum (0.5x – 2.0x)
 │       ├── VideoPlaybackState.swift        # Explicit Sendable playback state machine enum
-│       ├── VideoPlayerBottomBarView.swift  # Scrubber container hosting VideoTimelineBar
+│       ├── VideoPlayerBottomBarView.swift  # Unified liquid glass deck hosting title, metadata & timeline scrubber
 │       ├── VideoPlayerCanvasView.swift     # Video canvas host with swipe & tap gesture recognizers
 │       ├── VideoPlayerCenterControlsView.swift # Buffering spinner, retry, and center play/pause
 │       ├── VideoPlayerController.swift     # Observable MainActor playback engine coordinator
 │       ├── VideoPlayerHUDView.swift        # Auto-hiding HUD overlay container
 │       ├── VideoPlayerToastBannerView.swift# Resume & save glassmorphic toast pills
-│       ├── VideoPlayerTopBarView.swift     # Responsive top HUD toolbar (close, title, volume, actions)
+│       ├── VideoPlayerTopBarView.swift     # Responsive top HUD toolbar (close, volume, action tools)
 │       ├── VideoSeekCoordinator.swift      # Scrubbing & seeking pipeline coordinator
 │       ├── VideoSubtitleDelegate.swift     # Sendable subtitle text delegate
 │       ├── VideoThumbnailLimiter.swift     # Actor-based concurrency throttle for video frames

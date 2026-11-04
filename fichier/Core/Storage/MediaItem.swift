@@ -85,7 +85,10 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     }
     
     public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
-        lhs.id == rhs.id && lhs.size == rhs.size && lhs.modifiedDate == rhs.modifiedDate
+        lhs.id == rhs.id &&
+        lhs.size == rhs.size &&
+        lhs.modifiedDate == rhs.modifiedDate &&
+        lhs.children == rhs.children
     }
     
     public func hash(into hasher: inout Hasher) {
