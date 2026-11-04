@@ -901,12 +901,6 @@ public final class StorageLocationManager {
     
     // MARK: - Streaming Helpers
     
-    /// Shared serial dispatch queue required by AVFoundation's `AVAssetResourceLoader.setDelegate(_:queue:)` for thumbnail generation.
-    private static let thumbnailResourceLoaderQueue = DispatchQueue(
-        label: "com.acme.ios.photos.thumbloader",
-        qos: .userInitiated
-    )
-    
     /// Constructs a virtual custom scheme URL (`smbstream://`) intercepted by AVPlayer and AVAssetResourceLoader.
     ///
     /// - Parameters:
@@ -960,7 +954,7 @@ public final class StorageLocationManager {
             }
             
             let validItem = await resolveValidItem(for: item)
-            guard validItem.size > 0, let (streamURL, _) = Self.makeStreamURL(for: validItem.name) else {
+            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
@@ -968,7 +962,7 @@ public final class StorageLocationManager {
             // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
             let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
             // swiftlint:disable:next no_legacy_dispatch_queue
-            let queue = Self.thumbnailResourceLoaderQueue
+            let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
             let generator = AVAssetImageGenerator(asset: asset)

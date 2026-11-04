@@ -5,12 +5,11 @@
 
 import UIKit
 import PDFKit
-import Combine
 
-/// Coordinator managing `PDFViewDelegate` callbacks, property observers, and gestures for `PDFView`.
+/// Coordinator managing `PDFViewDelegate` callbacks, notification observers, and gestures for `PDFView`.
 ///
 /// ### Core Responsibilities
-/// - **Page Synchronization**: Observes `currentPage` via Swift Concurrency AsyncSequence (`publisher(for:).values`) to report active page numbers
+/// - **Page Synchronization**: Listens for `.PDFViewPageChanged` notifications via Swift Concurrency `AsyncSequence` to report active page numbers
 ///   and visible multi-page ranges to parent SwiftUI views.
 /// - **Scroll / Zoom State Management**: In book mode, disables internal scroll view panning when at 1.0x scale
 ///   so that finger drags turn pages instead of panning. Re-enables scrolling when zoomed in for deep reading.
@@ -69,7 +68,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         super.init()
     }
     
-    /// Attaches delegate, gestures, and Swift Concurrency property observers to the specified `PDFView`.
+    /// Attaches delegate, gestures, and notification center observers to the specified `PDFView`.
     ///
     /// - Parameter pdfView: The PDFView instance to configure.
     func attach(to pdfView: PDFView) {
@@ -80,7 +79,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         
         pageObservationTask = Task { @MainActor [weak self, weak pdfView] in
             guard let pdfView else { return }
-            for await _ in pdfView.publisher(for: \.currentPage).values {
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewPageChanged, object: pdfView) {
                 guard let self else { break }
                 self.updatePageInfo()
             }
@@ -88,7 +87,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         
         scaleObservationTask = Task { @MainActor [weak self, weak pdfView] in
             guard let pdfView else { return }
-            for await _ in pdfView.publisher(for: \.scaleFactor).values {
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewScaleChanged, object: pdfView) {
                 guard let self else { break }
                 self.updateScrollState()
             }
@@ -113,7 +112,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
-    /// Cancels active property observation tasks.
+    /// Cancels active notification observation tasks.
     private func detachObservers() {
         pageObservationTask?.cancel()
         pageObservationTask = nil
