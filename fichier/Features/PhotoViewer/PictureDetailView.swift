@@ -5,27 +5,72 @@
 
 import SwiftUI
 
+/// Full-screen photo inspection and slideshow presentation coordinator.
+///
+/// ### Core Capabilities
+/// - **Dual Display Modes**:
+///   1. *Manual Browsing*: Interactive 1:1 finger swipe `TabView` with page-style gestures.
+///   2. *Automated Slideshow*: Timed auto-advancing slideshow with customizable transitions (`.slide`, `.dissolve`, `.kenBurns`).
+/// - **Structured Concurrency**: Spawns a structured `TaskGroup` upon photo change (`.task(id: currentItem.id)`)
+///   to fetch EXIF metadata and download full-resolution image bytes in parallel.
+/// - **Lookahead Prefetching**: Automatically schedules background download of the subsequent photo (`prefetchNext`)
+///   to eliminate loading pauses during manual paging or rapid slideshow playback.
+/// - **Hardware Keyboard Support**: Complete iPad / Mac keyboard shortcuts (Arrow keys, Space for play/pause, `F` for favorite, `I` for info, `Esc` to close).
 public struct PictureDetailView: View {
+    /// Shared storage location manager providing media streaming and caching.
     var manager: StorageLocationManager
+    
+    /// Collection of photo items available for navigation in this session.
     let pictures: [MediaItem]
+    
+    /// The initial photo item focused when the viewer opened.
     let initialItem: MediaItem
+    
+    /// Flag indicating whether the slideshow should begin running automatically on appear.
     let autoStartSlideshow: Bool
     
     @Environment(\.dismiss) private var dismiss
+    
+    /// The currently displayed photo media item.
     @State private var currentItem: MediaItem
+    
+    /// Controls whether the automated slideshow timer is actively running.
     @State private var isPlayingSlideshow: Bool
+    
+    /// Trajectory direction of the most recent photo transition, driving asymmetric slide animations.
     @State private var slideDirection: SlideDirection = .forward
+    
+    /// Duration in seconds between automatic slideshow photo transitions.
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
+    
+    /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
+    
+    /// Controls visibility of floating top and bottom HUD overlay toolbars.
     @State private var showControls: Bool = true
     
-    // Tier 1 features
+    /// Full-resolution image decoded for the currently active photo.
     @State private var currentImage: UIImage?
+    
+    /// Parsed EXIF metadata for the currently active photo.
     @State private var activeMetadata: PictureEXIFData?
+    
+    /// Controls presentation of the EXIF information sheet.
     @State private var showingInfoSheet = false
+    
+    /// Temporary toast message displayed after saving to Camera Roll.
     @State private var saveStatusMessage: String?
+    
+    /// Indicates whether saving to the photo library is currently in flight.
     @State private var isSaving = false
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - pictures: Array of candidate media items (videos are filtered out automatically).
+    ///   - initialItem: Initial focused media item.
+    ///   - autoStartSlideshow: Whether to immediately begin slideshow cycling (defaults to `false`).
     public init(
         manager: StorageLocationManager,
         pictures: [MediaItem],
@@ -41,6 +86,7 @@ public struct PictureDetailView: View {
         self._isPlayingSlideshow = State(initialValue: autoStartSlideshow)
     }
     
+    /// Zero-based index of the current photo within the active collection.
     private var currentIndex: Int {
         pictures.firstIndex(where: { $0.id == currentItem.id }) ?? 0
     }
@@ -256,6 +302,7 @@ public struct PictureDetailView: View {
         }
     }
     
+    /// Dynamically constructs the transition animation based on user preference and trajectory direction.
     private var activeTransition: AnyTransition {
         switch transitionStyle {
         case .slide:
@@ -274,6 +321,7 @@ public struct PictureDetailView: View {
     
     // MARK: - Actions & Navigation Helpers
     
+    /// Saves the currently rendered image to the system Photos library with progress feedback and toast banner.
     private func saveToCameraRoll() {
         guard let img = currentImage else { return }
         isSaving = true
@@ -296,6 +344,7 @@ public struct PictureDetailView: View {
         }
     }
     
+    /// Navigates forward to the next image in the sequence, wrapping to index 0 at the end.
     private func goToNext() {
         guard !pictures.isEmpty else { return }
         slideDirection = .forward
@@ -303,6 +352,7 @@ public struct PictureDetailView: View {
         currentItem = pictures[nextIndex]
     }
     
+    /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
         guard !pictures.isEmpty else { return }
         slideDirection = .backward
@@ -310,6 +360,9 @@ public struct PictureDetailView: View {
         currentItem = pictures[prevIndex]
     }
     
+    /// Dispatches an asynchronous prefetch task for the next upcoming photo into memory/disk cache.
+    ///
+    /// - Parameter item: Current media item.
     private func prefetchNext(after item: MediaItem) {
         guard let idx = pictures.firstIndex(where: { $0.id == item.id }), pictures.count > 1 else { return }
         let nextIdx = (idx + 1) % pictures.count

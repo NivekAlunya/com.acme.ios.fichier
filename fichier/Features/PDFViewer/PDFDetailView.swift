@@ -6,41 +6,91 @@
 import SwiftUI
 import PDFKit
 
+/// Full-screen document viewer presenting PDF files with continuous and horizontal book spread modes.
+///
+/// ### Core Capabilities
+/// - **Dual Reading Modes**:
+///   1. *Continuous Scroll*: Vertical single-page document scrolling using native `PDFKitRepresentedView`.
+///   2. *Book Mode*: Interactive horizontal swipe `TabView` rendering facing page spreads (`PDFSpreadPageView`).
+/// - **Leading Thumbnail Sidebar**: Docked thumbnail strip (`PDFLeadingThumbnailSidebarView`) allowing rapid
+///   jumping to any page with synchronized scrolling and haptic feedback.
+/// - **Progressive Document Ingestion**: Retrieves local or cached files immediately, or streams from SMB servers
+///   via `manager.fetchDocumentURL`, throttling UI progress updates to 128 KB byte intervals.
+/// - **Hardware Keyboard Support**: Complete iPad / Mac shortcuts (`Esc` to dismiss, `B` to toggle book mode, Arrow keys to turn pages).
 struct PDFDetailView: View {
+    /// Shared storage location manager handling document streaming and caching.
     var manager: StorageLocationManager
+    
+    /// Target document media item.
     let item: MediaItem
     
     @Environment(\.dismiss) private var dismiss
+    
+    /// Loaded and parsed PDFKit document instance.
     @State private var document: PDFDocument?
+    
+    /// Local file URL for the cached or downloaded PDF document.
     @State private var localFileURL: URL?
+    
+    /// Indicates whether document download or parsing is actively in flight.
     @State private var isLoading = true
+    
+    /// Number of bytes received so far during network download.
     @State private var bytesReceived: Int64 = 0
+    
+    /// Total expected byte size of the document.
     @State private var totalBytes: Int64 = 0
+    
+    /// Tracks byte progress milestones to throttle `@MainActor` UI re-renders to 128 KB intervals.
     @State private var lastReportedBytes: Int64 = 0
+    
+    /// Error description string if loading or parsing fails.
     @State private var errorMessage: String?
+    
+    /// Controls visibility of floating top and bottom navigation HUD toolbars.
     @State private var showControls = true
+    
+    /// 1-based index of the currently active starting visible page.
     @State private var currentPage = 1
+    
+    /// 1-based index of the currently active ending visible page.
     @State private var endVisiblePage = 1
+    
+    /// Total number of pages in the document.
     @State private var totalPages = 1
+    
+    /// User preference reading mode persisted across sessions.
     @AppStorage("pdf_reading_mode") private var readingMode: PDFReadingMode = .continuous
     
+    /// Indicates whether book spread mode is currently active.
     private var isBookMode: Bool {
         readingMode.isBookMode
     }
     
+    /// Indicates whether Page 1 is displayed as an isolated cover page in book mode.
     private var displaysAsBook: Bool {
         readingMode.displaysAsBook
     }
+    
+    /// Currently focused spread index in book mode `TabView`.
     @State private var currentSpreadIndex = 0
+    
+    /// Active `PDFView` reference captured from `PDFKitRepresentedView`.
     @State private var activePDFView: PDFView?
+    
+    /// Active coordinator managing gestures and PDFKit notifications.
     @State private var coordinator: PDFKitCoordinator?
+    
+    /// Retry attempt counter used to force `.task` reload upon tap.
     @State private var reloadAttempt = 0
     
+    /// Ordered array of page spreads synthesized for the current document.
     private var spreads: [PDFSpread] {
         guard let document else { return [] }
         return PDFSpread.buildSpreads(pageCount: document.pageCount, displaysAsBook: displaysAsBook)
     }
     
+    /// Synchronizes the active book spread index with the current visible page number.
     private func syncCurrentSpread() {
         if let match = spreads.firstIndex(where: { $0.pageIndices.contains(currentPage - 1) }) {
             currentSpreadIndex = match
@@ -50,6 +100,7 @@ struct PDFDetailView: View {
         }
     }
     
+    /// Formatted status string displaying page numbers (e.g. "Page 1 of 40" or "Pages 2–3 of 40").
     private var pageInfoText: String {
         if isBookMode && currentPage != endVisiblePage && endVisiblePage > currentPage {
             return "Pages \(currentPage)–\(endVisiblePage) of \(totalPages)"
@@ -229,6 +280,7 @@ struct PDFDetailView: View {
     
     // MARK: - Top HUD
     
+    /// Translucent top action bar displaying file title, pagination, book mode selector, and export tools.
     private var topHUD: some View {
         HStack(spacing: 12) {
             Button {
@@ -339,6 +391,7 @@ struct PDFDetailView: View {
     
     // MARK: - Bottom HUD
     
+    /// Docked translucent status pill displaying the active page numbers and document length.
     private var bottomHUD: some View {
         Text(pageInfoText)
             .font(.system(size: 12, weight: .semibold))
@@ -365,6 +418,7 @@ struct PDFDetailView: View {
     
     // MARK: - Loading Overlay
     
+    /// Loading view displaying determinate progress percentage or indeterminate spinner.
     private var loadingOverlay: some View {
         VStack(spacing: 16) {
             if totalBytes > 0 {
@@ -402,6 +456,7 @@ struct PDFDetailView: View {
     
     // MARK: - Error Overlay
     
+    /// Error overlay view presenting descriptive failure messages with retry and close buttons.
     private func errorOverlay(error: String) -> some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle")
@@ -436,6 +491,7 @@ struct PDFDetailView: View {
     
     // MARK: - Loading Logic
     
+    /// Asynchronously locates or streams the PDF document, updating progress and instantiating `PDFDocument`.
     @MainActor
     private func loadDocument() async {
         isLoading = true

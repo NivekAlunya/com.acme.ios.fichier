@@ -5,9 +5,18 @@
 
 import SwiftUI
 
+/// Floating translucent bottom bar for the video player HUD.
+///
+/// Features:
+/// - Top row displaying the video title, playlist position (`1 of 12`), and formatted file size.
+/// - Bottom row embedding `VideoTimelineBar` for interactive progress tracking and timeline scrubbing.
 public struct VideoPlayerBottomBarView: View {
+    /// Active video player controller.
     public var controller: VideoPlayerController
     
+    /// Designated public initializer.
+    ///
+    /// - Parameter controller: Active video player controller.
     public init(controller: VideoPlayerController) {
         self.controller = controller
     }

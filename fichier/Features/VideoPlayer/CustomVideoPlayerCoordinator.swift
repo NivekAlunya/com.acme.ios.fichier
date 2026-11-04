@@ -5,16 +5,30 @@
 
 import AVKit
 
+/// Coordinator managing `AVPictureInPictureControllerDelegate` callbacks and Picture-in-Picture transitions.
+///
+/// Attaches to an `AVPlayerLayer` to configure inline and background PiP playback:
+/// - Sets `canStartPictureInPictureAutomaticallyFromInline = true` so users navigating home seamlessly transition to PiP.
+/// - Tracks active PiP presentation status (`isPiPActive`) and broadcasts changes via `onPiPStatusChanged`.
+/// - Implements UI restoration (`restoreUserInterfaceForPictureInPictureStopWithCompletionHandler`) when returning from PiP.
 @MainActor
 public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureControllerDelegate {
+    /// Callback delivering Boolean updates when Picture-in-Picture starts or stops.
     public var onPiPStatusChanged: ((Bool) -> Void)?
+    
+    /// Indicates whether Picture-in-Picture presentation is currently active.
     public private(set) var isPiPActive: Bool = false
+    
+    /// Underlying system Picture-in-Picture controller.
     public var pipController: AVPictureInPictureController?
     
     public override init() {
         super.init()
     }
     
+    /// Initializes and attaches the Picture-in-Picture controller to the specified player layer.
+    ///
+    /// - Parameter playerLayer: Active `AVPlayerLayer` hosting video rendering.
     public func setupPiP(with playerLayer: AVPlayerLayer) {
         guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
         
@@ -28,6 +42,7 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureCon
         self.pipController = pip
     }
     
+    /// Toggles Picture-in-Picture presentation on or off.
     public func togglePiP() {
         guard let pip = pipController, pip.isPictureInPicturePossible else { return }
         if pip.isPictureInPictureActive {

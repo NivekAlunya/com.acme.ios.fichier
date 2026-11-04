@@ -5,18 +5,53 @@
 
 import SwiftUI
 
+/// Asynchronous thumbnail loading component rendering cached or remote previews for photos, videos, and documents.
+///
+/// ### Core Capabilities
+/// - **Cooperative Task Lifecycle**: Spawns an asynchronous `@MainActor` task on `.onAppear` to fetch thumbnails
+///   from `StorageLocationManager`, and automatically cancels outstanding tasks on `.onDisappear`.
+/// - **Type Badges**: Renders overlay badges for videos (with live `VideoProgressRing` and watch status checkmarks),
+///   animated GIFs, and PDF documents.
+/// - **Progress Bar**: Renders a bottom progress bar for partially-watched videos using `.scaleEffect(x:...)`
+///   to avoid infinite geometry expansion inside list rows.
+/// - **Resilience**: Features automatic single retry after 1.5 seconds for video frame extraction failures,
+///   and provides a manual tap-to-retry button upon permanent error.
 public struct MediaThumbnailView: View {
+    /// Shared storage location manager handling thumbnail caches and workers.
     public var manager: StorageLocationManager
+    
+    /// The media item whose thumbnail is rendered.
     public let item: MediaItem
+    
+    /// Target maximum pixel bounding box for downsampled image decoding.
     public var maxDimension: CGFloat = 260
+    
+    /// Corner radius applied to thumbnail clipping and placeholder styling.
     public var cornerRadius: CGFloat = 10
+    
+    /// Configures layout for compact environments such as table list cells.
     public var isCompact: Bool = false
     
+    /// Successfully loaded and decoded thumbnail image.
     @State private var image: UIImage?
+    
+    /// In-flight asynchronous thumbnail loading task.
     @State private var loadTask: Task<Void, Never>?
+    
+    /// Indicates whether thumbnail generation or download failed.
     @State private var loadFailed: Bool = false
+    
+    /// Retry attempt counter for transient network / streaming timeouts.
     @State private var retryCount: Int = 0
     
+    /// Memberwise initializer for thumbnail configuration.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - item: Target media item.
+    ///   - maxDimension: Maximum pixel bounding dimension (defaults to 260).
+    ///   - cornerRadius: Clipping corner radius (defaults to 10).
+    ///   - isCompact: Whether rendered in compact list mode (defaults to `false`).
     public init(
         manager: StorageLocationManager,
         item: MediaItem,
@@ -168,6 +203,7 @@ public struct MediaThumbnailView: View {
     
     // MARK: - Loading & Retry Logic
     
+    /// Spawns an asynchronous task to download or retrieve the thumbnail from cache.
     private func startLoading() {
         loadTask?.cancel()
         loadFailed = false
@@ -201,11 +237,13 @@ public struct MediaThumbnailView: View {
         }
     }
     
+    /// Resets the retry counter and reinitiates thumbnail loading.
     private func retryLoading() {
         retryCount = 0
         startLoading()
     }
     
+    /// Cancels in-flight loading tasks and clears references.
     private func cancelLoading() {
         loadTask?.cancel()
         loadTask = nil

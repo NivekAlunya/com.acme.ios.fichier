@@ -6,9 +6,23 @@
 import SwiftUI
 import AVKit
 
+/// Video playback canvas combining hardware video rendering with full-screen gesture scrubbing.
+///
+/// Features:
+/// - Embeds `CustomVideoPlayerView` to host native `AVPlayerLayer` and Picture-in-Picture.
+/// - Single tap gesture toggles HUD overlay visibility (`controller.toggleControls()`).
+/// - Horizontal drag gesture (`videoSeekGesture`) enables scrubbing anywhere on the video canvas.
+///   Calculates dynamic scrubbing sensitivity scaled to document length:
+///   - Videos > 1 hour: 2.0× multiplier for rapid navigation.
+///   - Videos > 10 minutes: 1.0× multiplier.
+///   - Short clips: 0.5× multiplier for fine precision.
 public struct VideoPlayerCanvasView: View {
+    /// Active video player controller.
     public var controller: VideoPlayerController
     
+    /// Designated public initializer.
+    ///
+    /// - Parameter controller: Active video player controller.
     public init(controller: VideoPlayerController) {
         self.controller = controller
     }
@@ -36,6 +50,7 @@ public struct VideoPlayerCanvasView: View {
         }
     }
     
+    /// Full-screen horizontal drag gesture for gesture-driven timeline scrubbing.
     private var videoSeekGesture: some Gesture {
         DragGesture(minimumDistance: 15)
             .onChanged { value in

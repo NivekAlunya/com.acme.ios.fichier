@@ -6,8 +6,14 @@
 import SwiftUI
 import PDFKit
 
+/// SwiftUI wrapper around PDFKit's native `PDFThumbnailView` providing a horizontal scrubber bar.
+///
+/// Binds directly to an active `PDFView` instance to provide synchronized page scrubbing and thumbnail navigation.
 struct PDFThumbnailScrubberView: UIViewRepresentable {
+    /// Weak reference to the target `PDFView` being scrubbed.
     weak var pdfView: PDFView?
+    
+    /// Bounding size of each page thumbnail rendered in the strip.
     var thumbnailSize: CGSize = CGSize(width: 44, height: 60)
     
     func makeUIView(context: Context) -> PDFThumbnailView {

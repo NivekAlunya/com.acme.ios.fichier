@@ -6,13 +6,36 @@
 import Foundation
 import AVFoundation
 
+/// Background actor coordinating active asynchronous tasks spawned by `SMBResourceLoaderDelegate`.
+///
+/// ### Out-Of-Order Cancellation Handling
+/// AVFoundation's resource loading pipeline can occasionally deliver `didCancel` callbacks
+/// *before* the asynchronous task for `shouldWaitForLoadingOfRequestedResource` has finished registering.
+/// To handle race conditions and prevent orphan tasks:
+/// - Maintains an `activeTasks` dictionary keyed by `AVAssetResourceLoadingRequest`.
+/// - Records early cancellation notices in a bounded LRU `cancelledRequests` set (capacity 64).
+/// - If a request arrives that is already in `cancelledRequests`, it is immediately discarded without running.
 actor ResourceLoadingTaskTracker {
+    /// Active in-flight background tasks mapped to loading requests.
     private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
+    
+    /// Set of requests whose cancellation arrived before task execution commenced.
     private var cancelledRequests: Set<AVAssetResourceLoadingRequest> = []
+    
+    /// Ordered list tracking insertion age of early-cancelled requests for capacity bounding.
     private var cancelledOrder: [AVAssetResourceLoadingRequest] = []
+    
+    /// Bounding limit for early cancellation tracking to prevent memory leaks.
     private let maxCancelledCapacity = 64
+    
+    /// Indicates whether the tracker has been permanently stopped.
     private var isStopped = false
     
+    /// Spawns and tracks an asynchronous task for a given loading request.
+    ///
+    /// - Parameters:
+    ///   - request: The AVFoundation resource loading request.
+    ///   - operation: The asynchronous work closure.
     func runTask(
         for request: AVAssetResourceLoadingRequest,
         operation: @Sendable @escaping () async -> Void
@@ -33,6 +56,7 @@ actor ResourceLoadingTaskTracker {
         activeTasks[request] = task
     }
     
+    /// Removes a finished loading request from the active task dictionary.
     func remove(for request: AVAssetResourceLoadingRequest) {
         activeTasks.removeValue(forKey: request)
         if cancelledRequests.remove(request) != nil {
@@ -40,6 +64,7 @@ actor ResourceLoadingTaskTracker {
         }
     }
     
+    /// Cancels the task associated with a loading request or records it in the early cancellation cache.
     func cancelTask(for request: AVAssetResourceLoadingRequest) {
         if let task = activeTasks.removeValue(forKey: request) {
             task.cancel()
@@ -55,6 +80,7 @@ actor ResourceLoadingTaskTracker {
         }
     }
     
+    /// Permanently halts tracking and cancels all active in-flight resource loading tasks.
     func cancelAll() {
         isStopped = true
         let tasks = Array(activeTasks.values)

@@ -5,9 +5,19 @@
 
 import SwiftUI
 
+/// Modal bottom sheet presenting detailed EXIF camera settings, optical metadata, and file attributes.
+///
+/// Organized into distinct grouped sections:
+/// - **File Details**: File name, file size, codec format, pixel dimensions, megapixels, and timestamp.
+/// - **Camera & Lens**: Body manufacturer/model and attached lens model.
+/// - **Exposure Settings**: Lens aperture, shutter speed, sensor ISO, and focal length.
 struct PictureInfoSheet: View {
+    /// Parsed EXIF metadata object being inspected.
     let metadata: PictureEXIFData
+    
+    /// Target media item reference.
     let item: MediaItem
+    
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {

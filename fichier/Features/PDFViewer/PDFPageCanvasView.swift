@@ -6,7 +6,17 @@
 import UIKit
 import PDFKit
 
+/// Custom UIKit view rendering a single PDF page directly into CoreGraphics with crisp vector fidelity.
+///
+/// ### Coordinate Flipping & Geometry Calculation
+/// CoreGraphics operates in a Cartesian coordinate space where the origin `(0, 0)` is at the bottom-left,
+/// whereas UIKit places the origin at the top-left. To draw the PDF page upright:
+/// 1. Determines aspect-fit scale ratio between the `.cropBox` bounds and the target `rect`.
+/// 2. Translates the context origin to `(originX, originY + targetHeight)`.
+/// 3. Inverts the vertical coordinate axis with `scaleBy(x: scale, y: -scale)`.
+/// 4. Invokes `page.draw(with: .cropBox, to: context)`.
 public final class PDFPageCanvasView: UIView {
+    /// Active PDFKit page reference. Updating this property triggers an immediate redraw (`setNeedsDisplay`).
     public var page: PDFPage? {
         didSet {
             setNeedsDisplay()

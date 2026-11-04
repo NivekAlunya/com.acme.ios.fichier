@@ -6,10 +6,21 @@
 import SwiftUI
 import AVKit
 
+/// SwiftUI bridge wrapping AVKit's `AVRoutePickerView` for wireless AirPlay audio and video streaming.
+///
+/// Sets `prioritizesVideoDevices = true` to display external television and Apple TV targets prominently.
 public struct AirPlayButtonView: UIViewRepresentable {
+    /// Inactive icon tint color.
     public var tintColor: UIColor
+    
+    /// Active route picker icon tint color when an AirPlay route is connected.
     public var activeTintColor: UIColor
     
+    /// Memberwise designated initializer.
+    ///
+    /// - Parameters:
+    ///   - tintColor: Inactive tint color (defaults to `.white`).
+    ///   - activeTintColor: Active route tint color (defaults to `.systemBlue`).
     public init(
         tintColor: UIColor = .white,
         activeTintColor: UIColor = .systemBlue

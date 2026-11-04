@@ -5,15 +5,31 @@
 
 import SwiftUI
 
+/// Compact volume slider control with speaker status icon and interactive drag track.
+///
+/// Features:
+/// - Dynamic speaker icon transitioning from muted slash to 1, 2, or 3 sound waves based on volume level.
+/// - Tap speaker icon to toggle mute state.
+/// - Drag slider track to continuously scale volume between `0.0` and `1.0`.
+/// - Full VoiceOver accessibility with percentage reporting and adjustable increment/decrement actions.
 public struct VideoVolumeBar: View {
+    /// Two-way binding for normalized volume level (0.0 to 1.0).
     @Binding public var volume: Double
+    
+    /// Two-way binding for muted boolean state.
     @Binding public var isMuted: Bool
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - volume: Volume level binding.
+    ///   - isMuted: Muted state binding.
     public init(volume: Binding<Double>, isMuted: Binding<Bool>) {
         self._volume = volume
         self._isMuted = isMuted
     }
     
+    /// SF Symbol icon name reflecting current volume percentage and mute status.
     private var speakerIconName: String {
         if isMuted || volume <= 0.001 {
             return "speaker.slash.fill"

@@ -6,14 +6,36 @@
 import SwiftUI
 import PDFKit
 
+/// SwiftUI bridge wrapping PDFKit's `PDFView` for high-performance vector document browsing.
+///
+/// Configures display parameters based on the active reading mode:
+/// - In book mode: `displayMode = .twoUp`, `displayDirection = .horizontal`, `displaysAsBook = true`.
+/// - In continuous mode: `displayMode = .singlePageContinuous`, `displayDirection = .vertical`.
+///
+/// Coordinates page change notifications, gesture attachments, and automatic scale fitting (`autoScales = true`).
 struct PDFKitRepresentedView: UIViewRepresentable {
+    /// PDFKit document instance displayed.
     let document: PDFDocument
+    
+    /// Indicates whether two-page horizontal layout is active.
     var isBookMode: Bool = false
+    
+    /// Indicates whether Page 1 is treated as an isolated cover page.
     var displaysAsBook: Bool = true
+    
+    /// Callback delivering current page and total count.
     let onPageChange: ((Int, Int) -> Void)?
+    
+    /// Callback delivering visible page range and total count.
     var onPageRangeChange: ((Int, Int, Int) -> Void)? = nil
+    
+    /// Callback invoked when tapping the canvas.
     let onTap: (() -> Void)?
+    
+    /// Closure receiving the created coordinator instance.
     var onCoordinatorCreated: ((PDFKitCoordinator) -> Void)? = nil
+    
+    /// Closure receiving the created `PDFView` instance.
     let onPDFViewCreated: ((PDFView) -> Void)?
     
     func makeUIView(context: Context) -> PDFView {

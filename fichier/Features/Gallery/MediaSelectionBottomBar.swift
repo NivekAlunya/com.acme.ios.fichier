@@ -5,16 +5,39 @@
 
 import SwiftUI
 
+/// Floating translucent action bar displayed when multi-selection mode is active in `MediaGridView`.
+///
+/// Anchored to the bottom of the screen with an ultra-thin material pill shape, providing batch actions:
+/// - Favorite / Unfavorite toggle across all selected media items.
+/// - Batch export to the iOS Photos library via `PhotoLibrarySaver`.
+/// - Batch system share sheet dispatch.
+/// - Progress indicator capsule displaying live background download/export status with an optional cancel button.
 struct MediaSelectionBottomBar: View {
+    /// Number of items currently checked in the selection set.
     let selectedCount: Int
+    
+    /// Indicates whether all currently selected items are marked as favorites.
     let isAllFavorites: Bool
+    
+    /// Indicates whether an asynchronous batch operation is actively running.
     let isProcessing: Bool
+    
+    /// Optional status string displayed inside the progress badge (e.g. "Downloading 2/5...").
     let progressMessage: String?
+    
+    /// Flag controlling visibility of the "Save to Photos" button (hidden when already in Photos library).
     var showSaveToPhotos: Bool = true
+    
     /// Optional closure triggered when the user cancels an ongoing batch operation.
     var onCancel: (() -> Void)? = nil
+    
+    /// Handler invoked to toggle favorite state across all selected items.
     let onToggleFavorite: () -> Void
+    
+    /// Handler invoked to save all selected items to the Photos library.
     let onSaveToPhotos: () -> Void
+    
+    /// Handler invoked to export selected items to the system activity share sheet.
     let onShare: () -> Void
     
     var body: some View {

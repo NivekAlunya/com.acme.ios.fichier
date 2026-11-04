@@ -5,9 +5,20 @@
 
 import SwiftUI
 
+/// Centered controls overlay presenting playback indicators, large play/pause toggles, and side arrows.
+///
+/// Features:
+/// - Indeterminate buffering spinner with "Buffering..." caption when loading or network stalled.
+/// - Descriptive error notification with a retry button upon failure.
+/// - Large semi-transparent play/pause button (64pt) in the exact screen center.
+/// - Left and right chevron buttons (42pt) for switching to previous or next video in queue.
 public struct VideoPlayerCenterControlsView: View {
+    /// Two-way reference to the active video player controller.
     public var controller: VideoPlayerController
     
+    /// Designated public initializer.
+    ///
+    /// - Parameter controller: Active video player controller.
     public init(controller: VideoPlayerController) {
         self.controller = controller
     }

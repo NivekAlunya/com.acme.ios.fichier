@@ -6,9 +6,17 @@
 import SwiftUI
 import PDFKit
 
+/// SwiftUI wrapper embedding `PDFPageCanvasView` for standalone vector page rendering.
+///
+/// Encapsulates UIView lifecycle, delegating page assignments and redrawing efficiently
+/// without reallocating underlying drawing contexts when the page reference remains identical.
 public struct PDFPageCanvasRepresentable: UIViewRepresentable {
+    /// Active PDFKit page to render.
     public let page: PDFPage
     
+    /// Designated public initializer.
+    ///
+    /// - Parameter page: PDFKit page reference.
     public init(page: PDFPage) {
         self.page = page
     }

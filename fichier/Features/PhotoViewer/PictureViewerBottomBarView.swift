@@ -5,23 +5,59 @@
 
 import SwiftUI
 
+/// Floating translucent action toolbar docked at the bottom of the full-screen photo viewer.
+///
+/// Features interactive controls:
+/// - Previous and Next photo chevrons for fast paging.
+/// - Slideshow play/pause button and duration/transition settings menu.
+/// - EXIF photo information sheet toggle button.
+/// - Favorite state toggle button.
+/// - Save to camera roll button (disabled when viewing local Photos library assets).
+/// - Native SwiftUI `ShareLink` export.
 public struct PictureViewerBottomBarView: View {
+    /// Indicates whether the collection contains more than one photo, enabling navigation arrows.
     public let hasMultiplePictures: Bool
+    
+    /// Two-way binding controlling automated slideshow playback.
     @Binding public var isPlayingSlideshow: Bool
+    
+    /// Two-way binding for slideshow advance interval in seconds.
     @Binding public var slideshowInterval: Double
+    
+    /// Two-way binding for transition visual effect style.
     @Binding public var transitionStyle: SlideshowTransitionStyle
+    
+    /// Indicates whether the current photo is marked as a user favorite.
     public let isFavorite: Bool
+    
+    /// Indicates whether export to Camera Roll is allowed (false for existing PhotoKit assets).
     public let canSaveToCameraRoll: Bool
+    
+    /// Indicates whether photo export to Camera Roll is actively processing.
     public let isSaving: Bool
+    
+    /// The currently decoded full-resolution `UIImage` reference.
     public let currentImage: UIImage?
+    
+    /// Display name of the active photo.
     public let currentName: String
     
+    /// Action handler to page backward to the previous photo.
     public let onPrevious: () -> Void
+    
+    /// Action handler to page forward to the next photo.
     public let onNext: () -> Void
+    
+    /// Action handler to present the EXIF metadata inspector.
     public let onShowInfo: () -> Void
+    
+    /// Action handler to toggle favorite status.
     public let onToggleFavorite: () -> Void
+    
+    /// Action handler to save the current photo to the device photo library.
     public let onSaveToCameraRoll: () -> Void
     
+    /// Memberwise designated initializer.
     public init(
         hasMultiplePictures: Bool,
         isPlayingSlideshow: Binding<Bool>,

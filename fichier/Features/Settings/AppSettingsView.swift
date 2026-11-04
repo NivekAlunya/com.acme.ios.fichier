@@ -6,6 +6,15 @@
 import SwiftUI
 import UIKit
 
+/// Modal settings view configuring application-wide preferences, cache storage, and system permissions.
+///
+/// Organized into distinct functional sections:
+/// 1. **System Settings**: Direct deep-link to the iOS Settings app for Network and Privacy permissions.
+/// 2. **Storage & Cache**: Live telemetry of on-disk thumbnail and video cache usage with a destructive clear action.
+/// 3. **Slideshow Preferences**: Transition animation style (`.slide`, `.dissolve`, etc.) and cycling duration.
+/// 4. **Gallery Defaults**: Preferred view mode (`.grid` vs `.list`), grid density (`GridSize`), and sort order.
+/// 5. **PDF Reader Defaults**: Default page layout reading mode (`PDFReadingMode`).
+/// 6. **About**: Application version, build number, and SMB protocol support details.
 struct AppSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -154,12 +163,14 @@ struct AppSettingsView: View {
         }
     }
     
+    /// Formatted application version and build string from the main bundle dictionary.
     private var appVersionString: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
     }
     
+    /// Asynchronously deletes all cached thumbnails and downloaded media files, updating telemetry.
     private func clearCache() {
         isClearingCache = true
         Task {

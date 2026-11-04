@@ -6,22 +6,40 @@
 import SwiftUI
 import AVKit
 
+/// Floating top navigation bar for the video player HUD.
+///
+/// Adapts responsively across device size classes:
+/// - In compact portrait: Splits into a two-tier layout (close button & volume bar on top row; center tools bar on bottom row).
+/// - In landscape or regular iPad: Renders a single horizontal bar with centered action tools.
+///
+/// Tool elements include close button, volume slider, previous/next video arrows, favorite toggle,
+/// camera roll export, system sharing via `ShareLink`, AirPlay routing, and the playback options menu.
 public struct VideoPlayerTopBarView: View {
+    /// Active video player controller.
     public var controller: VideoPlayerController
+    
+    /// Callback invoked to close and dismiss the video player.
     public var onDismiss: () -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - controller: Active video player controller.
+    ///   - onDismiss: Dismissal handler.
     public init(controller: VideoPlayerController, onDismiss: @escaping () -> Void) {
         self.controller = controller
         self.onDismiss = onDismiss
     }
     
+    /// True on iPad and Mac regular horizontal size classes.
     private var isRegular: Bool {
         horizontalSizeClass == .regular
     }
     
+    /// True on iPhones in vertical portrait orientation.
     private var isCompactPortrait: Bool {
         horizontalSizeClass == .compact && verticalSizeClass == .regular
     }
@@ -62,6 +80,7 @@ public struct VideoPlayerTopBarView: View {
         }
     }
     
+    /// Circular dismissal button.
     private var closeButton: some View {
         Button {
             onDismiss()
@@ -82,6 +101,7 @@ public struct VideoPlayerTopBarView: View {
         .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close video player"))
     }
     
+    /// Compact volume slider bar bound to controller volume and mute state.
     private var volumeBar: some View {
         @Bindable var bindableController = controller
         return VideoVolumeBar(volume: $bindableController.volume, isMuted: $bindableController.isMuted)
@@ -95,6 +115,7 @@ public struct VideoPlayerTopBarView: View {
             }
     }
     
+    /// Previous video button.
     private var previousButton: some View {
         Button {
             controller.goToPrevious()
@@ -109,6 +130,7 @@ public struct VideoPlayerTopBarView: View {
         .accessibilityLabel(String(localized: "Previous Video", comment: "Accessibility label for previous video"))
     }
     
+    /// Next video button.
     private var nextButton: some View {
         Button {
             controller.goToNext()
@@ -123,12 +145,14 @@ public struct VideoPlayerTopBarView: View {
         .accessibilityLabel(String(localized: "Next Video", comment: "Accessibility label for next video"))
     }
     
+    /// Subtle vertical divider between tool sections.
     private var toolsDivider: some View {
         Divider()
             .frame(height: 20)
             .background(Color.white.opacity(0.3))
     }
     
+    /// Floating capsule container hosting action icons.
     private var centerToolsBar: some View {
         HStack(spacing: 6) {
             if controller.videos.count > 1 {
@@ -157,6 +181,7 @@ public struct VideoPlayerTopBarView: View {
         )
     }
     
+    /// Playback options menu configuring Picture-in-Picture, subtitles, audio tracks, and playback rate.
     private var playbackOptionsMenu: some View {
         Menu {
             Button {
@@ -243,6 +268,7 @@ public struct VideoPlayerTopBarView: View {
         .accessibilityLabel(String(localized: "Playback Options", comment: "Accessibility label for playback options menu"))
     }
     
+    /// Row of action tool icon buttons.
     @ViewBuilder
     private func actionToolsIcons(spacing: CGFloat) -> some View {
         HStack(spacing: spacing) {

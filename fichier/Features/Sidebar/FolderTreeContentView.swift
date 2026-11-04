@@ -5,11 +5,28 @@
 
 import SwiftUI
 
+/// Intermediate content column in the `NavigationSplitView` displaying the active location's directory hierarchy.
+///
+/// Handles three distinct visual states:
+/// 1. **Disconnected**: Renders a `ContentUnavailableView` inviting the user to configure or select a remote location.
+/// 2. **Connecting / Empty**: Renders an indeterminate progress view or an empty shares notification with refresh actions.
+/// 3. **Connected with Shares**: Embeds `SidebarFolderTreeView` to present the hierarchical folder tree.
 public struct FolderTreeContentView: View {
+    /// Two-way bindable reference to the centralized storage location manager.
     @Bindable var manager: StorageLocationManager
+    
+    /// Binding controlling presentation of the new SMB connection sheet.
     @Binding var showingAddRemote: Bool
+    
+    /// Callback invoked when a folder item is selected in the tree.
     let onSelectFolder: (MediaItem) -> Void
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - showingAddRemote: Binding for connection sheet presentation.
+    ///   - onSelectFolder: Callback receiving the selected folder item.
     public init(
         manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
@@ -77,6 +94,7 @@ public struct FolderTreeContentView: View {
         .navigationTitle(navigationTitle)
     }
     
+    /// Computes the column title reflecting the current connection name or active folder.
     private var navigationTitle: String {
         if let location = manager.currentLocation {
             return location.name

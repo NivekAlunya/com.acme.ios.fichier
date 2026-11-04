@@ -9,14 +9,40 @@ import AVFoundation
 import CryptoKit
 import PDFKit
 
+/// Centralized on-disk caching engine managing thumbnail persistence, video stream buffering, and document staging.
+///
+/// ### Architecture & Concurrency Overview
+/// - **Thread Safety & Concurrency**: Conforms to `Sendable` as an immutable coordinator with atomic filesystem operations.
+///   Heavy I/O calculations (directory sweeps, eviction, size summation) execute on background detached tasks (`priority: .utility`).
+/// - **Universal Master Thumbnail Dimension (420px)**: Employs a single master dimension of 420 px for all cached thumbnails.
+///   Whether the user displays List, Compact Grid (120px), Medium Grid (180px), or Large Grid (280px), a single cached file
+///   satisfies all views with native CoreGraphics scaling, eliminating duplicate downloads and multiple cache files per photo.
+/// - **Dynamic Host Disk Budgeting**: Continuously probes available volume space via `volumeAvailableCapacityForImportantUsageKey`.
+///   Under low disk conditions (< 1.5 GB free), cache ceilings automatically contract from 2 GB to 400 MB (videos)
+///   and 300 MB to 100 MB (thumbnails) to prevent device storage warnings.
+/// - **FIFO / Protected Eviction**: Evicts oldest accessed files first, while strictly shielding currently active URLs (`protectedURLs`).
 nonisolated public final class MediaCacheManager: Sendable {
+    
+    /// Global shared singleton coordinator.
     public static let shared = MediaCacheManager()
     
+    /// Underlying system `FileManager` reference.
     private var fileManager: FileManager { .default }
+    
+    /// Local directory storing JPEG downsampled thumbnails.
     private let thumbnailsDirectory: URL
+    
+    /// Local directory caching downloaded video files and streaming buffers.
     private let videosDirectory: URL
+    
+    /// Local directory staging cached PDF documents.
     private let documentsDirectory: URL
     
+    // MARK: - Initialization & Directory Bootstrap
+    
+    /// Initializes directories inside the user's `CachesDirectory` sandbox with `.completeUntilFirstUserAuthentication` protection.
+    ///
+    /// Automatically kicks off an asynchronous background maintenance pass to prune orphaned partial downloads.
     public init() {
         let fm = FileManager.default
         let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -42,12 +68,19 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Thumbnail Master Dimension
     
-    /// The universal master dimension (in pixels) for all thumbnails cached on disk.
-    /// Eliminates redundant SMB fetches and re-encodings across List, Compact, Medium, and Large view modes.
+    /// The universal master pixel dimension for all on-disk cached thumbnails (420px).
     public static let standardThumbnailDimension: CGFloat = 420
     
     // MARK: - Key Hashing
     
+    /// Computes a cryptographically stable SHA-256 cache key for an image thumbnail.
+    ///
+    /// - Parameters:
+    ///   - shareName: Name of the SMB share or storage root.
+    ///   - path: Canonical path to the file.
+    ///   - dimension: Pixel dimension bounding box.
+    ///   - connectionID: Connection identifier scoping multi-server configurations.
+    /// - Returns: A 64-character lowercase hexadecimal hash string.
     public func cacheKey(for shareName: String, path: String, dimension: CGFloat = MediaCacheManager.standardThumbnailDimension, connectionID: String = "") -> String {
         let raw: String
         if connectionID.isEmpty {
@@ -59,6 +92,13 @@ nonisolated public final class MediaCacheManager: Sendable {
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
+    /// Computes a SHA-256 hash key for a video file cache location.
+    ///
+    /// - Parameters:
+    ///   - shareName: Storage root or share name.
+    ///   - path: Canonical path to the video file.
+    ///   - connectionID: Scoped connection ID.
+    /// - Returns: A 64-character hexadecimal hash string.
     public func videoKey(for shareName: String, path: String, connectionID: String = "") -> String {
         let raw: String
         if connectionID.isEmpty {
@@ -70,6 +110,14 @@ nonisolated public final class MediaCacheManager: Sendable {
         return hash.map { String(format: "%02x", $0) }.joined()
     }
     
+    /// Resolves primary, legacy, and fallback lookup keys for thumbnail cache reads.
+    ///
+    /// - Parameters:
+    ///   - shareName: Storage root or share name.
+    ///   - path: Canonical path to the item.
+    ///   - dimension: Target display dimension.
+    ///   - connectionID: Scoped connection profile ID.
+    /// - Returns: A tuple of primary, unscoped fallback, and dimension-specific legacy keys.
     public func thumbnailKeys(
         for shareName: String,
         path: String,
@@ -83,8 +131,17 @@ nonisolated public final class MediaCacheManager: Sendable {
         return (primary, fallback, legacyDimKey)
     }
     
-    // MARK: - Thumbnail Disk Cache
+    // MARK: - Thumbnail Disk Cache Operations
     
+    /// Synchronously retrieves a cached thumbnail image from disk.
+    ///
+    /// Checks primary key, and automatically migrates legacy unscoped keys if discovered.
+    ///
+    /// - Parameters:
+    ///   - key: The primary SHA-256 key.
+    ///   - fallbackKey: Legacy unscoped key.
+    ///   - legacyKey: Dimension-specific key.
+    /// - Returns: Decoded `UIImage`, or `nil` if not cached.
     public func getThumbnail(for key: String, fallbackKey: String? = nil, legacyKey: String? = nil) -> UIImage? {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
         if fileManager.fileExists(atPath: fileURL.path),
@@ -121,6 +178,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         return nil
     }
     
+    /// Asynchronously retrieves a cached thumbnail from disk on a detached worker queue.
     public func getThumbnailAsync(for key: String, fallbackKey: String? = nil, legacyKey: String? = nil) async -> UIImage? {
         await Task.detached(priority: .userInitiated) { [self] in
             guard !Task.isCancelled else { return nil }
@@ -128,12 +186,18 @@ nonisolated public final class MediaCacheManager: Sendable {
         }.value
     }
     
+    /// Writes an image thumbnail to disk as an atomic JPEG file (82% compression quality).
+    ///
+    /// - Parameters:
+    ///   - image: The `UIImage` to encode.
+    ///   - key: The SHA-256 cache key.
     public func saveThumbnail(_ image: UIImage, for key: String) {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
         guard let data = image.jpegData(compressionQuality: 0.82) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
     
+    /// Asynchronously saves an image thumbnail to disk on background utility QoS.
     public func saveThumbnailAsync(_ image: UIImage, for key: String) {
         Task.detached(priority: .utility) { [self] in
             self.saveThumbnail(image, for: key)
@@ -142,6 +206,10 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Video Disk Cache
     
+    /// Resolves the canonical on-disk cached video URL for a media item, performing automatic legacy migrations.
+    ///
+    /// - Parameter item: The video `MediaItem`.
+    /// - Returns: A file URL within `SMBVideos`.
     public func localVideoURL(for item: MediaItem) -> URL {
         let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
         let ext = (item.name as NSString).pathExtension.lowercased()
@@ -160,6 +228,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         return url
     }
     
+    /// Checks whether a full video file is currently cached and complete on local disk.
     public func hasCachedVideo(for item: MediaItem) -> Bool {
         let url = localVideoURL(for: item)
         return fileManager.fileExists(atPath: url.path)
@@ -167,6 +236,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Document Cache URL Resolution
     
+    /// Resolves the on-disk file URL for a cached PDF document.
     public func localDocumentURL(for item: MediaItem) -> URL {
         let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
         let ext = (item.name as NSString).pathExtension.lowercased()
@@ -174,6 +244,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         return documentsDirectory.appendingPathComponent("\(key).\(safeExt)")
     }
     
+    /// Checks whether a complete copy of a document is cached on disk.
     public func hasCachedDocument(for item: MediaItem) -> Bool {
         let url = localDocumentURL(for: item)
         return fileManager.fileExists(atPath: url.path)
@@ -181,15 +252,23 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - PDF Thumbnail Generation
     
+    /// Renders the first page of a PDF document at the given URL into a thumbnail.
+    ///
+    /// - Parameters:
+    ///   - url: File URL of the PDF document.
+    ///   - maxDimension: Maximum thumbnail pixel size.
+    /// - Returns: A rendered `UIImage` cover image, or `nil` on failure.
     public func generatePDFThumbnail(from url: URL, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
         guard let doc = PDFDocument(url: url), let page = doc.page(at: 0) else { return nil }
         let size = CGSize(width: maxDimension, height: maxDimension)
         return page.thumbnail(of: size, for: .mediaBox)
     }
     
+    /// Renders a PDF cover thumbnail from in-memory byte buffer.
+    ///
+    /// Buffers $> 5 \text{ MB}$ stage to temporary files to enable virtual memory mapping (`mmap`),
+    /// preventing multi-megabyte heap allocation spikes during rasterization.
     public func generatePDFThumbnail(from data: Data, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
-        // For large data buffers (> 5 MB), stage to a temporary file so PDFDocument takes advantage of
-        // virtual memory mapping (mmap) rather than inflating heap memory during page rasterization
         if data.count > 5 * 1024 * 1024 {
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
             do {
@@ -207,10 +286,10 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Video Thumbnail Timing Constants
     
-    /// The default timestamp sampled for video thumbnails to capture a representative scene beyond introductory title cards/black frames.
+    /// The default timestamp sampled for video thumbnails (15.0s) to avoid black introductory frames.
     public static let defaultVideoThumbnailTime = CMTime(seconds: 15.0, preferredTimescale: 600)
     
-    /// The tolerance applied when sampling video thumbnail keyframes, allowing fast keyframe selection without decoding all preceding frames.
+    /// The keyframe tolerance applied when sampling video thumbnails (2.5s) to allow instant I-frame decoding.
     public static let defaultVideoThumbnailTolerance = CMTime(seconds: 2.5, preferredTimescale: 600)
     
     /// Fallback timestamp when the video is shorter than the default thumbnail time.
@@ -218,6 +297,15 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Video Thumbnail Generation
     
+    /// Generates a video thumbnail frame from a local file using `AVAssetImageGenerator`.
+    ///
+    /// First attempts preferred keyframe time (15s); if that fails or video is shorter, falls back to frame zero.
+    ///
+    /// - Parameters:
+    ///   - localURL: The local video file URL.
+    ///   - maxDimension: Maximum pixel bounding box.
+    ///   - preferredTime: Target timestamp.
+    /// - Returns: A rendered `UIImage`, or `nil` on failure.
     public func generateVideoThumbnail(
         from localURL: URL,
         maxDimension: CGFloat = standardThumbnailDimension,
@@ -230,12 +318,12 @@ nonisolated public final class MediaCacheManager: Sendable {
         generator.requestedTimeToleranceBefore = Self.defaultVideoThumbnailTolerance
         generator.requestedTimeToleranceAfter = Self.defaultVideoThumbnailTolerance
         
-        // 1. Try preferred time (defaults to 12.0s):
+        // 1. Try preferred time (defaults to 15.0s):
         if let (cgImage, _) = try? await generator.image(at: preferredTime) {
             return UIImage(cgImage: cgImage)
         }
         
-        // 2. Fallback to keyframe at zero (e.g. for short videos < 10s):
+        // 2. Fallback to keyframe at zero (e.g. for short videos < 15s):
         generator.requestedTimeToleranceBefore = .positiveInfinity
         generator.requestedTimeToleranceAfter = .positiveInfinity
         do {
@@ -248,7 +336,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - Cache Size, Eviction & Cleanup
     
-    /// Returns the approximate available free volume space in bytes.
+    /// Queries the filesystem to determine free available volume space in bytes.
     public func systemAvailableFreeSpace() -> Int64 {
         let cachesURL = thumbnailsDirectory
         if let values = try? cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
@@ -262,7 +350,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         return Int64.max
     }
     
-    /// Cleans up any leftover temporary partial download files (.part) that are older than the specified age (default 1 hour).
+    /// Cleans up any orphaned partial download files (`.part`) older than the given duration (default 1 hour).
     public func cleanOrphanedPartFiles(olderThan seconds: TimeInterval = 3600) {
         guard let enumerator = fileManager.enumerator(
             at: videosDirectory,
@@ -281,11 +369,9 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    /// Performs a comprehensive disk cache hygiene pass:
-    /// 1. Prunes orphaned partial `.part` downloads left over from interrupted saves or app termination.
-    /// 2. Dynamically assesses host volume free space; under low disk space (< 1.5 GB), cuts cache limits
-    ///    to 400 MB (videos) and 100 MB (thumbnails) so the app never triggers system low-space warnings.
-    /// 3. Evicts oldest thumbnails and video files (FIFO) while respecting `protectedURLs`.
+    /// Performs a full disk cache maintenance pass, purging partial downloads and enforcing dynamic capacity ceilings.
+    ///
+    /// - Parameter protecting: Set of URLs (such as currently playing videos) that must not be evicted.
     public func performMaintenanceSweep(protecting: Set<URL> = []) {
         cleanOrphanedPartFiles()
         
@@ -300,15 +386,18 @@ nonisolated public final class MediaCacheManager: Sendable {
         evictThumbnailsIfNeeded(limitBytes: thumbLimit)
     }
     
-    /// Async wrapper for `performMaintenanceSweep` dispatched on background utility QoS.
+    /// Asynchronously runs `performMaintenanceSweep` on background utility QoS.
     public func performMaintenanceSweepAsync(protecting: Set<URL> = []) async {
         await Task.detached(priority: .utility) { [self] in
             self.performMaintenanceSweep(protecting: protecting)
         }.value
     }
     
-    /// Evicts oldest cached videos if total video cache size exceeds limitBytes (defaults to 2 GB),
-    /// skipping any files specified in `protectedURLs` (such as the currently playing video).
+    /// Evicts oldest cached video files (FIFO) if total video cache size exceeds `limitBytes` (default 2 GB).
+    ///
+    /// - Parameters:
+    ///   - limitBytes: Maximum allowed aggregate size in bytes.
+    ///   - protectedURLs: File URLs that must be shielded from eviction.
     public func evictVideosIfNeeded(limitBytes: Int64 = 2_000_000_000, keeping protectedURLs: Set<URL> = []) {
         guard let enumerator = fileManager.enumerator(
             at: videosDirectory,
@@ -320,7 +409,6 @@ nonisolated public final class MediaCacheManager: Sendable {
         var totalSize: Int64 = 0
         
         for case let fileURL as URL in enumerator {
-            // Clean up any stale partial downloads (.part)
             if fileURL.pathExtension == "part" {
                 try? fileManager.removeItem(at: fileURL)
                 continue
@@ -350,7 +438,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    /// Evicts oldest cached thumbnails if total thumbnail cache size exceeds limitBytes (defaults to 300 MB).
+    /// Evicts oldest cached thumbnails if aggregate thumbnail cache exceeds `limitBytes` (default 300 MB).
     public func evictThumbnailsIfNeeded(limitBytes: Int64 = 300_000_000) {
         guard let enumerator = fileManager.enumerator(
             at: thumbnailsDirectory,
@@ -385,13 +473,14 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    /// Computes total cache size on a background thread to prevent UI hitches
+    /// Computes aggregate cache size in bytes asynchronously on background utility QoS.
     public func calculateTotalCacheSize() async -> Int64 {
         await Task.detached(priority: .utility) { [self] in
             self.calculateTotalCacheSizeInternal()
         }.value
     }
     
+    /// Internal synchronous summation of file sizes across thumbnail and video cache directories.
     private func calculateTotalCacheSizeInternal() -> Int64 {
         var total: Int64 = 0
         for dir in [thumbnailsDirectory, videosDirectory] {
@@ -406,11 +495,13 @@ nonisolated public final class MediaCacheManager: Sendable {
         return total
     }
     
+    /// Asynchronously formats the aggregate disk cache size into a human-readable string (e.g. "124.5 MB").
     public func formattedCacheSize() async -> String {
         let bytes = await calculateTotalCacheSize()
         return formatByteCount(bytes)
     }
     
+    /// Converts a byte integer into a localized string.
     private func formatByteCount(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.allowedUnits = [.useAll]
@@ -418,13 +509,13 @@ nonisolated public final class MediaCacheManager: Sendable {
         return formatter.string(fromByteCount: bytes)
     }
     
+    /// Deletes all cached thumbnails and videos, optionally protecting designated URLs.
     public func clearAllCache(protecting: Set<URL> = []) {
         try? fileManager.removeItem(at: thumbnailsDirectory)
         
         if protecting.isEmpty {
             try? fileManager.removeItem(at: videosDirectory)
         } else {
-            // Delete everything except protected files
             if let enumerator = fileManager.enumerator(at: videosDirectory, includingPropertiesForKeys: nil) {
                 for case let fileURL as URL in enumerator {
                     if !protecting.contains(fileURL) {
@@ -441,6 +532,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         try? fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true, attributes: attributes)
     }
     
+    /// Asynchronous wrapper for `clearAllCache` executed on background utility QoS.
     public func clearAllCacheAsync(protecting: Set<URL> = []) async {
         await Task.detached(priority: .utility) { [self] in
             self.clearAllCache(protecting: protecting)

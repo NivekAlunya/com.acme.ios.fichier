@@ -6,17 +6,49 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Primary sidebar view displaying the list of all configured and discovered storage locations.
+///
+/// Presents available storage providers:
+/// - System Apple Photos library (permanent, cannot be deleted).
+/// - Local on-device sandboxed directories added via `fileImporter`.
+/// - iCloud Drive ubiquitous document folders added via `fileImporter`.
+/// - Authenticated SMB file servers.
+///
+/// Features include folder import via security-scoped bookmarks, swipe-to-delete removal,
+/// connection progress spinners, and quick access to application settings.
 public struct LocationsSidebarView: View {
+    /// Two-way bindable reference to the centralized storage location manager.
     @Bindable var manager: StorageLocationManager
+    
+    /// Binding controlling presentation of the new SMB connection sheet.
     @Binding var showingAddRemote: Bool
+    
+    /// Binding controlling presentation of the application settings sheet.
     @Binding var showingSettings: Bool
+    
+    /// Identifier of the storage location currently attempting connection, displaying an inline spinner.
     let connectingLocationID: String?
+    
+    /// Callback triggered when the user taps a storage location row.
     let onSelectLocation: (StorageLocation) -> Void
     
+    /// Controls presentation of the system directory document picker (`.fileImporter`).
     @State private var showingFolderPicker = false
+    
+    /// Error message captured during document picker security bookmark creation.
     @State private var folderPickerErrorMessage: String?
+    
+    /// Controls presentation of error alerts originating from directory import failures.
     @State private var showingFolderErrorAlert = false
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - showingAddRemote: Binding for connection sheet.
+    ///   - showingSettings: Binding for settings sheet.
+    ///   - connectingLocationID: Active connecting location ID.
+    ///   - onSelectLocation: Location selection handler.
     public init(
         manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
@@ -168,6 +200,7 @@ public struct LocationsSidebarView: View {
         )
     }
     
+    /// Content for the '+' location menu presenting options for local, cloud, and network locations.
     @ViewBuilder
     private var addLocationMenuContent: some View {
         Button {
@@ -191,10 +224,12 @@ public struct LocationsSidebarView: View {
         }
     }
     
+    /// Tests whether the given location is currently active and connected.
     private func isCurrentLocation(_ location: StorageLocation) -> Bool {
         manager.isConnected && manager.currentLocation?.id == location.id
     }
     
+    /// Tests whether the given location is currently establishing an asynchronous connection.
     private func isConnecting(_ location: StorageLocation) -> Bool {
         connectingLocationID == location.id
     }

@@ -6,15 +6,40 @@
 import SwiftUI
 import AVKit
 
+/// Full-screen video detail presentation view hosting custom hardware-accelerated playback.
+///
+/// ### Core Capabilities
+/// - **Controller Lifecycle**: Lazily instantiates `VideoPlayerController` on `.onAppear` and tears down
+///   resources on `.onDisappear` (suppressing audio session deactivation if Picture-in-Picture is active).
+/// - **Live Subtitles**: Overlays real-time subtitle text segments with adaptive bottom padding that animates
+///   cleanly when bottom HUD toolbars appear or fade.
+/// - **System Notifications**: Listens for `AVPlayerItem.didPlayToEndTimeNotification` to advance playlists,
+///   `AVPlayerItem.failedToPlayToEndTimeNotification` for error recovery, and `scenePhase` background transitions
+///   to flush playback progress to `VideoPlaybackStore`.
+/// - **Hardware Keyboard Support**: Complete iPad / Mac shortcuts (`Space`/`K` for play/pause, `J`/`L` for 10s seek,
+///   Arrow keys for 5s seek, `[`/`]` for playlist navigation, `M` for mute, Up/Down for volume, `F` for favorite, `Esc` to exit).
 public struct VideoDetailView: View {
+    /// Shared storage location manager providing media streaming and workers.
     var manager: StorageLocationManager
+    
+    /// Playlist of video items available for playback.
     let videos: [MediaItem]
+    
+    /// The initially focused video media item.
     let initialItem: MediaItem
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    
+    /// Central video player controller driving state and playback.
     @State private var controller: VideoPlayerController?
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - videos: Array of candidate media items (filtered for video types).
+    ///   - initialItem: Initial focused video media item.
     public init(
         manager: StorageLocationManager,
         videos: [MediaItem],
@@ -47,6 +72,7 @@ public struct VideoDetailView: View {
         }
     }
     
+    /// Composed video view containing canvas, subtitle overlay, HUD, and lifecycle observers.
     @ViewBuilder
     private func videoContent(controller: VideoPlayerController) -> some View {
         ZStack {
@@ -106,6 +132,7 @@ public struct VideoDetailView: View {
     
     // MARK: - Hardware Keyboard Shortcuts
     
+    /// Registers hardware keyboard shortcuts for iPad and macOS environments.
     private func keyboardShortcuts(controller: VideoPlayerController) -> some View {
         Group {
             Button("") {

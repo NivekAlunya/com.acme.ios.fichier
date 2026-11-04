@@ -1,0 +1,43 @@
+# .swiftlint.yml
+
+# Include only your application source directory
+included:
+  - fichier
+
+# Exclude build artifacts and external vendor dependencies
+excluded:
+  - .build
+  - Pods
+  - DerivedData
+  - Carthage
+
+opt_in_rules:
+  - empty_count
+  - force_unwrapping
+  - fatal_error_message
+  - redundant_nil_coalescing
+  - unneeded_parentheses_in_closure_argument
+  - vertical_whitespace_closing_braces
+  - yoda_condition
+
+disabled_rules:
+  - line_length             # Avoid unnecessary warnings on long comments / URLs
+  - trailing_whitespace     # Can be auto-handled by SwiftFormat
+  - type_body_length        # Prevents build-failing errors on larger SwiftUI views
+  - file_length             # Prevents build-failing errors on larger files
+  - function_body_length    # Avoids hard errors on complex SwiftUI views or body properties
+  - identifier_name         # Allows concise loop indices (i), coordinates (w, h, p, d), and speeds (speed1_5)
+
+# Custom rules enforcing Swift Concurrency & Workspace Rules
+custom_rules:
+  no_legacy_dispatch_queue:
+    name: "Legacy Concurrency Primitive"
+    regex: "(DispatchQueue|DispatchSemaphore|DispatchGroup|NSLock|pthread_mutex)"
+    message: "Avoid legacy GCD/locking primitives. Use Swift 6 actors, async/await, or TaskGroup."
+    severity: warning
+
+  force_try_ban:
+    name: "Force Try"
+    regex: "(\\btry!\\b)"
+    message: "Avoid 'try!'. Use structured error handling (do-catch) or 'try?'."
+    severity: warning
