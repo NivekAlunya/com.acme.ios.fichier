@@ -901,10 +901,11 @@ public final class StorageLocationManager {
     
     // MARK: - Streaming Helpers
     
-    /// Shared serial dispatch queue required by AVFoundation's `AVAssetResourceLoader.setDelegate(_:queue:)` for thumbnail generation.
+    /// Shared concurrent dispatch queue required by AVFoundation's `AVAssetResourceLoader.setDelegate(_:queue:)` for thumbnail generation.
     private static let thumbnailResourceLoaderQueue = DispatchQueue(
         label: "com.acme.ios.photos.thumbloader",
-        qos: .userInitiated
+        qos: .userInitiated,
+        attributes: .concurrent
     )
     
     /// Constructs a virtual custom scheme URL (`smbstream://`) intercepted by AVPlayer and AVAssetResourceLoader.

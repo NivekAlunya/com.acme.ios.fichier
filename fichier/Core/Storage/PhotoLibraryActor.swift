@@ -6,6 +6,7 @@
 import UIKit
 import Photos
 import AVFoundation
+import os
 
 /// An isolated actor managing read-only access to the user's system PhotoKit photo and video library.
 ///
@@ -342,10 +343,14 @@ public actor PhotoLibraryActor {
         options.isNetworkAccessAllowed = true
         
         let loadedAsset: AVAsset = try await withCheckedThrowingContinuation { continuation in
-            var hasResumed = false
+            let hasResumed = OSAllocatedUnfairLock(initialState: false)
             imageManager.requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                guard !hasResumed else { return }
-                hasResumed = true
+                let shouldProceed = hasResumed.withLock { resumed -> Bool in
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+                guard shouldProceed else { return }
                 if let avAsset {
                     continuation.resume(returning: avAsset)
                 } else if let error = info?[PHImageErrorKey] as? Error {
