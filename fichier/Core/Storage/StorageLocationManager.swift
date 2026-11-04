@@ -942,7 +942,7 @@ public final class StorageLocationManager {
     private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
-        return await videoThumbnailLimiter.withPermit {
+        return try? await videoThumbnailLimiter.withPermit {
             guard !Task.isCancelled else { return nil }
             if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                 return nil
@@ -1003,11 +1003,13 @@ public final class StorageLocationManager {
                     group.cancelAll()
                     generator.cancelAllCGImageGeneration()
                     delegate.cancelAll()
+                    asset.resourceLoader.setDelegate(nil, queue: nil)
                     return first
                 }
             } onCancel: {
                 generator.cancelAllCGImageGeneration()
                 delegate.cancelAll()
+                asset.resourceLoader.setDelegate(nil, queue: nil)
             }
         }
     }
@@ -1077,7 +1079,7 @@ public final class StorageLocationManager {
         // Only attempt full download during grid browsing for documents <= 12 MB.
         let maxThumbnailDownloadBytes: Int64 = 12 * 1024 * 1024
         if item.size > 0 && item.size <= maxThumbnailDownloadBytes {
-            let thumb = await pdfThumbnailLimiter.withPermit { () -> UIImage? in
+            let thumb = try? await pdfThumbnailLimiter.withPermit { () -> UIImage? in
                 guard !Task.isCancelled else { return nil }
                 if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                     return nil

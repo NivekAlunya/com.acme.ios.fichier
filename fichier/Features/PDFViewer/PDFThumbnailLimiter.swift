@@ -39,7 +39,8 @@ public actor PDFThumbnailLimiter {
     ///
     /// - Parameter operation: The work closure to execute once permitted.
     /// - Returns: The result of the operation.
-    public func withPermit<T: Sendable>(_ operation: @Sendable () async throws -> T) async rethrows -> T {
+    /// - Throws: `CancellationError` if the task is cancelled before acquiring or during execution.
+    public func withPermit<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
         let waiterID = UUID()
         let acquired = await withTaskCancellationHandler {
             await acquire(id: waiterID)
@@ -48,10 +49,14 @@ public actor PDFThumbnailLimiter {
                 await self.cancelWaiter(id: waiterID)
             }
         }
-        defer {
+        guard acquired, !Task.isCancelled else {
             if acquired {
                 release()
             }
+            throw CancellationError()
+        }
+        defer {
+            release()
         }
         return try await operation()
     }

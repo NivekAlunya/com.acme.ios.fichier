@@ -9,7 +9,7 @@ import PDFKit
 /// Coordinator managing `PDFViewDelegate` callbacks, notification observers, and gestures for `PDFView`.
 ///
 /// ### Core Responsibilities
-/// - **Page Synchronization**: Listens for `.PDFViewPageChanged` notifications to report active page numbers
+/// - **Page Synchronization**: Listens for `.PDFViewPageChanged` notifications via Swift Concurrency `AsyncSequence` to report active page numbers
 ///   and visible multi-page ranges to parent SwiftUI views.
 /// - **Scroll / Zoom State Management**: In book mode, disables internal scroll view panning when at 1.0x scale
 ///   so that finger drags turn pages instead of panning. Re-enables scrolling when zoomed in for deep reading.
@@ -33,8 +33,8 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     /// Callback invoked when a single tap is detected on the canvas.
     var onTap: (() -> Void)?
     
-    private nonisolated(unsafe) var pageObserver: (any NSObjectProtocol)?
-    private nonisolated(unsafe) var scaleObserver: (any NSObjectProtocol)?
+    private var pageObservationTask: Task<Void, Never>?
+    private var scaleObservationTask: Task<Void, Never>?
     private var panGesture: UIPanGestureRecognizer?
     private var lastPageTurnTime: TimeInterval = 0
     
@@ -77,23 +77,19 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         
         detachObservers()
         
-        pageObserver = NotificationCenter.default.addObserver(
-            forName: .PDFViewPageChanged,
-            object: pdfView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updatePageInfo()
+        pageObservationTask = Task { @MainActor [weak self, weak pdfView] in
+            guard let pdfView else { return }
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewPageChanged, object: pdfView) {
+                guard let self else { break }
+                self.updatePageInfo()
             }
         }
         
-        scaleObserver = NotificationCenter.default.addObserver(
-            forName: .PDFViewScaleChanged,
-            object: pdfView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updateScrollState()
+        scaleObservationTask = Task { @MainActor [weak self, weak pdfView] in
+            guard let pdfView else { return }
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewScaleChanged, object: pdfView) {
+                guard let self else { break }
+                self.updateScrollState()
             }
         }
         
@@ -116,16 +112,12 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
-    /// Unregisters notification observers safely off actor isolation boundaries.
-    private nonisolated func detachObservers() {
-        if let pageObserver {
-            NotificationCenter.default.removeObserver(pageObserver)
-            self.pageObserver = nil
-        }
-        if let scaleObserver {
-            NotificationCenter.default.removeObserver(scaleObserver)
-            self.scaleObserver = nil
-        }
+    /// Cancels active notification observation tasks.
+    private func detachObservers() {
+        pageObservationTask?.cancel()
+        pageObservationTask = nil
+        scaleObservationTask?.cancel()
+        scaleObservationTask = nil
     }
     
     /// Detaches all gestures, delegates, and observers when the view is dismantled.
@@ -284,7 +276,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         true
     }
     
-    deinit {
+    isolated deinit {
         detachObservers()
     }
 }

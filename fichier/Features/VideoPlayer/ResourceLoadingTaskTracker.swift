@@ -16,14 +16,14 @@ import AVFoundation
 /// - Records early cancellation notices in a bounded LRU `cancelledRequests` set (capacity 64).
 /// - If a request arrives that is already in `cancelledRequests`, it is immediately discarded without running.
 actor ResourceLoadingTaskTracker {
-    /// Active in-flight background tasks mapped to loading requests.
-    private var activeTasks: [AVAssetResourceLoadingRequest: Task<Void, Never>] = [:]
+    /// Active in-flight background tasks mapped to loading request identifiers.
+    private var activeTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     
-    /// Set of requests whose cancellation arrived before task execution commenced.
-    private var cancelledRequests: Set<AVAssetResourceLoadingRequest> = []
+    /// Set of request identifiers whose cancellation arrived before task execution commenced.
+    private var cancelledRequests: Set<ObjectIdentifier> = []
     
     /// Ordered list tracking insertion age of early-cancelled requests for capacity bounding.
-    private var cancelledOrder: [AVAssetResourceLoadingRequest] = []
+    private var cancelledOrder: [ObjectIdentifier] = []
     
     /// Bounding limit for early cancellation tracking to prevent memory leaks.
     private let maxCancelledCapacity = 64
@@ -31,47 +31,49 @@ actor ResourceLoadingTaskTracker {
     /// Indicates whether the tracker has been permanently stopped.
     private var isStopped = false
     
-    /// Spawns and tracks an asynchronous task for a given loading request.
+    /// Spawns and tracks an asynchronous task for a given loading request identifier.
     ///
     /// - Parameters:
-    ///   - request: The AVFoundation resource loading request.
+    ///   - requestID: Unique object identifier for the AVFoundation loading request.
+    ///   - isCancelled: Initial cancellation status of the loading request.
     ///   - operation: The asynchronous work closure.
     func runTask(
-        for request: AVAssetResourceLoadingRequest,
+        for requestID: ObjectIdentifier,
+        isCancelled: Bool,
         operation: @Sendable @escaping () async -> Void
     ) {
         if isStopped {
             return
         }
-        if cancelledRequests.remove(request) != nil {
-            cancelledOrder.removeAll(where: { $0 == request })
+        if cancelledRequests.remove(requestID) != nil {
+            cancelledOrder.removeAll(where: { $0 == requestID })
             return
         }
-        guard !request.isCancelled else { return }
+        guard !isCancelled else { return }
         
         let task = Task.detached(priority: .userInitiated) { [weak self] in
             await operation()
-            await self?.remove(for: request)
+            await self?.remove(for: requestID)
         }
-        activeTasks[request] = task
+        activeTasks[requestID] = task
     }
     
-    /// Removes a finished loading request from the active task dictionary.
-    func remove(for request: AVAssetResourceLoadingRequest) {
-        activeTasks.removeValue(forKey: request)
-        if cancelledRequests.remove(request) != nil {
-            cancelledOrder.removeAll(where: { $0 == request })
+    /// Removes a finished loading request identifier from the active task dictionary.
+    func remove(for requestID: ObjectIdentifier) {
+        activeTasks.removeValue(forKey: requestID)
+        if cancelledRequests.remove(requestID) != nil {
+            cancelledOrder.removeAll(where: { $0 == requestID })
         }
     }
     
-    /// Cancels the task associated with a loading request or records it in the early cancellation cache.
-    func cancelTask(for request: AVAssetResourceLoadingRequest) {
-        if let task = activeTasks.removeValue(forKey: request) {
+    /// Cancels the task associated with a loading request identifier or records it in the early cancellation cache.
+    func cancelTask(for requestID: ObjectIdentifier) {
+        if let task = activeTasks.removeValue(forKey: requestID) {
             task.cancel()
         } else if !isStopped {
-            let (inserted, _) = cancelledRequests.insert(request)
+            let (inserted, _) = cancelledRequests.insert(requestID)
             if inserted {
-                cancelledOrder.append(request)
+                cancelledOrder.append(requestID)
                 if cancelledOrder.count > maxCancelledCapacity {
                     let oldest = cancelledOrder.removeFirst()
                     cancelledRequests.remove(oldest)

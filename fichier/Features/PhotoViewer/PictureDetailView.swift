@@ -246,26 +246,28 @@ public struct PictureDetailView: View {
             currentImage = nil
             prefetchNext(after: currentItem)
             
-            await withTaskGroup(of: Void.self) { group in
+            await withTaskGroup(of: (isMeta: Bool, meta: PictureEXIFData?, image: UIImage?).self) { group in
                 group.addTask {
                     let meta = await manager.fetchMetadata(for: currentItem)
-                    if !Task.isCancelled {
-                        await MainActor.run {
-                            guard self.currentItem.id == targetID else { return }
-                            self.activeMetadata = meta
-                        }
-                    }
+                    return (true, meta, nil)
                 }
                 
                 if !currentItem.isVideo {
                     group.addTask {
                         let img = await manager.downloadImage(for: currentItem)
-                        if !Task.isCancelled {
-                            await MainActor.run {
-                                guard self.currentItem.id == targetID else { return }
-                                self.currentImage = img
-                            }
-                        }
+                        return (false, nil, img)
+                    }
+                }
+                
+                for await result in group {
+                    guard !Task.isCancelled, self.currentItem.id == targetID else {
+                        group.cancelAll()
+                        break
+                    }
+                    if result.isMeta {
+                        self.activeMetadata = result.meta
+                    } else {
+                        self.currentImage = result.image
                     }
                 }
             }
