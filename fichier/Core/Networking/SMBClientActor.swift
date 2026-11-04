@@ -334,12 +334,17 @@ actor SMBClientActor {
                     return prefixThumb
                 }
                 
-                // Fallback for non-linearized documents: fetch full document if within safe bounded size (< 12 MB)
+                // Fallback for non-linearized documents: fetch full document if within safe bounded size (<= 12 MB)
                 // to prevent socket starvation during gallery browsing
+                let fileSize = item.size > 0 ? item.size : await fetchFileSize(for: item)
                 let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
-                if item.size > 0 && item.size <= maxDirectDownloadBytes {
+                if fileSize > 0 && fileSize <= maxDirectDownloadBytes {
                     do {
                         let localURL = try await fetchDocumentURL(for: item)
+                        // fetchDocumentURL internally renders and caches the thumbnail; reuse it directly if available
+                        if let cachedThumb = thumbnailCache.object(forKey: memoryCacheKey) ?? MediaCacheManager.shared.getThumbnail(for: diskKey) {
+                            return cachedThumb
+                        }
                         if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
                             thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
                             MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)

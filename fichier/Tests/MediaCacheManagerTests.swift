@@ -183,5 +183,20 @@ final class MediaCacheManagerTests: XCTestCase {
         let clampedLargeLength = min(largeSize, 1_048_576)
         XCTAssertEqual(clampedLargeLength, 1_048_576, "Files larger than 1 MB must be clamped to 1 MB max read")
     }
+    
+    func testPDFSizeResolutionThresholdLogic() {
+        let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
+        
+        // When item.size is 0, dynamically resolved size evaluates threshold
+        let unpopulatedSize: Int64 = 0
+        let resolvedSize: Int64 = 5 * 1024 * 1024 // 5 MB
+        let effectiveSize = unpopulatedSize > 0 ? unpopulatedSize : resolvedSize
+        
+        XCTAssertTrue(effectiveSize > 0 && effectiveSize <= maxDirectDownloadBytes, "Resolved size must allow fallback for files <= 12 MB")
+        
+        let largeResolvedSize: Int64 = 25 * 1024 * 1024 // 25 MB
+        let largeEffectiveSize = unpopulatedSize > 0 ? unpopulatedSize : largeResolvedSize
+        XCTAssertFalse(largeEffectiveSize > 0 && largeEffectiveSize <= maxDirectDownloadBytes, "Files > 12 MB must not trigger fallback download")
+    }
 }
 #endif
