@@ -225,9 +225,11 @@ struct MediaGridView: View {
                         .tint(.blue)
                         .disabled(manager.parentFolder == nil)
                         .accessibilityLabel(
-                            manager.parentFolder != nil
-                                ? String(localized: "Navigate to parent folder: \(manager.parentFolder!.name)", comment: "Accessibility label for parent folder button")
-                                : String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
+                            if let parentName = manager.parentFolder?.name {
+                                String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
+                            } else {
+                                String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
+                            }
                         )
                         
                         if !displayPictures.isEmpty {

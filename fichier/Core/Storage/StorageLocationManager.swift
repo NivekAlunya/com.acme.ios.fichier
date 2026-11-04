@@ -26,13 +26,24 @@ public final class StorageLocationManager {
     public var currentLocation: StorageLocation?
     
     // Root tree of shared folders for Sidebar Tree
-    public var folderTree: [MediaItem] = []
+    public var folderTree: [MediaItem] = [] {
+        didSet {
+            updateParentFolder()
+        }
+    }
     
     // Subfolders of the currently selected folder
     public var currentFolders: [MediaItem] = []
     
     // Currently selected folder in the SplitView
-    public var selectedFolder: MediaItem?
+    public var selectedFolder: MediaItem? {
+        didSet {
+            updateParentFolder()
+        }
+    }
+    
+    /// Cached parent folder of the currently selected folder, if not at root level (O(1) access)
+    public private(set) var parentFolder: MediaItem?
     
     // Pictures in the currently selected folder
     public var pictures: [MediaItem] = []
@@ -527,19 +538,24 @@ public final class StorageLocationManager {
         return item.path == "/" || item.path.isEmpty
     }
     
-    /// Returns the parent folder of the currently selected folder, if not at root level
-    public var parentFolder: MediaItem? {
-        guard let current = selectedFolder else { return nil }
+    /// Recomputes and caches the parent folder of the currently selected folder
+    public func updateParentFolder() {
+        guard let current = selectedFolder else {
+            parentFolder = nil
+            return
+        }
         
         if isRootFolder(current) {
-            return nil
+            parentFolder = nil
+            return
         }
         
         if let treeParent = findParentInTree(for: current, in: folderTree) {
-            return treeParent
+            parentFolder = treeParent
+            return
         }
         
-        return deriveParentFolder(for: current)
+        parentFolder = deriveParentFolder(for: current)
     }
     
     private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
@@ -554,7 +570,7 @@ public final class StorageLocationManager {
         return nil
     }
     
-    private func deriveParentFolder(for item: MediaItem) -> MediaItem? {
+    public func deriveParentFolder(for item: MediaItem) -> MediaItem? {
         if item.locationID == StorageLocation.photosLocationID {
             return folderTree.first ?? MediaItem(
                 locationID: StorageLocation.photosLocationID,
@@ -579,14 +595,12 @@ public final class StorageLocationManager {
             )
         }
         
-        // SMB
-        let currentPath = item.path
-        if currentPath == "/" || currentPath.isEmpty {
-            return nil
-        }
-        let cleanedPath = currentPath.hasPrefix("/") ? String(currentPath.dropFirst()) : currentPath
-        let components = cleanedPath.split(separator: "/").map(String.init)
-        if components.count <= 1 {
+        // SMB: Normalize Windows backslashes and filter traversal tokens
+        let normalizedPath = item.path.replacingOccurrences(of: "\\", with: "/")
+        let rawComponents = normalizedPath.split(separator: "/").map(String.init)
+        let safeComponents = rawComponents.filter { $0 != "." && $0 != ".." && !$0.isEmpty }
+        
+        if safeComponents.count <= 1 {
             return MediaItem(
                 locationID: item.locationID,
                 name: item.rootName,
@@ -595,7 +609,7 @@ public final class StorageLocationManager {
                 isDirectory: true
             )
         } else {
-            let parentComponents = components.dropLast()
+            let parentComponents = safeComponents.dropLast()
             let parentPath = "/" + parentComponents.joined(separator: "/")
             let parentName = parentComponents.last ?? item.rootName
             return MediaItem(

@@ -122,26 +122,21 @@ struct FolderTreeNodeView: View {
             .buttonStyle(.plain)
         }
         .listRowBackground(isSelected ? Color.blue.opacity(0.14) : Color.clear)
-        .onAppear {
+        .task {
             if isExpanded && node.children == nil {
-                Task {
-                    await manager.loadSubfoldersForTree(at: node)
-                }
+                await manager.loadSubfoldersForTree(at: node)
             }
         }
-        .onChange(of: manager.selectedFolder) { _, newSelected in
-            if let newSelected {
-                if newSelected.id == node.id || isAncestor(of: newSelected) {
-                    if !isExpanded {
-                        withAnimation(.snappy) {
-                            isExpanded = true
-                        }
+        .task(id: manager.selectedFolder?.id) {
+            guard let selected = manager.selectedFolder else { return }
+            if selected.id == node.id || isAncestor(of: selected) {
+                if !isExpanded {
+                    withAnimation(.snappy) {
+                        isExpanded = true
                     }
-                    if node.children == nil {
-                        Task {
-                            await manager.loadSubfoldersForTree(at: node)
-                        }
-                    }
+                }
+                if node.children == nil {
+                    await manager.loadSubfoldersForTree(at: node)
                 }
             }
         }
@@ -161,20 +156,26 @@ struct FolderTreeNodeView: View {
     }
     
     private func isAncestor(of target: MediaItem) -> Bool {
-        guard target.rootName == node.rootName else { return false }
+        guard target.locationID == node.locationID, target.rootName == node.rootName else { return false }
         if node.path == "/" || node.path.isEmpty {
             return target.path != node.path
         }
-        let prefix = node.path.hasSuffix("/") ? node.path : "\(node.path)/"
-        return target.path.hasPrefix(prefix)
+        let normalizedNode = node.path.replacingOccurrences(of: "\\", with: "/")
+        let normalizedTarget = target.path.replacingOccurrences(of: "\\", with: "/")
+        let nodeComponents = normalizedNode.split(separator: "/").filter { !$0.isEmpty }
+        let targetComponents = normalizedTarget.split(separator: "/").filter { !$0.isEmpty }
+        return targetComponents.starts(with: nodeComponents) && targetComponents.count > nodeComponents.count
     }
     
     private func shouldChildBeInitiallyExpanded(_ child: MediaItem) -> Bool {
         guard let selected = manager.selectedFolder else { return false }
         if selected.id == child.id { return true }
-        guard selected.rootName == child.rootName else { return false }
+        guard selected.locationID == child.locationID, selected.rootName == child.rootName else { return false }
         if child.path.isEmpty || child.path == "/" { return true }
-        let prefix = child.path.hasSuffix("/") ? child.path : "\(child.path)/"
-        return selected.path.hasPrefix(prefix)
+        let normalizedChild = child.path.replacingOccurrences(of: "\\", with: "/")
+        let normalizedSelected = selected.path.replacingOccurrences(of: "\\", with: "/")
+        let childComponents = normalizedChild.split(separator: "/").filter { !$0.isEmpty }
+        let selectedComponents = normalizedSelected.split(separator: "/").filter { !$0.isEmpty }
+        return selectedComponents.starts(with: childComponents)
     }
 }

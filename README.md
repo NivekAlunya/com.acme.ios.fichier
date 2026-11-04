@@ -79,7 +79,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 95 independent, modular Swift files (87 application files + 8 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 96 independent, modular Swift files (87 application files + 9 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -205,6 +205,7 @@ fichier/
     ├── PDFReadingModeTests.swift           # Reading mode cases, properties, and identifier tests
     ├── PDFSpreadTests.swift                # Spread builder and cover layout tests
     ├── PDFThumbnailSidebarTests.swift      # Thumbnail sidebar model and callback tests
+    ├── StorageLocationManagerTests.swift   # Root detection, parent derivation & path hygiene tests
     ├── SupportedMediaTypesTests.swift      # File extension and format detection tests
     ├── VideoPlaybackStateTests.swift       # Playback state enum, equality, and transition tests
     └── VideoSeekCoordinatorTests.swift     # Seek generation, tolerance, and scrub lifecycle tests
