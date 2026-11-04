@@ -6,7 +6,6 @@
 import UIKit
 import Photos
 import AVFoundation
-import os
 
 /// An isolated actor managing read-only access to the user's system PhotoKit photo and video library.
 ///
@@ -342,21 +341,15 @@ public actor PhotoLibraryActor {
         options.deliveryMode = .highQualityFormat
         options.isNetworkAccessAllowed = true
         
-        let loadedAsset: AVAsset = try await withCheckedThrowingContinuation { continuation in
-            let hasResumed = OSAllocatedUnfairLock(initialState: false)
+        let stream = AsyncThrowingStream<AVAsset, Error> { continuation in
             imageManager.requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                let shouldProceed = hasResumed.withLock { resumed -> Bool in
-                    if resumed { return false }
-                    resumed = true
-                    return true
-                }
-                guard shouldProceed else { return }
                 if let avAsset {
-                    continuation.resume(returning: avAsset)
+                    continuation.yield(avAsset)
+                    continuation.finish()
                 } else if let error = info?[PHImageErrorKey] as? Error {
-                    continuation.resume(throwing: error)
+                    continuation.finish(throwing: error)
                 } else {
-                    continuation.resume(throwing: NSError(
+                    continuation.finish(throwing: NSError(
                         domain: "PhotoLibraryActor",
                         code: 6,
                         userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")]
@@ -365,17 +358,21 @@ public actor PhotoLibraryActor {
             }
         }
         
-        if let urlAsset = loadedAsset as? AVURLAsset {
-            return urlAsset.url
+        for try await loadedAsset in stream {
+            if let urlAsset = loadedAsset as? AVURLAsset {
+                return urlAsset.url
+            }
+            
+            // Composition / Slow-mo export fallback into managed temporary export directory
+            let tempURL = exportDirectory.appendingPathComponent("ph_export_\(UUID().uuidString).mov")
+            guard let exporter = AVAssetExportSession(asset: loadedAsset, presetName: AVAssetExportPresetHighestQuality) else {
+                throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to create export session", comment: "Error message when AVAssetExportSession cannot be initialized")])
+            }
+            try await exporter.export(to: tempURL, as: .mov)
+            return tempURL
         }
         
-        // Composition / Slow-mo export fallback into managed temporary export directory
-        let tempURL = exportDirectory.appendingPathComponent("ph_export_\(UUID().uuidString).mov")
-        guard let exporter = AVAssetExportSession(asset: loadedAsset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw NSError(domain: "PhotoLibraryActor", code: 4, userInfo: [NSLocalizedDescriptionKey: String(localized: "Failed to create export session", comment: "Error message when AVAssetExportSession cannot be initialized")])
-        }
-        try await exporter.export(to: tempURL, as: .mov)
-        return tempURL
+        throw NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")])
     }
     
     /// Prunes video composition exports in `fichier_video_exports` that are older than 1 hour.
