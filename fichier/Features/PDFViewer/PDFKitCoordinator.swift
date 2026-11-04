@@ -79,14 +79,14 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         
         pageObservationTask = Task { @MainActor [weak self, weak pdfView] in
             for await _ in NotificationCenter.default.notifications(named: .PDFViewPageChanged, object: pdfView) {
-                guard let self else { return }
+                guard let self else { break }
                 self.updatePageInfo()
             }
         }
         
         scaleObservationTask = Task { @MainActor [weak self, weak pdfView] in
             for await _ in NotificationCenter.default.notifications(named: .PDFViewScaleChanged, object: pdfView) {
-                guard let self else { return }
+                guard let self else { break }
                 self.updateScrollState()
             }
         }
@@ -272,5 +272,9 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     /// Allows simultaneous gesture recognition with system navigation gestures.
     nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         true
+    }
+    
+    deinit {
+        detachObservers()
     }
 }

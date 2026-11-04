@@ -342,7 +342,10 @@ public actor PhotoLibraryActor {
         options.isNetworkAccessAllowed = true
         
         let loadedAsset: AVAsset = try await withCheckedThrowingContinuation { continuation in
+            var hasResumed = false
             imageManager.requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+                guard !hasResumed else { return }
+                hasResumed = true
                 if let avAsset {
                     continuation.resume(returning: avAsset)
                 } else if let error = info?[PHImageErrorKey] as? Error {
