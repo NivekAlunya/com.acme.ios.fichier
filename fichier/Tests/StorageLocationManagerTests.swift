@@ -5,6 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+import PDFKit
 @testable import fichier
 
 @MainActor
@@ -169,6 +170,60 @@ final class StorageLocationManagerTests: XCTestCase {
         manager.selectedFolder = sub
         XCTAssertNotNil(manager.parentFolder, "Subfolder must resolve parent folder")
         XCTAssertEqual(manager.parentFolder?.name, "Share")
+    }
+    
+    // MARK: - PDF Thumbnail & Version Observation Tests
+    
+    func testThumbnailVersionsIncrementOnUpgrade() async {
+        let manager = StorageLocationManager()
+        let item = MediaItem(
+            locationID: "smb_1",
+            name: "Doc.pdf",
+            rootName: "Share",
+            path: "/Doc.pdf",
+            isDirectory: false
+        )
+        
+        let initialVersion = manager.thumbnailVersions[item.id] ?? 0
+        
+        // Generate valid PDF document
+        let pdfData = NSMutableData()
+        guard let consumer = CGDataConsumer(data: pdfData as CFMutableData) else { return }
+        var mediaBox = CGRect(x: 0, y: 0, width: 200, height: 200)
+        guard let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else { return }
+        context.beginPage(mediaBox: &mediaBox)
+        context.setFillColor(UIColor.blue.cgColor)
+        context.fill(CGRect(x: 10, y: 10, width: 100, height: 100))
+        context.endPage()
+        context.closePDF()
+        
+        guard let doc = PDFDocument(data: pdfData as Data) else {
+            XCTFail("Failed to build PDFDocument")
+            return
+        }
+        
+        await manager.upgradePDFThumbnail(for: item, from: doc)
+        
+        let updatedVersion = manager.thumbnailVersions[item.id] ?? 0
+        XCTAssertEqual(updatedVersion, initialVersion + 1, "Upgrading a PDF thumbnail must increment its observable version token")
+    }
+    
+    func testInvalidateCurrentFolderThumbnailsUpdatesVersions() async {
+        let manager = StorageLocationManager()
+        let item = MediaItem(
+            locationID: "smb_1",
+            name: "Report.pdf",
+            rootName: "Share",
+            path: "/Report.pdf",
+            isDirectory: false
+        )
+        manager.pictures = [item]
+        
+        let initialVersion = manager.thumbnailVersions[item.id] ?? 0
+        await manager.invalidateCurrentFolderThumbnails()
+        
+        let updatedVersion = manager.thumbnailVersions[item.id] ?? 0
+        XCTAssertEqual(updatedVersion, initialVersion + 1, "Invalidating current folder thumbnails must increment thumbnail version tokens")
     }
 }
 #endif

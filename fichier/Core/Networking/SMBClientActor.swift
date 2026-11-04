@@ -328,9 +328,30 @@ actor SMBClientActor {
                 return nil
             }
             
-            // Remote PDF: Fast-path prefix thumbnailing (linearized / web-optimized documents)
+            // Remote PDF: Fast-path prefix thumbnailing with bounded fallback
             if item.isPDF {
-                return await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension)
+                if let prefixThumb = await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
+                    return prefixThumb
+                }
+                
+                // Fallback for non-linearized documents: fetch full document if within safe bounded size (< 12 MB)
+                // to prevent socket starvation during gallery browsing
+                let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
+                if item.size > 0 && item.size <= maxDirectDownloadBytes {
+                    do {
+                        let localURL = try await fetchDocumentURL(for: item)
+                        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
+                            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                            return thumb
+                        }
+                    } catch {
+                        if !Task.isCancelled {
+                            AppLog.smb.warning("Fallback PDF thumbnailing failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                        }
+                    }
+                }
+                return nil
             }
             
             // Photo Thumbnail Handling
@@ -397,15 +418,26 @@ actor SMBClientActor {
             guard prefixLength > 0 else { return nil }
             
             let range: Range<Int64> = 0..<prefixLength
-            if let prefixData = try? await client.contents(atPath: item.path, range: range, progress: { _, _ in !Task.isCancelled }),
-               !prefixData.isEmpty,
-               let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: prefixData, maxDimension: maxDimension) {
-                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                return thumb
+            do {
+                let prefixData = try await client.contents(atPath: item.path, range: range) { _, _ in
+                    !Task.isCancelled
+                }
+                if !prefixData.isEmpty,
+                   let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: prefixData, maxDimension: maxDimension) {
+                    thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                    MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                    return thumb
+                }
+            } catch {
+                if !Task.isCancelled {
+                    AppLog.smb.warning("Fast-path prefix read failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                }
             }
             return nil
         } catch {
+            if !Task.isCancelled {
+                AppLog.smb.error("Failed to connect for PDF prefix thumbnail at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+            }
             return nil
         }
     }

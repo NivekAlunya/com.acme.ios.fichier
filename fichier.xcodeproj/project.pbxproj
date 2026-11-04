@@ -74,7 +74,7 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				D1F1B10130910E5200518819 /* Embed Frameworks */,
-				D14BDE20309B4039007D8134 /* ShellScript */,
+				D14BDE20309B4039007D8134 /* Run SwiftLint */,
 			);
 			buildRules = (
 			);
@@ -145,23 +145,23 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		D14BDE20309B4039007D8134 /* ShellScript */ = {
+		D14BDE20309B4039007D8134 /* Run SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			shellPath = /bin/zsh;
-			shellScript = (
-				"if [[ \"$(uname -m)\" == arm64 ]]; then",
-				"    export PATH=\"/opt/homebrew/bin:$PATH\"",
-				"fi",
-				"",
-				"if which swiftlint > /dev/null; then",
-				"  echo \"SwiftLint installed\"",
-				"  swiftlint",
-				"else",
-				"  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"",
-				"fi",
-				"",
+			buildActionMask = 2147483647;
+			files = (
 			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Run SwiftLint";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nif [ \"$CI\" = \"true\" ]; then\n  if ! which swiftlint >/dev/null 2>&1; then\n    echo \"error: SwiftLint is required in CI environment.\"\n    exit 1\n  fi\n  cd \"${SRCROOT}\" && swiftlint lint --strict\nelif which swiftlint >/dev/null 2>&1; then\n  cd \"${SRCROOT}\" && swiftlint lint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
