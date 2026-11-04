@@ -142,16 +142,26 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     
     // MARK: - Equatable & Hashable
     
-    /// Fast equality check comparing primary identifiers, sizes, modification dates, and immediate child counts.
+    /// Fast equality check comparing primary identifiers, sizes, modification dates, and immediate child identifiers.
     ///
-    /// Avoids deep $O(N)$ recursive tree traversal on nested directories during SwiftUI diffing passes.
+    /// Avoids deep recursive tree traversal on nested subtrees during SwiftUI diffing passes while ensuring
+    /// immediate child reorganizations or renames trigger accurate re-renders.
     public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
-        lhs.id == rhs.id &&
-        lhs.name == rhs.name &&
-        lhs.size == rhs.size &&
-        lhs.modifiedDate == rhs.modifiedDate &&
-        (lhs.children?.count == rhs.children?.count) &&
-        ((lhs.children == nil) == (rhs.children == nil))
+        guard lhs.id == rhs.id &&
+              lhs.name == rhs.name &&
+              lhs.size == rhs.size &&
+              lhs.modifiedDate == rhs.modifiedDate else {
+            return false
+        }
+        switch (lhs.children, rhs.children) {
+        case (.none, .none):
+            return true
+        case (.some(let lc), .some(let rc)):
+            guard lc.count == rc.count else { return false }
+            return zip(lc, rc).allSatisfy { $0.id == $1.id }
+        default:
+            return false
+        }
     }
     
     /// Fast path splitting returning zero-allocation substrings separated by `/` or `\`.

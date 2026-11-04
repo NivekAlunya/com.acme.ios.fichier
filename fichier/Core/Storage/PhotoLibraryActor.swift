@@ -342,18 +342,17 @@ public actor PhotoLibraryActor {
         options.isNetworkAccessAllowed = true
         
         let loadedAsset: AVAsset = try await withCheckedThrowingContinuation { continuation in
-            var hasResumed = false
             imageManager.requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
-                guard !hasResumed else { return }
                 if let avAsset {
-                    hasResumed = true
                     continuation.resume(returning: avAsset)
                 } else if let error = info?[PHImageErrorKey] as? Error {
-                    hasResumed = true
                     continuation.resume(throwing: error)
                 } else {
-                    hasResumed = true
-                    continuation.resume(throwing: NSError(domain: "PhotoLibraryActor", code: 6, userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")]))
+                    continuation.resume(throwing: NSError(
+                        domain: "PhotoLibraryActor",
+                        code: 6,
+                        userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to load video asset", comment: "Error message when AVAsset cannot be loaded from Photo Library")]
+                    ))
                 }
             }
         }

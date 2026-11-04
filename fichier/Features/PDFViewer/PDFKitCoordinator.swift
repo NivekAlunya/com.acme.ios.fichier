@@ -33,8 +33,8 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     /// Callback invoked when a single tap is detected on the canvas.
     var onTap: (() -> Void)?
     
-    private nonisolated(unsafe) var pageObserver: (any NSObjectProtocol)?
-    private nonisolated(unsafe) var scaleObserver: (any NSObjectProtocol)?
+    private var pageObservationTask: Task<Void, Never>?
+    private var scaleObservationTask: Task<Void, Never>?
     private var panGesture: UIPanGestureRecognizer?
     private var lastPageTurnTime: TimeInterval = 0
     
@@ -77,23 +77,17 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         
         detachObservers()
         
-        pageObserver = NotificationCenter.default.addObserver(
-            forName: .PDFViewPageChanged,
-            object: pdfView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updatePageInfo()
+        pageObservationTask = Task { @MainActor [weak self, weak pdfView] in
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewPageChanged, object: pdfView) {
+                guard let self else { return }
+                self.updatePageInfo()
             }
         }
         
-        scaleObserver = NotificationCenter.default.addObserver(
-            forName: .PDFViewScaleChanged,
-            object: pdfView,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.updateScrollState()
+        scaleObservationTask = Task { @MainActor [weak self, weak pdfView] in
+            for await _ in NotificationCenter.default.notifications(named: .PDFViewScaleChanged, object: pdfView) {
+                guard let self else { return }
+                self.updateScrollState()
             }
         }
         
@@ -116,16 +110,12 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
-    /// Unregisters notification observers safely off actor isolation boundaries.
-    private nonisolated func detachObservers() {
-        if let pageObserver {
-            NotificationCenter.default.removeObserver(pageObserver)
-            self.pageObserver = nil
-        }
-        if let scaleObserver {
-            NotificationCenter.default.removeObserver(scaleObserver)
-            self.scaleObserver = nil
-        }
+    /// Cancels active notification observation tasks.
+    private func detachObservers() {
+        pageObservationTask?.cancel()
+        pageObservationTask = nil
+        scaleObservationTask?.cancel()
+        scaleObservationTask = nil
     }
     
     /// Detaches all gestures, delegates, and observers when the view is dismantled.
@@ -282,9 +272,5 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     /// Allows simultaneous gesture recognition with system navigation gestures.
     nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         true
-    }
-    
-    deinit {
-        detachObservers()
     }
 }

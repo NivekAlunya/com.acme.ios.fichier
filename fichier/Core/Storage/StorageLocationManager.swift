@@ -901,6 +901,12 @@ public final class StorageLocationManager {
     
     // MARK: - Streaming Helpers
     
+    /// Shared serial dispatch queue required by AVFoundation's `AVAssetResourceLoader.setDelegate(_:queue:)` for thumbnail generation.
+    private static let thumbnailResourceLoaderQueue = DispatchQueue(
+        label: "com.acme.ios.photos.thumbloader",
+        qos: .userInitiated
+    )
+    
     /// Constructs a virtual custom scheme URL (`smbstream://`) intercepted by AVPlayer and AVAssetResourceLoader.
     ///
     /// - Parameters:
@@ -942,7 +948,7 @@ public final class StorageLocationManager {
     private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
-        return await videoThumbnailLimiter.withPermit {
+        return try? await videoThumbnailLimiter.withPermit {
             guard !Task.isCancelled else { return nil }
             if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                 return nil
@@ -954,7 +960,7 @@ public final class StorageLocationManager {
             }
             
             let validItem = await resolveValidItem(for: item)
-            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
+            guard validItem.size > 0, let (streamURL, _) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
@@ -962,7 +968,7 @@ public final class StorageLocationManager {
             // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
             let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
             // swiftlint:disable:next no_legacy_dispatch_queue
-            let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
+            let queue = Self.thumbnailResourceLoaderQueue
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
             let generator = AVAssetImageGenerator(asset: asset)
@@ -1003,11 +1009,13 @@ public final class StorageLocationManager {
                     group.cancelAll()
                     generator.cancelAllCGImageGeneration()
                     delegate.cancelAll()
+                    asset.resourceLoader.setDelegate(nil, queue: nil)
                     return first
                 }
             } onCancel: {
                 generator.cancelAllCGImageGeneration()
                 delegate.cancelAll()
+                asset.resourceLoader.setDelegate(nil, queue: nil)
             }
         }
     }
@@ -1077,7 +1085,7 @@ public final class StorageLocationManager {
         // Only attempt full download during grid browsing for documents <= 12 MB.
         let maxThumbnailDownloadBytes: Int64 = 12 * 1024 * 1024
         if item.size > 0 && item.size <= maxThumbnailDownloadBytes {
-            let thumb = await pdfThumbnailLimiter.withPermit { () -> UIImage? in
+            let thumb = try? await pdfThumbnailLimiter.withPermit { () -> UIImage? in
                 guard !Task.isCancelled else { return nil }
                 if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                     return nil

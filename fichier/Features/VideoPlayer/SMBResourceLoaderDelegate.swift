@@ -86,9 +86,10 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         let worker = self.worker
         let item = self.item
         let chunkSize = self.chunkSize
+        let requestID = ObjectIdentifier(loadingRequest)
         
         Task {
-            await tracker.runTask(for: loadingRequest) {
+            await tracker.runTask(for: requestID, isCancelled: loadingRequest.isCancelled) {
                 do {
                     var currentOffset = startOffset
                     
@@ -135,8 +136,9 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         _ resourceLoader: AVAssetResourceLoader,
         didCancel loadingRequest: AVAssetResourceLoadingRequest
     ) {
+        let requestID = ObjectIdentifier(loadingRequest)
         Task { [tracker = self.taskTracker] in
-            await tracker.cancelTask(for: loadingRequest)
+            await tracker.cancelTask(for: requestID)
         }
     }
     
