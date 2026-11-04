@@ -89,7 +89,8 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         lhs.name == rhs.name &&
         lhs.size == rhs.size &&
         lhs.modifiedDate == rhs.modifiedDate &&
-        lhs.children == rhs.children
+        (lhs.children?.count == rhs.children?.count) &&
+        ((lhs.children == nil) == (rhs.children == nil))
     }
     
     /// Path components split on both "/" and "\" without intermediate string allocations.

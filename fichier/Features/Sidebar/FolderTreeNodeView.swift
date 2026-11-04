@@ -145,8 +145,9 @@ struct FolderTreeNodeView: View {
         if node.path == "/" || node.path.isEmpty {
             return target.path != node.path
         }
-        // Fast-path rejection: discard completely non-matching paths with 0 allocations
-        guard target.path.hasPrefix(node.path) else { return false }
+        // Directory boundary prefix check prevents false-positives like /Folder/Cat matching /Folder/Category
+        let nodeBoundary = node.path.hasSuffix("/") ? node.path : "\(node.path)/"
+        guard target.path.hasPrefix(nodeBoundary) else { return false }
         let nodeComponents = node.normalizedComponents
         let targetComponents = target.normalizedComponents
         return targetComponents.starts(with: nodeComponents) && targetComponents.count > nodeComponents.count
@@ -157,8 +158,9 @@ struct FolderTreeNodeView: View {
         if selected.id == child.id { return true }
         guard selected.locationID == child.locationID, selected.rootName == child.rootName else { return false }
         if child.path.isEmpty || child.path == "/" { return true }
-        // Fast-path rejection: discard non-matching branches before substring parsing
-        guard selected.path.hasPrefix(child.path) else { return false }
+        // Directory boundary prefix check prevents false-positives across sibling folders
+        let childBoundary = child.path.hasSuffix("/") ? child.path : "\(child.path)/"
+        guard selected.path.hasPrefix(childBoundary) else { return false }
         return selected.normalizedComponents.starts(with: child.normalizedComponents)
     }
 }

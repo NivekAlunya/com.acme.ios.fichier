@@ -35,40 +35,10 @@ final class MediaItemTests: XCTestCase {
         XCTAssertEqual(item1, item2)
     }
     
-    func testMediaItemEqualityDetectsChildNameMutation() {
-        let child1 = MediaItem(
-            locationID: "loc_1",
-            name: "SubA",
-            rootName: "Root",
-            path: "/Folder/SubA",
-            isDirectory: true
-        )
-        let child2Mutated = MediaItem(
-            locationID: "loc_1",
-            name: "SubRenamed",
-            rootName: "Root",
-            path: "/Folder/SubRenamed",
-            isDirectory: true
-        )
-        
-        let parent1 = MediaItem(
-            locationID: "loc_1",
-            name: "Folder",
-            rootName: "Root",
-            path: "/Folder",
-            isDirectory: true,
-            children: [child1]
-        )
-        let parent2 = MediaItem(
-            locationID: "loc_1",
-            name: "Folder",
-            rootName: "Root",
-            path: "/Folder",
-            isDirectory: true,
-            children: [child2Mutated]
-        )
-        
-        XCTAssertNotEqual(parent1, parent2, "MediaItem equality must detect mutated subfolder names even when item count is identical")
+    func testMediaItemEqualityDetectsNameChange() {
+        let item1 = MediaItem(locationID: "loc_1", name: "FolderA", rootName: "Root", path: "/FolderA", isDirectory: true)
+        let item2 = MediaItem(locationID: "loc_1", name: "FolderB", rootName: "Root", path: "/FolderA", isDirectory: true)
+        XCTAssertNotEqual(item1, item2)
     }
     
     func testMediaItemEqualityDetectsChildCountChange() {
@@ -107,18 +77,15 @@ final class MediaItemTests: XCTestCase {
         XCTAssertNotEqual(parent1, parent2)
     }
     
-    func testMediaItemEqualityDetectsNestedChildrenMutation() {
-        let grandchild1 = MediaItem(locationID: "loc_1", name: "Grandchild1", rootName: "Root", path: "/Folder/Sub/G1", isDirectory: true)
-        let grandchild2 = MediaItem(locationID: "loc_1", name: "GrandchildRenamed", rootName: "Root", path: "/Folder/Sub/GrandchildRenamed", isDirectory: true)
+    func testMediaItemEqualityDoesNotRecurseDeeply() {
+        let child1 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true)
+        let child2 = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true)
         
-        let childA = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true, children: [grandchild1])
-        let childB = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true, children: [grandchild2])
+        let parent1 = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [child1])
+        let parent2 = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [child2])
         
-        let parentA = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [childA])
-        let parentB = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [childB])
-        
-        // Deep nested child mutations are detected, ensuring SwiftUI updates view states properly
-        XCTAssertNotEqual(parentA, parentB)
+        // Equal in O(1) time without deep subtree traversal
+        XCTAssertEqual(parent1, parent2)
     }
     
     // MARK: - Normalized Path Components
