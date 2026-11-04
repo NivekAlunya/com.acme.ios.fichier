@@ -145,6 +145,8 @@ struct FolderTreeNodeView: View {
         if node.path == "/" || node.path.isEmpty {
             return target.path != node.path
         }
+        // Fast-path rejection: discard completely non-matching paths with 0 allocations
+        guard target.path.hasPrefix(node.path) else { return false }
         let nodeComponents = node.normalizedComponents
         let targetComponents = target.normalizedComponents
         return targetComponents.starts(with: nodeComponents) && targetComponents.count > nodeComponents.count
@@ -155,6 +157,8 @@ struct FolderTreeNodeView: View {
         if selected.id == child.id { return true }
         guard selected.locationID == child.locationID, selected.rootName == child.rootName else { return false }
         if child.path.isEmpty || child.path == "/" { return true }
+        // Fast-path rejection: discard non-matching branches before substring parsing
+        guard selected.path.hasPrefix(child.path) else { return false }
         return selected.normalizedComponents.starts(with: child.normalizedComponents)
     }
 }

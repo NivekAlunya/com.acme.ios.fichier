@@ -195,6 +195,7 @@ public struct PictureDetailView: View {
         }
         // Photo loading, EXIF extraction, and prefetching with structured cancellation on photo switch
         .task(id: currentItem.id) {
+            let targetID = currentItem.id
             activeMetadata = nil
             currentImage = nil
             prefetchNext(after: currentItem)
@@ -204,6 +205,7 @@ public struct PictureDetailView: View {
                     let meta = await manager.fetchMetadata(for: currentItem)
                     if !Task.isCancelled {
                         await MainActor.run {
+                            guard self.currentItem.id == targetID else { return }
                             self.activeMetadata = meta
                         }
                     }
@@ -214,6 +216,7 @@ public struct PictureDetailView: View {
                         let img = await manager.downloadImage(for: currentItem)
                         if !Task.isCancelled {
                             await MainActor.run {
+                                guard self.currentItem.id == targetID else { return }
                                 self.currentImage = img
                             }
                         }
