@@ -348,7 +348,7 @@ public actor PhotoLibraryActor {
                     continuation.finish()
                 } else if let error = info?[PHImageErrorKey] as? Error {
                     continuation.finish(throwing: error)
-                } else {
+                } else if info?[PHImageResultIsDegradedKey] as? Bool != true {
                     continuation.finish(throwing: NSError(
                         domain: "PhotoLibraryActor",
                         code: 6,
