@@ -85,28 +85,11 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     }
     
     public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
-        guard lhs.id == rhs.id &&
-              lhs.name == rhs.name &&
-              lhs.size == rhs.size &&
-              lhs.modifiedDate == rhs.modifiedDate else {
-            return false
-        }
-        
-        switch (lhs.children, rhs.children) {
-        case (nil, nil):
-            return true
-        case (.some(let l), .some(let r)):
-            guard l.count == r.count else { return false }
-            // Shallow comparison of direct child attributes to avoid deep recursive O(N) subtree traversals
-            for i in 0..<l.count {
-                if l[i].id != r[i].id || l[i].name != r[i].name || l[i].size != r[i].size || l[i].modifiedDate != r[i].modifiedDate {
-                    return false
-                }
-            }
-            return true
-        default:
-            return false
-        }
+        lhs.id == rhs.id &&
+        lhs.name == rhs.name &&
+        lhs.size == rhs.size &&
+        lhs.modifiedDate == rhs.modifiedDate &&
+        lhs.children == rhs.children
     }
     
     /// Path components split on both "/" and "\" without intermediate string allocations.

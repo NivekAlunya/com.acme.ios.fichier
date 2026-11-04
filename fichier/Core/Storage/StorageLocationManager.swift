@@ -561,13 +561,11 @@ public final class StorageLocationManager {
     private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
         for node in nodes {
             guard let children = node.children else { continue }
-            for child in children {
-                if child.id == target.id {
-                    return node
-                }
-                if let found = findParentInTree(for: target, in: [child]) {
-                    return found
-                }
+            if children.contains(where: { $0.id == target.id }) {
+                return node
+            }
+            if let found = findParentInTree(for: target, in: children) {
+                return found
             }
         }
         return nil

@@ -107,9 +107,9 @@ final class MediaItemTests: XCTestCase {
         XCTAssertNotEqual(parent1, parent2)
     }
     
-    func testMediaItemEqualityDoesNotRecurseIntoGrandchildren() {
+    func testMediaItemEqualityDetectsNestedChildrenMutation() {
         let grandchild1 = MediaItem(locationID: "loc_1", name: "Grandchild1", rootName: "Root", path: "/Folder/Sub/G1", isDirectory: true)
-        let grandchild2 = MediaItem(locationID: "loc_1", name: "Grandchild2", rootName: "Root", path: "/Folder/Sub/G2", isDirectory: true)
+        let grandchild2 = MediaItem(locationID: "loc_1", name: "GrandchildRenamed", rootName: "Root", path: "/Folder/Sub/GrandchildRenamed", isDirectory: true)
         
         let childA = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true, children: [grandchild1])
         let childB = MediaItem(locationID: "loc_1", name: "Sub", rootName: "Root", path: "/Folder/Sub", isDirectory: true, children: [grandchild2])
@@ -117,8 +117,8 @@ final class MediaItemTests: XCTestCase {
         let parentA = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [childA])
         let parentB = MediaItem(locationID: "loc_1", name: "Folder", rootName: "Root", path: "/Folder", isDirectory: true, children: [childB])
         
-        // Parent items are equal because direct child identity/attributes match, preserving O(K) shallow diffing
-        XCTAssertEqual(parentA, parentB)
+        // Deep nested child mutations are detected, ensuring SwiftUI updates view states properly
+        XCTAssertNotEqual(parentA, parentB)
     }
     
     // MARK: - Normalized Path Components
