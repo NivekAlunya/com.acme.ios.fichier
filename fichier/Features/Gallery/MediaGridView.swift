@@ -224,13 +224,7 @@ struct MediaGridView: View {
                         }
                         .tint(.blue)
                         .disabled(manager.parentFolder == nil)
-                        .accessibilityLabel(
-                            if let parentName = manager.parentFolder?.name {
-                                String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
-                            } else {
-                                String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
-                            }
-                        )
+                        .accessibilityLabel(parentName)
                         
                         if !displayPictures.isEmpty {
                             Button(.Strings.galleryButtonSelect) {
@@ -429,6 +423,15 @@ struct MediaGridView: View {
                 await manager.selectAndLoadFolder(folder)
             }
         }
+    }
+
+    var parentName: String {
+        if let parentName = manager.parentFolder?.name {
+            String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
+        } else {
+            String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
+        }
+
     }
     
     // MARK: - Grid Mode
