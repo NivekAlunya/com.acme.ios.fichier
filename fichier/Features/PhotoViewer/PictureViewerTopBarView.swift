@@ -5,14 +5,34 @@
 
 import SwiftUI
 
+/// Floating translucent top navigation header for the full-screen photo viewer.
+///
+/// Displays:
+/// - Leading circular dismissal button (`xmark`).
+/// - Centered file info capsule displaying file title, current index, total count, and formatted size.
+/// - Symmetrical trailing spacer ensuring perfect visual centering regardless of layout bounds.
 public struct PictureViewerTopBarView: View {
+    /// Active photo media item displayed in the viewer.
     public let item: MediaItem
+    
+    /// Zero-based index of the photo within the current gallery collection.
     public let currentIndex: Int
+    
+    /// Total count of photos available in the viewer paging context.
     public let totalCount: Int
+    
+    /// Callback triggered to dismiss the full-screen photo viewer.
     public let onDismiss: () -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - item: Active media item.
+    ///   - currentIndex: Zero-based photo index.
+    ///   - totalCount: Total photo count.
+    ///   - onDismiss: Dismissal closure.
     public init(
         item: MediaItem,
         currentIndex: Int,
@@ -25,6 +45,7 @@ public struct PictureViewerTopBarView: View {
         self.onDismiss = onDismiss
     }
     
+    /// True when running in an iPad or Mac regular horizontal size class.
     private var isRegular: Bool {
         horizontalSizeClass == .regular
     }
@@ -48,6 +69,7 @@ public struct PictureViewerTopBarView: View {
         .padding(.top, isRegular ? 8 : 4)
     }
     
+    /// Leading circular close button styled with ultra-thin material and subtle drop shadow.
     private var closeButton: some View {
         Button {
             onDismiss()
@@ -64,6 +86,7 @@ public struct PictureViewerTopBarView: View {
         .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close photo viewer"))
     }
     
+    /// Centered capsule container displaying the photo file name and pagination counter.
     private var fileInfoCapsule: some View {
         HStack(spacing: 6) {
             Text(item.name)

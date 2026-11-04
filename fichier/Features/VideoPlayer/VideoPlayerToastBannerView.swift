@@ -5,9 +5,18 @@
 
 import SwiftUI
 
+/// Floating translucent notification capsules rendered beneath the top bar in the video player HUD.
+///
+/// Displays:
+/// 1. **Playback Resume Notification**: Indicates the restored timestamp with an interactive "Restart" pill button.
+/// 2. **Save to Camera Roll Confirmation**: Displays a checkmark badge when video export completes.
 public struct VideoPlayerToastBannerView: View {
+    /// Two-way reference to the active video player controller.
     public var controller: VideoPlayerController
     
+    /// Designated public initializer.
+    ///
+    /// - Parameter controller: Active video player controller.
     public init(controller: VideoPlayerController) {
         self.controller = controller
     }

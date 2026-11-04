@@ -7,7 +7,21 @@ import Foundation
 import CoreGraphics
 import ImageIO
 
+/// High-performance metadata parser extracting EXIF, TIFF, and camera hardware tags from image sources.
+///
+/// ### Architecture & Concurrency
+/// - **Zero-Decode Metadata Parsing**: Reads headers directly using `CGImageSourceCreateWithData` and `CGImageSourceCopyPropertiesAtIndex`
+///   with `kCGImageSourceShouldCache: false`. This avoids allocating image bitmaps or decoding pixels into memory.
+/// - **Thread Safety**: Marked `nonisolated public enum`, allowing execution from any concurrent background worker task.
 nonisolated public enum ImageMetadataExtractor {
+    
+    /// Extracts EXIF and camera metadata directly from a local file URL.
+    ///
+    /// - Parameters:
+    ///   - url: The file system URL of the image.
+    ///   - fileName: The display file name.
+    ///   - fileSize: Formatted human-readable file size string.
+    /// - Returns: A populated `PictureEXIFData` structure.
     public static func extract(from url: URL, fileName: String, fileSize: String) -> PictureEXIFData {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else {
@@ -16,6 +30,13 @@ nonisolated public enum ImageMetadataExtractor {
         return extract(fromSource: source, fileName: fileName, fileSize: fileSize)
     }
     
+    /// Extracts EXIF and camera metadata directly from in-memory byte data or partial header packets.
+    ///
+    /// - Parameters:
+    ///   - data: Encoded image data (e.g. first 64 KB of a JPEG or HEIC file).
+    ///   - fileName: The display file name.
+    ///   - fileSize: Formatted human-readable file size string.
+    /// - Returns: A populated `PictureEXIFData` structure.
     public static func extract(from data: Data, fileName: String, fileSize: String) -> PictureEXIFData {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
@@ -24,6 +45,7 @@ nonisolated public enum ImageMetadataExtractor {
         return extract(fromSource: source, fileName: fileName, fileSize: fileSize)
     }
     
+    /// Fallback generator producing an empty EXIF record when image headers cannot be parsed.
     private static func emptyData(fileName: String, fileSize: String) -> PictureEXIFData {
         PictureEXIFData(
             fileName: fileName,
@@ -41,6 +63,19 @@ nonisolated public enum ImageMetadataExtractor {
         )
     }
     
+    /// Core extractor parsing dictionary trees returned by `CGImageSourceCopyPropertiesAtIndex`.
+    ///
+    /// ### Complex Code Breakdown:
+    /// - **Dimension Resolution**: Checks root dictionary `kCGImagePropertyPixelWidth` first, falling back to EXIF tags.
+    /// - **Megapixel Computation**: Computes `(width * height) / 1,000,000` to format standard photo MP strings.
+    /// - **Camera Model Formatting**: Checks if `model` already contains `make` (e.g. "Canon Canon EOS R5") to avoid redundant prefixes.
+    /// - **Exposure Conversion**: Converts decimal exposure seconds (e.g. 0.004s) into standard photographic fractions (`1/250s`).
+    ///
+    /// - Parameters:
+    ///   - source: Initialized `CGImageSource`.
+    ///   - fileName: Display name.
+    ///   - fileSize: Formatted size string.
+    /// - Returns: A fully configured `PictureEXIFData` model.
     private static func extract(fromSource source: CGImageSource, fileName: String, fileSize: String) -> PictureEXIFData {
         guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
             return emptyData(fileName: fileName, fileSize: fileSize)
@@ -75,7 +110,7 @@ nonisolated public enum ImageMetadataExtractor {
         
         let lens = exif?[kCGImagePropertyExifLensModel] as? String
         
-        // Exposure: Aperture, Shutter, ISO, Focal
+        // Exposure: Aperture, Shutter, ISO, Focal Length
         var apertureStr: String?
         if let fNumber = exif?[kCGImagePropertyExifFNumber] as? Double {
             apertureStr = String(format: "ƒ/%.1f", fNumber)
@@ -101,7 +136,7 @@ nonisolated public enum ImageMetadataExtractor {
             focalStr = String(format: "%.0f mm", fl)
         }
         
-        // Date
+        // Timestamp
         let dateTaken = exif?[kCGImagePropertyExifDateTimeOriginal] as? String ?? tiff?[kCGImagePropertyTIFFDateTime] as? String
         
         return PictureEXIFData(

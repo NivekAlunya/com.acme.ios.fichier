@@ -5,17 +5,41 @@
 
 import SwiftUI
 
+/// Custom interactive timeline scrubber bar component for video playback.
+///
+/// Features:
+/// - Monospaced elapsed time label on the leading edge.
+/// - Dynamic progress track with interactive dragging knob that enlarges (10pt to 16pt) when scrubbed.
+/// - Trailing time button toggling between remaining time (`-0:42`) and total duration (`2:15`).
+/// - Full VoiceOver accessibility with adjustable increment/decrement actions.
 public struct VideoTimelineBar: View {
+    /// Current playback progress in seconds.
     public let currentTime: Double
+    
+    /// Total duration of the video in seconds.
     public let duration: Double
+    
+    /// Final seek commit callback invoked upon releasing the scrubber drag gesture.
     public let onSeek: (Double) -> Void
+    
+    /// Continuous scrubbing callback invoked as the user drags their finger across the track.
     public let onScrubbing: ((Double) -> Void)?
+    
+    /// Callback signaling changes in active scrubbing state.
     public let onScrubStateChanged: (Bool) -> Void
     
     @State private var isScrubbing: Bool = false
     @State private var scrubTargetTime: Double = 0
     @State private var showRemainingTime: Bool = true
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - currentTime: Current playback progress in seconds.
+    ///   - duration: Total duration in seconds.
+    ///   - onSeek: Commit seek handler.
+    ///   - onScrubbing: Real-time scrub movement handler.
+    ///   - onScrubStateChanged: Scrub state transition handler.
     public init(
         currentTime: Double,
         duration: Double,
@@ -30,10 +54,12 @@ public struct VideoTimelineBar: View {
         self.onScrubStateChanged = onScrubStateChanged
     }
     
+    /// Effective timestamp currently driving UI display (reflects scrub target during dragging).
     private var effectiveCurrentTime: Double {
         isScrubbing ? scrubTargetTime : currentTime
     }
     
+    /// Normalized progress fraction between `0.0` and `1.0`.
     private var progressFraction: Double {
         guard duration > 0 else { return 0 }
         return max(0.0, min(1.0, effectiveCurrentTime / duration))
@@ -139,6 +165,7 @@ public struct VideoTimelineBar: View {
         .padding(.vertical, 2)
     }
     
+    /// Formats the trailing time string based on toggle preference.
     private var rightTimeLabel: String {
         guard duration > 0 else { return "0:00" }
         if showRemainingTime {
@@ -149,6 +176,7 @@ public struct VideoTimelineBar: View {
         }
     }
     
+    /// Formats a time in seconds into a digital clock string.
     private func formatSeconds(_ totalSeconds: Double) -> String {
         guard totalSeconds.isFinite && !totalSeconds.isNaN && totalSeconds >= 0 else { return "0:00" }
         let secs = Int(totalSeconds)

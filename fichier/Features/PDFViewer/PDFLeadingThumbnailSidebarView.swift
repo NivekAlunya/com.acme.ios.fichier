@@ -6,12 +6,33 @@
 import SwiftUI
 import PDFKit
 
+/// Floating vertical thumbnail sidebar docked on the leading edge of `PDFDetailView`.
+///
+/// Features:
+/// - Vertical scrollable list of all document pages rendered via `PDFThumbnailItemCell`.
+/// - Automatic synchronization with `ScrollViewReader` scrolling the active page into center focus.
+/// - Multi-page selection highlighting supporting both single-page continuous and two-page book spreads.
+/// - Haptic selection feedback (`UISelectionFeedbackGenerator`) upon tapping a page thumbnail.
 public struct PDFLeadingThumbnailSidebarView: View {
+    /// Active PDFKit document instance.
     public let document: PDFDocument
+    
+    /// 1-based index of the first currently visible page.
     public let currentPage: Int
+    
+    /// 1-based index of the last currently visible page (equals `currentPage` in single page mode).
     public let endVisiblePage: Int
+    
+    /// Action callback triggered when the user taps a thumbnail to navigate.
     public let onPageSelected: (Int) -> Void
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - document: Underlying PDFKit document.
+    ///   - currentPage: 1-based starting visible page.
+    ///   - endVisiblePage: 1-based ending visible page.
+    ///   - onPageSelected: Selection callback.
     public init(
         document: PDFDocument,
         currentPage: Int,

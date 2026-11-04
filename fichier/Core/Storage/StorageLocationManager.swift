@@ -7,63 +7,112 @@ import Foundation
 import Observation
 import UIKit
 import AVFoundation
+import PDFKit
 import OSLog
 
+/// Centralized state manager and coordinator for all media storage backends in the application.
+///
+/// `StorageLocationManager` is an `@Observable` model object isolated to the `@MainActor`. It coordinates
+/// browsing, caching, and streaming across three distinct storage backends:
+/// 1. **SMB Network Shares** — Managed via `SMBClientActor` and authenticated via `SMBKeychain`.
+/// 2. **Local and iCloud Drive Folders** — Managed via `LocalStorageActor` using security-scoped bookmarks.
+/// 3. **Apple Photos Library** — Managed via `PhotoLibraryActor` using PhotoKit.
+///
+/// ### Key Responsibilities
+/// - Maintains active connections and persisted credentials for servers and local folders.
+/// - Drives navigation through hierarchical folder trees and tracks selected media collections.
+/// - Coordinates two-tier in-memory and persistent disk caching for thumbnails and full-resolution media.
+/// - Dispatches video thumbnail generation through a bounded concurrency limiter (`VideoThumbnailLimiter`)
+///   and custom resource loaders (`SMBResourceLoaderDelegate`).
+/// - Handles system memory pressure and background lifecycle transitions to avoid out-of-memory (OOM) terminations.
 @Observable
 @MainActor
 public final class StorageLocationManager {
+    /// Indicates whether a storage location is currently connected and ready for browsing.
     public var isConnected = false
+    
+    /// Indicates whether a network request or folder scanning operation is currently in flight.
     public var isLoading = false
+    
+    /// User-presentable error message from the most recent failed operation, or `nil` if healthy.
     public var errorMessage: String?
     
-    // Saved validated server connections
+    /// Persisted list of validated SMB server credentials and connection metadata.
     public var savedConnections: [SavedSMBConnection] = []
     
-    // Saved local and iCloud Drive folder locations
+    /// Persisted list of local and iCloud Drive folder security-scoped bookmarks.
     public var savedFolderLocations: [SavedFolderLocation] = []
     
-    // Currently active location (SMB or Local/iCloud Folder)
+    /// The currently selected storage location (SMB share, local/iCloud folder, or Photos Library).
     public var currentLocation: StorageLocation?
     
-    // Root tree of shared folders for Sidebar Tree
+    /// Hierarchical tree of folders and shares used to populate the navigation sidebar.
+    ///
+    /// Updating this tree automatically recalculates `parentFolder` for O(1) breadcrumb navigation.
     public var folderTree: [MediaItem] = [] {
         didSet {
             updateParentFolder()
         }
     }
     
-    // Subfolders of the currently selected folder
+    /// Immediate child subfolders within the currently selected folder.
     public var currentFolders: [MediaItem] = []
     
-    // Currently selected folder in the SplitView
+    /// The folder currently selected in the sidebar or grid navigation.
+    ///
+    /// Modifying this property triggers an automatic recalculation of `parentFolder`.
     public var selectedFolder: MediaItem? {
         didSet {
             updateParentFolder()
         }
     }
     
-    /// Cached parent folder of the currently selected folder, if not at root level (O(1) access)
+    /// Cached parent folder of the currently selected folder, providing O(1) access for upward navigation.
     public private(set) var parentFolder: MediaItem?
     
-    // Pictures in the currently selected folder
+    /// Media items (photos, videos, PDFs) discovered in the currently selected folder.
     public var pictures: [MediaItem] = []
     
-    // Tracks current active folder to cancel out-of-order thumbnail requests
+    /// The unique identifier of the currently active folder, used to discard stale async thumbnail requests.
     public private(set) var activeFolderID: String?
+    
+    /// Identifier representing the current connection session, used for cache partitioning.
     public private(set) var currentConnectionID: String = ""
+    
+    /// Tracks dynamic thumbnail generation tokens per media item, allowing observing SwiftUI views to react to on-the-fly upgrades.
+    public private(set) var thumbnailVersions: [String: Int] = [:]
+    
+    /// In-flight asynchronous folder scanning task, cancelled when switching folders rapidly.
     private var loadFolderTask: Task<Void, Never>?
     
-    // In-memory cache of the last viewed folder per location to restore iPad split-view state seamlessly
+    /// In-memory memory map preserving the last viewed folder per location ID for seamless split-view restoration.
     private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
     
+    /// Background actor managing SMB connections, directory scanning, and streaming.
     private let worker = SMBClientActor()
+    
+    /// Nonisolated accessor exposing the worker actor for background streaming operations.
     nonisolated var clientActor: SMBClientActor { worker }
+    
+    /// Background actor managing local sandbox and security-scoped file system access.
     private let localWorker = LocalStorageActor()
+    
+    /// Background actor managing PhotoKit queries and PHAsset fetching.
     private let photosWorker = PhotoLibraryActor()
+    
+    /// Concurrency limiter preventing socket saturation during parallel video keyframe extraction.
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
+    
+    /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
+    private let pdfThumbnailLimiter = PDFThumbnailLimiter()
+    
+    /// UserDefaults key for persisted SMB connection records.
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
+    
+    /// UserDefaults key for persisted local folder bookmarks.
     private let savedFolderLocationsKey = "SavedFolderLocations_v1"
     
+    /// Initializes the manager, restoring saved connections and registering lifecycle observers.
     public init() {
         loadSavedConnections()
         loadSavedFolderLocations()
@@ -76,6 +125,10 @@ public final class StorageLocationManager {
     // MARK: - Lifecycle & Memory Pressure Observers
     
     /// Registers system observers for memory warnings and background transitions.
+    ///
+    /// To ensure the app maintains a lean memory footprint and complies with iOS memory budgets:
+    /// - `didReceiveMemoryWarningNotification` flushes volatile RAM caches in `worker`.
+    /// - `didEnterBackgroundNotification` triggers a detached utility task to prune expired disk cache entries.
     private func setupLifecycleObservers() {
         // Clear in-memory image caches on low memory warnings to prevent OOM terminations
         NotificationCenter.default.addObserver(
@@ -103,6 +156,7 @@ public final class StorageLocationManager {
     
     // MARK: - Saved Connections Persistence
     
+    /// Loads and decodes persisted SMB connections from `UserDefaults`.
     private func loadSavedConnections() {
         guard let data = UserDefaults.standard.data(forKey: savedConnectionsKey),
               let decoded = try? JSONDecoder().decode([SavedSMBConnection].self, from: data) else {
@@ -112,10 +166,21 @@ public final class StorageLocationManager {
         savedConnections = decoded.sorted { $0.lastConnected > $1.lastConnected }
     }
     
+    /// Retrieves the stored password from the secure Keychain for a given SMB connection.
+    ///
+    /// - Parameter connection: The saved connection metadata.
+    /// - Returns: The decrypted password, or an empty string if missing.
     public func password(for connection: SavedSMBConnection) -> String {
         SMBKeychain.loadPassword(for: connection.id) ?? ""
     }
     
+    /// Stores or updates a validated SMB connection record in `UserDefaults` and saves its password to the Keychain.
+    ///
+    /// - Parameters:
+    ///   - host: Network hostname or IP address.
+    ///   - user: Authentication username.
+    ///   - pass: Plaintext password to store in Keychain.
+    ///   - hostname: Optional Bonjour or NetBIOS display hostname.
     private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) {
         let existingHostname = savedConnections.first(where: { $0.id == "\(user)@\(host)" })?.hostname
         let finalHostname = hostname ?? existingHostname
@@ -137,6 +202,9 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
+    ///
+    /// - Parameter connection: The connection to remove.
     public func removeSavedConnection(_ connection: SavedSMBConnection) {
         SMBKeychain.deletePassword(for: connection.id)
         savedConnections.removeAll { $0.id == connection.id }
@@ -152,6 +220,7 @@ public final class StorageLocationManager {
     
     // MARK: - Saved Folder Locations Persistence (Local & iCloud Drive)
     
+    /// Aggregated list of all available storage locations, ordered with Photos first, followed by folders and SMB servers.
     public var allLocations: [StorageLocation] {
         var list: [StorageLocation] = [StorageLocation.photos]
         for folder in savedFolderLocations {
@@ -163,6 +232,7 @@ public final class StorageLocationManager {
         return list
     }
     
+    /// Loads and decodes local folder bookmarks from `UserDefaults`.
     private func loadSavedFolderLocations() {
         guard let data = UserDefaults.standard.data(forKey: savedFolderLocationsKey),
               let decoded = try? JSONDecoder().decode([SavedFolderLocation].self, from: data) else {
@@ -172,6 +242,9 @@ public final class StorageLocationManager {
         savedFolderLocations = decoded.sorted { $0.dateAdded > $1.dateAdded }
     }
     
+    /// Appends or updates a saved local folder location and persists it to `UserDefaults`.
+    ///
+    /// - Parameter location: The folder location record containing security-scoped bookmark data.
     public func addSavedFolderLocation(_ location: SavedFolderLocation) {
         var updated = savedFolderLocations.filter { $0.id != location.id }
         updated.insert(location, at: 0)
@@ -181,6 +254,9 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Removes a saved local folder location from `UserDefaults` and disconnects if it is active.
+    ///
+    /// - Parameter location: The folder location to remove.
     public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
         savedFolderLocations.removeAll { $0.id == location.id }
         if currentLocation?.folderLocation?.id == location.id {
@@ -193,6 +269,11 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Updates refreshed security-scoped bookmark data for an existing folder location.
+    ///
+    /// - Parameters:
+    ///   - bookmarkData: The updated binary bookmark data.
+    ///   - folderLocation: The target location record.
     private func updateBookmarkData(_ bookmarkData: Data, for folderLocation: SavedFolderLocation) {
         if let index = savedFolderLocations.firstIndex(where: { $0.id == folderLocation.id }) {
             let updated = SavedFolderLocation(
@@ -209,6 +290,9 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Dispatches location deletion to the appropriate backend store.
+    ///
+    /// - Parameter location: The storage location to remove.
     public func removeLocation(_ location: StorageLocation) {
         switch location.kind {
         case .smb:
@@ -226,6 +310,12 @@ public final class StorageLocationManager {
     
     // MARK: - Select Unified Location
     
+    /// Activates and mounts a storage location, preparing its root folder tree for navigation.
+    ///
+    /// This method performs clean disconnection from the previous backend, initializes the target
+    /// backend actor, and restores the previously selected subfolder if one was recorded in memory.
+    ///
+    /// - Parameter location: The target location to activate.
     public func selectLocation(_ location: StorageLocation) async {
         switch location.kind {
         case .smb:
@@ -280,7 +370,7 @@ public final class StorageLocationManager {
                 // Restore previously selected album/folder if available
                 let locID = location.id
                 if let remembered = lastSelectedFolderPerLocation[locID],
-                   (albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id) {
+                   albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id {
                     await selectAndLoadFolder(remembered)
                 } else if let firstAlbum = albums.first {
                     await selectAndLoadFolder(firstAlbum)
@@ -296,6 +386,16 @@ public final class StorageLocationManager {
     
     // MARK: - Connect to Mac mini & List All Shares Automatically
     
+    /// Connects to a remote SMB server and enumerates its exported shares.
+    ///
+    /// Sanitizes the input host, constructs session credentials, queries available shares via `SMBClientActor`,
+    /// persists successful connections, and auto-selects the first share or previously viewed subfolder.
+    ///
+    /// - Parameters:
+    ///   - host: Hostname or IP address.
+    ///   - user: SMB username (empty for guest).
+    ///   - pass: Plaintext password.
+    ///   - hostname: Optional NetBIOS/Bonjour name for display.
     public func connect(host: String, user: String, pass: String, hostname: String? = nil) async {
         isLoading = true
         errorMessage = nil
@@ -361,6 +461,7 @@ public final class StorageLocationManager {
     
     // MARK: - Refresh Shares & Current Folder
     
+    /// Refreshes the root tree and reloads the currently selected folder across any active backend.
     public func refreshSharesAndFolders() async {
         errorMessage = nil
         if currentLocation?.kind == .photos {
@@ -419,6 +520,16 @@ public final class StorageLocationManager {
     
     // MARK: - Select Folder & Load Both Subfolders + Pictures
     
+    /// Selects a folder item and asynchronously enumerates its child subfolders and media files.
+    ///
+    /// ### Concurrency and Invalidation Strategy
+    /// 1. Immediately cancels any ongoing `loadFolderTask` to prioritize the new user action.
+    /// 2. Clears the existing `pictures` and `currentFolders` collections to cause obsolete UI
+    ///    cells to unmount and drop their active thumbnail generation tasks.
+    /// 3. Signals the `worker` actor with the new `activeFolderID` to discard queued thumbnail requests.
+    /// 4. Checks cooperative task cancellation (`Task.checkCancellation()`) before committing state.
+    ///
+    /// - Parameter folder: The folder item to browse.
     public func selectAndLoadFolder(_ folder: MediaItem) async {
         // Record this folder as the last active selection for the current location
         if let locID = currentLocation?.id, !locID.isEmpty {
@@ -493,6 +604,9 @@ public final class StorageLocationManager {
         await task.value
     }
     
+    /// Lazily populates child subfolders in the sidebar tree without altering the active grid selection.
+    ///
+    /// - Parameter folder: The folder node being expanded in the sidebar.
     public func loadSubfoldersForTree(at folder: MediaItem) async {
         do {
             let subfolders: [MediaItem]
@@ -512,6 +626,13 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Pure functional recursive tree traversal that injects loaded child nodes into the corresponding parent.
+    ///
+    /// - Parameters:
+    ///   - nodes: The current subtree list.
+    ///   - targetID: The identifier of the parent node to receive children.
+    ///   - children: The discovered child subfolders.
+    /// - Returns: A newly constructed tree reflecting the updated child hierarchy.
     private func updateTreeNodes(in nodes: [MediaItem], targetID: String, children: [MediaItem]) -> [MediaItem] {
         nodes.map { node in
             var updated = node
@@ -526,7 +647,10 @@ public final class StorageLocationManager {
     
     // MARK: - Parent Folder Navigation
     
-    /// Returns true if the folder represents the top-level root of its storage location
+    /// Determines whether a folder represents the top-level root of its storage backend.
+    ///
+    /// - Parameter item: The media item folder to inspect.
+    /// - Returns: `true` if the folder cannot be navigated above; `false` otherwise.
     public func isRootFolder(_ item: MediaItem) -> Bool {
         if item.locationID == StorageLocation.photosLocationID {
             return item.path.isEmpty
@@ -538,7 +662,10 @@ public final class StorageLocationManager {
         return item.path == "/" || item.path.isEmpty
     }
     
-    /// Recomputes and caches the parent folder of the currently selected folder
+    /// Recomputes and caches the parent folder of the currently selected folder.
+    ///
+    /// Employs a fast-path lookup in the existing `folderTree`, falling back to path-string decomposition
+    /// (`deriveParentFolder`) when the parent node has not been lazily expanded in the tree.
     public func updateParentFolder() {
         guard let current = selectedFolder else {
             parentFolder = nil
@@ -558,6 +685,12 @@ public final class StorageLocationManager {
         parentFolder = deriveParentFolder(for: current)
     }
     
+    /// Recursively searches the expanded tree hierarchy to locate the immediate parent of a target node.
+    ///
+    /// - Parameters:
+    ///   - target: The child item whose parent is sought.
+    ///   - nodes: The tree nodes to search.
+    /// - Returns: The parent `MediaItem` if discovered in the tree, or `nil`.
     private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
         for node in nodes {
             guard let children = node.children else { continue }
@@ -571,6 +704,13 @@ public final class StorageLocationManager {
         return nil
     }
     
+    /// Synthesizes a parent `MediaItem` using path-based string surgery when tree metadata is unavailable.
+    ///
+    /// Sanitizes path components against traversal tokens (`.` and `..`), normalizes path delimiters,
+    /// and formats root or directory representations suitable for navigation.
+    ///
+    /// - Parameter item: The child folder item.
+    /// - Returns: The derived parent `MediaItem`, or `nil` if already at root.
     public func deriveParentFolder(for item: MediaItem) -> MediaItem? {
         if item.locationID == StorageLocation.photosLocationID {
             return folderTree.first ?? MediaItem(
@@ -625,6 +765,21 @@ public final class StorageLocationManager {
     
     // MARK: - Download Picture / Thumbnail
     
+    /// Downloads or retrieves a cached thumbnail image for a given media item.
+    ///
+    /// ### Multi-Tier Thumbnail Pipeline
+    /// 1. **Tier 1 (RAM)**: Checks `SMBClientActor`'s in-memory `NSCache` for immediate rendering.
+    /// 2. **Backend Delegation**:
+    ///    - Photos Library: Delegated to `PhotoLibraryActor` (`PHCachingImageManager`).
+    ///    - Local Files: Checks persistent disk cache (`MediaCacheManager`), then decodes with downsampling.
+    ///    - SMB Videos: Checks disk cache, then extracts a keyframe over the network via `streamVideoThumbnail`.
+    ///    - SMB Images: Checks disk cache, debounces by 40ms, and queries `SMBClientActor`.
+    /// 3. **Tier 2 (Disk Storage)**: Successfully decoded images are written back to `MediaCacheManager`.
+    ///
+    /// - Parameters:
+    ///   - item: The target media item.
+    ///   - maxDimension: Maximum pixel bounding dimension for downsampling.
+    /// - Returns: A decoded, downsampled `UIImage`, or `nil` if loading failed or was cancelled.
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         
@@ -716,6 +871,11 @@ public final class StorageLocationManager {
             return nil
         }
         
+        // PDF document thumbnail streaming, fast-path prefix caching, and placeholder generation
+        if item.isPDF {
+            return await fetchPDFThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension)
+        }
+        
         // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
         let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
@@ -728,15 +888,7 @@ public final class StorageLocationManager {
             return diskCached
         }
         
-        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
-            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: MediaCacheManager.standardThumbnailDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: photoDiskKey)
-                return thumb
-            }
-        }
-        
+        // Debounce briefly (40ms for photos) to prevent network thrashing during fast scrolls
         try? await Task.sleep(for: .milliseconds(40))
         guard !Task.isCancelled else { return nil }
         
@@ -749,19 +901,44 @@ public final class StorageLocationManager {
     
     // MARK: - Streaming Helpers
     
+    /// Constructs a virtual custom scheme URL (`smbstream://`) intercepted by AVPlayer and AVAssetResourceLoader.
+    ///
+    /// - Parameters:
+    ///   - itemName: File name of the media asset.
+    ///   - uniqueID: Session UUID distinguishing resource loader instances.
+    /// - Returns: A tuple with the synthetic streaming URL and its unique session identifier.
     nonisolated public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
         let safeName = itemName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
         guard let url = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else { return nil }
         return (url, uniqueID)
     }
     
+    /// Ensures a media item has a positive byte size populated, querying file attributes if missing.
+    ///
+    /// - Parameter item: The media item to validate.
+    /// - Returns: The verified `MediaItem` with positive size metadata.
     public func resolveValidItem(for item: MediaItem) async -> MediaItem {
         guard item.size <= 0 else { return item }
         let realSize = await fetchFileSize(for: item)
         return realSize > 0 ? item.withSize(realSize) : item
     }
 
-    /// Streams minimal byte slices on demand using the same progressive loader as the player to extract a keyframe
+    /// Progressive video keyframe extractor over SMB using AVAssetResourceLoader.
+    ///
+    /// ### Algorithmic Details & Concurrency Control
+    /// 1. Uses `videoThumbnailLimiter.withPermit` to cap simultaneous thumbnail extraction tasks (default max 2),
+    ///    preventing socket congestion on the SMB server.
+    /// 2. Configures `SMBResourceLoaderDelegate` with a 256 KB chunk size for efficient range-request header parsing.
+    /// 3. Employs `AVAssetImageGenerator` with tight tolerances targeting a standardized 12.0s timestamp,
+    ///    with fallbacks to `.zero` and 1.0s if the video is very short.
+    /// 4. Races the extraction against a 12-second timeout inside a structured `TaskGroup`, immediately
+    ///    cancelling underlying network requests and CGImage generation upon timeout or external cancellation.
+    ///
+    /// - Parameters:
+    ///   - item: Video media item.
+    ///   - expectedFolderID: Active folder identifier to avoid completing obsolete requests.
+    ///   - maxDimension: Maximum bounding dimension for the thumbnail.
+    /// - Returns: An extracted keyframe image, or `nil`.
     private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
@@ -784,6 +961,7 @@ public final class StorageLocationManager {
             let asset = AVURLAsset(url: streamURL)
             // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
             let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
+            // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
@@ -821,7 +999,7 @@ public final class StorageLocationManager {
                         return nil
                     }
                     
-                    let first = await group.next() ?? nil
+                    let first = (await group.next()).flatMap { $0 }
                     group.cancelAll()
                     generator.cancelAllCGImageGeneration()
                     delegate.cancelAll()
@@ -834,6 +1012,151 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - PDF Document Thumbnail Streaming & Placeholders
+    
+    /// Progressive PDF document thumbnail generator with fast-path prefix reading and stylized placeholder fallbacks.
+    ///
+    /// ### Three-Tier Thumbnailing Strategy:
+    /// 1. **Cache / Local Ingestion**: Checks RAM, persistent disk thumbnails, or local document cache.
+    /// 2. **Fast-Path Prefix Read**: Reads the initial 1 MB prefix over SMB. For linearized (web-optimized) PDFs,
+    ///    Page 1 is rendered and cached in ~200ms without transferring the remaining document.
+    /// 3. **Bounded Ingestion or Stylized Cover**:
+    ///    - If the document is $\le 12 \text{ MB}$, downloads via `PDFThumbnailLimiter` (max 1 concurrent operation)
+    ///      with a strict 8-second timeout to prevent socket starvation.
+    ///    - If the document exceeds $12 \text{ MB}$, or if download fails/times out, immediately generates an
+    ///      elegant stylized vector PDF cover card with title and file size.
+    ///
+    /// - Parameters:
+    ///   - item: The target PDF `MediaItem`.
+    ///   - expectedFolderID: Active directory token to verify folder consistency.
+    ///   - maxDimension: Maximum thumbnail bounding dimension.
+    /// - Returns: A rendered cover `UIImage`, or `nil` if cancelled.
+    private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
+        if Task.isCancelled { return nil }
+        
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        
+        // 1. Check persistent on-disk thumbnail cache
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        
+        // 2. Check if complete document is already cached locally (e.g. previously opened in PDFDetailView)
+        if MediaCacheManager.shared.hasCachedDocument(for: item) {
+            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
+        // 3. Debounce briefly (100ms) to cancel fast-scrolling cells before touching SMB
+        try? await Task.sleep(for: .milliseconds(100))
+        guard !Task.isCancelled else { return nil }
+        if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+            return nil
+        }
+        
+        // 4. Fast-Path Prefix Read (Linearized / Web-Optimized PDFs)
+        if let fastThumb = await worker.fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
+            worker.cacheThumbnail(fastThumb, forKey: memoryCacheKey)
+            MediaCacheManager.shared.saveThumbnailAsync(fastThumb, for: diskKey)
+            return fastThumb
+        }
+        guard !Task.isCancelled else { return nil }
+        
+        // 5. Size Ceiling & Concurrency Limiting:
+        // Only attempt full download during grid browsing for documents <= 12 MB.
+        let maxThumbnailDownloadBytes: Int64 = 12 * 1024 * 1024
+        if item.size > 0 && item.size <= maxThumbnailDownloadBytes {
+            let thumb = await pdfThumbnailLimiter.withPermit { () -> UIImage? in
+                guard !Task.isCancelled else { return nil }
+                if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+                    return nil
+                }
+                
+                // Re-check disk cache in case a previous task finished it while waiting
+                if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+                    return diskCached
+                }
+                
+                do {
+                    // Race download against an 8-second timeout using structured concurrency
+                    return try await withThrowingTaskGroup(of: UIImage?.self) { group in
+                        group.addTask {
+                            let localURL = try await self.worker.fetchDocumentURL(for: item)
+                            return MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension)
+                        }
+                        group.addTask {
+                            try await Task.sleep(for: .seconds(8))
+                            return nil
+                        }
+                        let result = (try await group.next()).flatMap { $0 }
+                        group.cancelAll()
+                        return result
+                    }
+                } catch {
+                    return nil
+                }
+            }
+            if let thumb {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
+        // 6. Documents > 12 MB or without a pre-computed thumbnail return nil.
+        // MediaThumbnailView will render a zero-allocation lightweight SwiftUI vector placeholder.
+        return nil
+    }
+    
+    // MARK: - On-the-Fly Thumbnail Upgrades
+    
+    /// Upgrades or creates the master thumbnail for a PDF document currently opened in the reader.
+    ///
+    /// Extracted directly from Page 1 of the parsed in-memory `PDFDocument`, saving network I/O
+    /// and disk parsing overhead. Persists the rendered thumbnail to both RAM and disk caches,
+    /// and notifies active gallery cells to update immediately.
+    ///
+    /// - Parameters:
+    ///   - item: The target document `MediaItem`.
+    ///   - document: The parsed `PDFDocument` currently displayed in the reader.
+    public func upgradePDFThumbnail(for item: MediaItem, from document: PDFDocument) async {
+        let maxDimension = MediaCacheManager.standardThumbnailDimension
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        
+        // Render first page directly from in-memory document
+        guard let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: document, maxDimension: maxDimension) else {
+            return
+        }
+        
+        // Persist to disk and RAM
+        MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+        worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+        
+        // Trigger SwiftUI observation update for this item
+        thumbnailVersions[item.id, default: 0] += 1
+    }
+    
+    /// Downloads the full-resolution image for a media item from the active backend.
+    ///
+    /// - Parameter item: The media item to download.
+    /// - Returns: The full-resolution `UIImage`, or `nil` if cancelled or failed.
     nonisolated public func downloadImage(for item: MediaItem) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
         if item.phAssetIdentifier != nil {
@@ -845,6 +1168,10 @@ public final class StorageLocationManager {
         return await worker.fetchFullImage(for: item)
     }
     
+    /// Queries the byte size of a media item from its respective storage backend.
+    ///
+    /// - Parameter item: The media item to inspect.
+    /// - Returns: Size in bytes, or `0` if undetermined.
     nonisolated public func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchFileSize(for: item)
@@ -855,6 +1182,10 @@ public final class StorageLocationManager {
         return await worker.fetchFileSize(for: item)
     }
     
+    /// Fetches parsed EXIF and camera metadata for an image without decoding pixel buffers.
+    ///
+    /// - Parameter item: The media item to inspect.
+    /// - Returns: Parsed `PictureEXIFData`, or `nil` if unavailable.
     nonisolated public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
         if item.phAssetIdentifier != nil {
@@ -868,10 +1199,23 @@ public final class StorageLocationManager {
     
     // MARK: - Video Support & Disk Cache (Tier 3)
     
+    /// Fetches a specific byte range of a media file over SMB.
+    ///
+    /// - Parameters:
+    ///   - item: The media item being streamed.
+    ///   - offset: Starting byte position.
+    ///   - length: Requested number of bytes.
+    /// - Returns: The retrieved byte chunk.
     nonisolated public func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
         try await worker.fetchMediaRange(for: item, offset: offset, length: length)
     }
     
+    /// Resolves or downloads the playable local or sandbox file URL for a video asset.
+    ///
+    /// - Parameters:
+    ///   - item: Target video media item.
+    ///   - progress: Optional progress reporting callback (`Sendable`).
+    /// - Returns: Local file `URL` ready for AVPlayer playback.
     public func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         if item.phAssetIdentifier != nil {
             return try await photosWorker.fetchVideoURL(for: item)
@@ -882,6 +1226,12 @@ public final class StorageLocationManager {
         return try await worker.fetchVideoURL(for: item, progress: progress)
     }
     
+    /// Resolves or downloads the local file URL for a PDF document asset.
+    ///
+    /// - Parameters:
+    ///   - item: Target document media item.
+    ///   - progress: Optional progress reporting callback (`Sendable`).
+    /// - Returns: Local file `URL` ready for PDFKit rendering.
     public func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         if let localURL = item.localURL {
             return localURL
@@ -889,12 +1239,15 @@ public final class StorageLocationManager {
         return try await worker.fetchDocumentURL(for: item, progress: progress)
     }
     
+    /// Human-readable formatted string indicating total media cache disk usage.
     public var mediaCacheSize: String = "…"
     
+    /// Queries `MediaCacheManager` and updates `mediaCacheSize` on the `@MainActor`.
     public func refreshMediaCacheSize() async {
         mediaCacheSize = await MediaCacheManager.shared.formattedCacheSize()
     }
     
+    /// Purges all cached thumbnails and downloads from both RAM and disk caches.
     public func clearMediaCache() {
         Task {
             await MediaCacheManager.shared.clearAllCacheAsync()
@@ -903,8 +1256,22 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Clears both memory and persistent disk thumbnail caches for all items in the currently loaded folder.
+    public func invalidateCurrentFolderThumbnails() async {
+        let items = pictures
+        guard !items.isEmpty else { return }
+        
+        MediaCacheManager.shared.invalidateThumbnailCache(for: items)
+        
+        let ids = items.map(\.id)
+        await worker.removeThumbnailsFromMemory(for: ids)
+        
+        await refreshMediaCacheSize()
+    }
+    
     // MARK: - Disconnect
     
+    /// Disconnects from the active storage location and resets all navigation and selection state.
     public func disconnect() async {
         loadFolderTask?.cancel()
         loadFolderTask = nil

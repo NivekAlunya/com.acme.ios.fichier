@@ -5,11 +5,24 @@
 
 import SwiftUI
 
+/// Grid cell view displaying a media item's thumbnail, file metadata, and interactive selection badges.
+///
+/// Wraps `MediaThumbnailView` with square 1:1 aspect ratio, selection highlight borders,
+/// favorite heart icons, and multi-selection checkboxes.
 struct MediaThumbnailCell: View {
+    /// Storage location manager providing thumbnail caching and retrieval.
     var manager: StorageLocationManager
+    
+    /// Target media item displayed in this grid cell.
     let item: MediaItem
+    
+    /// Maximum pixel bounding dimension for downsampled thumbnail decoding.
     var maxDimension: CGFloat = 260
+    
+    /// Indicates whether this cell is checked in multi-selection mode.
     var isSelected: Bool = false
+    
+    /// Indicates whether the gallery is currently in multi-selection editing mode.
     var isSelectionMode: Bool = false
     
     var body: some View {
@@ -46,6 +59,7 @@ struct MediaThumbnailCell: View {
         }
     }
     
+    /// Visual overlay displaying a checkmark circle during selection mode or a red heart for favorites.
     @ViewBuilder
     private var selectionOrFavoriteOverlay: some View {
         if isSelectionMode {

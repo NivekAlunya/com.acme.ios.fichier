@@ -6,8 +6,18 @@
 import SwiftUI
 import UIKit
 
+/// SwiftUI bridge wrapping `UIScrollView` to deliver native pinch-to-zoom and double-tap gestures.
+///
+/// Configures a `UIScrollView` hosting a scale-aspect-fit `UIImageView`:
+/// - Minimum zoom scale: `1.0` (fit-to-bounds).
+/// - Maximum zoom scale: `4.0` (deep pixel inspection).
+/// - Gesture disambiguation: Single tap requires double tap to fail (`singleTap.require(toFail: doubleTap)`).
+/// - Resets zoom scale to `1.0` whenever the underlying image asset changes.
 struct ZoomableImageView: UIViewRepresentable {
+    /// Full-resolution image displayed in the zoomable canvas.
     let image: UIImage
+    
+    /// Single tap callback invoked to toggle HUD visibility.
     let onTap: () -> Void
 
     func makeUIView(context: Context) -> UIScrollView {

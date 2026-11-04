@@ -6,16 +6,32 @@
 import AVFoundation
 import Observation
 
+/// Coordinates audio track selection, closed-caption subtitle parsing, and playback rate for `VideoPlayerController`.
+///
+/// ### Core Responsibilities
+/// - Asynchronously loads audible and legible media selection groups from `AVAsset`.
+/// - Configures `AVPlayerItemLegibleOutput` with `VideoSubtitleDelegate` to capture subtitle text.
+/// - Manages subtitle toggle states and audio track switching on the active `AVPlayerItem`.
+/// - Controls playback rate adjustments (`0.5×` through `2.0×`) applied to `AVPlayer`.
 @Observable
 @MainActor
 public final class VideoTrackManager {
+    /// Discovered audio tracks available for the current video.
     public private(set) var availableAudios: [VideoTrackOption] = []
-    public private(set) var selectedAudioID: String? = nil
     
+    /// Unique identifier of the currently selected audio track.
+    public private(set) var selectedAudioID: String?
+    
+    /// Discovered subtitle and closed caption options, including the synthetic "Off" option.
     public private(set) var availableSubtitles: [VideoTrackOption] = []
-    public private(set) var selectedSubtitleID: String? = nil
+    
+    /// Unique identifier of the currently selected subtitle option.
+    public private(set) var selectedSubtitleID: String?
+    
+    /// Live rendered subtitle string currently visible on screen.
     public var currentSubtitleText: String = ""
     
+    /// Active video playback speed multiplier.
     public var playbackRate: VideoPlaybackRate = .normal
     
     private var audibleGroup: AVMediaSelectionGroup?
@@ -24,12 +40,15 @@ public final class VideoTrackManager {
     private var subtitleDelegate: VideoSubtitleDelegate?
     private weak var loadedPlayerItem: AVPlayerItem?
     
+    /// Designated public initializer.
     public init() {}
     
+    /// Indicates whether the media item possesses alternative audio streams or subtitle tracks.
     public var hasOptions: Bool {
         availableAudios.count > 1 || !availableSubtitles.isEmpty
     }
     
+    /// Resets all loaded track options, disconnecting delegates and outputs.
     public func reset() {
         if let output = legibleOutput {
             loadedPlayerItem?.remove(output)
@@ -46,6 +65,9 @@ public final class VideoTrackManager {
         subtitleDelegate = nil
     }
     
+    /// Asynchronously inspects the player item asset to populate audio and subtitle choices.
+    ///
+    /// - Parameter playerItem: Active `AVPlayerItem` instance.
     public func loadTracks(for playerItem: AVPlayerItem) async {
         guard loadedPlayerItem !== playerItem else { return }
         reset()
@@ -123,10 +145,14 @@ public final class VideoTrackManager {
         }
     }
     
+    /// Indicates whether a subtitle track is currently enabled.
     public var isSubtitlesEnabled: Bool {
         selectedSubtitleID != nil && selectedSubtitleID != "sub_off"
     }
     
+    /// Toggles subtitle state between "Off" and the first available subtitle track.
+    ///
+    /// - Parameter playerItem: Active `AVPlayerItem`.
     public func toggleSubtitles(in playerItem: AVPlayerItem) {
         if isSubtitlesEnabled {
             if let offOption = availableSubtitles.first(where: { $0.id == "sub_off" }) {
@@ -139,12 +165,22 @@ public final class VideoTrackManager {
         }
     }
     
+    /// Selects an audio stream for the active video.
+    ///
+    /// - Parameters:
+    ///   - option: Chosen audio track option.
+    ///   - playerItem: Active `AVPlayerItem`.
     public func selectAudio(option: VideoTrackOption, in playerItem: AVPlayerItem) {
         guard let group = audibleGroup, let mediaOption = option.mediaOption else { return }
         playerItem.select(mediaOption, in: group)
         selectedAudioID = option.id
     }
     
+    /// Selects a subtitle stream or disables subtitles.
+    ///
+    /// - Parameters:
+    ///   - option: Chosen subtitle option.
+    ///   - playerItem: Active `AVPlayerItem`.
     public func selectSubtitle(option: VideoTrackOption, in playerItem: AVPlayerItem) {
         guard let group = legibleGroup else { return }
         if option.mediaOption == nil {
@@ -154,6 +190,11 @@ public final class VideoTrackManager {
         selectedSubtitleID = option.id
     }
     
+    /// Configures the playback speed rate on the player.
+    ///
+    /// - Parameters:
+    ///   - rate: Target rate enum.
+    ///   - player: Active `AVPlayer`.
     public func setPlaybackRate(_ rate: VideoPlaybackRate, for player: AVPlayer) {
         playbackRate = rate
         player.defaultRate = rate.rawValue

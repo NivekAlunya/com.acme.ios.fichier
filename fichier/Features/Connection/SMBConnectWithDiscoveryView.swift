@@ -5,14 +5,32 @@
 
 import SwiftUI
 
+/// Modal sheet presenting local network Bonjour discovery alongside manual SMB connection inputs.
+///
+/// Provides a guided connection workflow:
+/// 1. Continuously scans the local Wi-Fi / Ethernet subnet using `SMBHostDiscovery` for `_smb._tcp` endpoints.
+/// 2. Allows selecting a discovered server to auto-fill its resolved IPv4 address and Bonjour display name.
+/// 3. Accepts manual host address, username, and password credentials.
+/// 4. Validates connection against `StorageLocationManager` and dismisses upon successful authentication.
 struct SMBConnectWithDiscoveryView: View {
     @Environment(\.dismiss) private var dismiss
+    
+    /// Storage location manager receiving connection parameters.
     var smbManager: StorageLocationManager
+    
+    /// Bonjour network service browser managing local host discovery.
     @State private var discovery = SMBHostDiscovery()
     
+    /// User-entered or Bonjour-selected server IP address / hostname.
     @State private var selectedHost = ""
+    
+    /// Optional user-friendly display name for the server.
     @State private var selectedHostname = ""
+    
+    /// SMB authentication username.
     @State private var username = ""
+    
+    /// Plaintext SMB authentication password.
     @State private var password = ""
     
     var body: some View {

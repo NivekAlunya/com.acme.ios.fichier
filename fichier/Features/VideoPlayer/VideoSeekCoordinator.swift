@@ -6,31 +6,65 @@
 import AVFoundation
 import Observation
 
+/// Coordinates responsive live scrubbing and exact frame seeking for `VideoPlayerController`.
+///
+/// ### Algorithmic Details & Seek Optimization
+/// Rapid timeline scrubbing across remote network video presents distinct performance challenges:
+/// 1. **Dynamic Seek Tolerances**: For small continuous finger drags (<1.0s), uses a tight tolerance of `0.5s`
+///    for responsive keyframe updates; for moderate jumps (<5.0s), relaxes to `1.5s`; for large jumps, uses
+///    `.positiveInfinity` to jump instantly to the nearest sync keyframe without decoding inter-frames.
+/// 2. **Stationary Exact Seeking**: When finger dragging pauses for `250ms`, automatically promotes the preview
+///    to an exact-frame zero-tolerance seek (`toleranceBefore: .zero, toleranceAfter: .zero`).
+/// 3. **Generation Counter Invalidation**: Increments `seekGeneration` on every seek dispatch to ensure asynchronous
+///    completions from earlier requests never overwrite later user seek targets.
+/// 4. **Watchdog Timer**: Implements a 2.5-second watchdog task during `finishSeeking` that guarantees playback
+///    resumes if AVPlayer's completion handler stalls due to network buffering.
 @Observable
 @MainActor
 public final class VideoSeekCoordinator {
+    /// Indicates whether timeline bar dragging is currently active.
     public var isScrubbingTimeline: Bool = false
+    
+    /// Indicates whether interactive horizontal drag gesture scrubbing is active.
     public var isScrubbingWithGesture: Bool = false
+    
+    /// Indicates whether an asynchronous seek request is actively in flight.
     public var isSeekingFrame: Bool = false
+    
+    /// Indicates whether the final completion seek is executing.
     public var isFinishingSeek: Bool = false
     
+    /// Playback timestamp in seconds when gesture scrubbing originated.
     public var initialScrubTime: Double = 0
+    
+    /// Records whether video was actively playing prior to scrub initiation to resume automatically on release.
     public var wasPlayingBeforeScrub: Bool = false
-    public var pendingSeekSeconds: Double? = nil
+    
+    /// Queued seek timestamp awaiting throttle window completion.
+    public var pendingSeekSeconds: Double?
+    
+    /// Timestamp of the most recent seek dispatch.
     public var lastSeekTime: Date = Date.distantPast
+    
+    /// Timestamp target in seconds of the most recent seek dispatch.
     public var lastSeekTargetSeconds: Double = 0
+    
+    /// Monotonically increasing generation number distinguishing active from obsolete seek operations.
     public var seekGeneration: Int = 0
     
     private var stationarySeekTask: Task<Void, Never>?
     private var throttleSeekTask: Task<Void, Never>?
     private var seekWatchdogTask: Task<Void, Never>?
     
+    /// Designated public initializer.
     public init() {}
     
+    /// Indicates whether any form of user scrubbing is currently active.
     public var isScrubbing: Bool {
         isScrubbingTimeline || isScrubbingWithGesture
     }
     
+    /// Initiates timeline slider scrubbing, pausing playback if necessary.
     public func startTimelineScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, player: AVPlayer?) {
         guard !isScrubbingTimeline else { return }
         isScrubbingTimeline = true
@@ -41,10 +75,12 @@ public final class VideoSeekCoordinator {
         }
     }
     
+    /// Concludes timeline slider scrubbing.
     public func endTimelineScrubbing() {
         isScrubbingTimeline = false
     }
     
+    /// Initiates full-screen gesture scrubbing, pausing playback if necessary.
     public func startGestureScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, player: AVPlayer?) {
         guard !isScrubbingWithGesture else { return }
         isScrubbingWithGesture = true
@@ -56,10 +92,12 @@ public final class VideoSeekCoordinator {
         initialScrubTime = currentPlaybackSeconds
     }
     
+    /// Concludes full-screen gesture scrubbing.
     public func endGestureScrubbing() {
         isScrubbingWithGesture = false
     }
     
+    /// Determines appropriate tolerance bounds based on scrub distance delta.
     public func liveSeekTolerance(for targetSeconds: Double) -> CMTime {
         let delta = abs(targetSeconds - lastSeekTargetSeconds)
         if delta < 1.0 {
@@ -71,6 +109,7 @@ public final class VideoSeekCoordinator {
         }
     }
     
+    /// Submits a request for live frame seeking, throttling dispatches to a minimum 100ms interval.
     public func requestLiveFrameSeek(to targetSeconds: Double, player: AVPlayer?) {
         let now = Date()
         let elapsed = now.timeIntervalSince(lastSeekTime)
@@ -108,6 +147,7 @@ public final class VideoSeekCoordinator {
         executeLiveSeek(to: targetSeconds, tolerance: liveSeekTolerance(for: targetSeconds), player: player)
     }
     
+    /// Dispatches an immediate seek operation to the player with specified tolerance.
     public func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime, player: AVPlayer?) {
         guard let player = player else { return }
         throttleSeekTask?.cancel()
@@ -134,6 +174,7 @@ public final class VideoSeekCoordinator {
         }
     }
     
+    /// Upgrades the active preview to an exact frame seek when scrubbing motion pauses for 250ms.
     public func performStationaryExactSeek(to targetSeconds: Double, player: AVPlayer?) {
         guard let player = player else { return }
         throttleSeekTask?.cancel()
@@ -161,6 +202,7 @@ public final class VideoSeekCoordinator {
         }
     }
     
+    /// Concludes user scrubbing, executing a final seek and resuming playback if desired.
     public func finishSeeking(
         at targetSeconds: Double,
         resumePlaying: Bool,
@@ -220,6 +262,7 @@ public final class VideoSeekCoordinator {
         }
     }
     
+    /// Resets all scrubbing state, cancelling in-flight throttle and watchdog tasks.
     public func reset() {
         stationarySeekTask?.cancel()
         stationarySeekTask = nil

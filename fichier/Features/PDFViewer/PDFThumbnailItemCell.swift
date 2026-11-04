@@ -6,14 +6,35 @@
 import SwiftUI
 import PDFKit
 
+/// Single thumbnail item view used inside `PDFLeadingThumbnailSidebarView`.
+///
+/// Features:
+/// - Asynchronous thumbnail rendering from `PDFPage.thumbnail(of:for:)` via `.task(id: pageNumber)`.
+/// - Rounded rectangular badge displaying the 1-based page number.
+/// - Active selection border and glowing accent shadow when the page is currently visible on screen.
 public struct PDFThumbnailItemCell: View {
+    /// Reference to the underlying PDFKit page object.
     public let page: PDFPage?
+    
+    /// 1-based page index.
     public let pageNumber: Int
+    
+    /// Indicates whether this page is currently visible in the active document viewer.
     public let isSelected: Bool
+    
+    /// Callback triggered when this thumbnail cell is tapped by the user.
     public let onSelect: () -> Void
     
+    /// Cached bitmap thumbnail of the page.
     @State private var thumbnail: UIImage?
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - page: PDFKit page reference.
+    ///   - pageNumber: 1-based page number.
+    ///   - isSelected: Whether page is currently active.
+    ///   - onSelect: Tap selection callback.
     public init(
         page: PDFPage?,
         pageNumber: Int,

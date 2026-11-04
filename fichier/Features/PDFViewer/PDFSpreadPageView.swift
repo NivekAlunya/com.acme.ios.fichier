@@ -6,11 +6,26 @@
 import SwiftUI
 import PDFKit
 
+/// Renders a single spread (one or two facing pages) within `PDFDetailView`'s book mode `TabView`.
+///
+/// Lays out pages side-by-side using `PDFPageCanvasRepresentable`, applying realistic drop shadows,
+/// adaptive horizontal spacing for landscape orientations, and tap gesture detection to toggle HUD controls.
 public struct PDFSpreadPageView: View {
+    /// Reference to the active `PDFDocument`.
     public let document: PDFDocument
+    
+    /// Target spread descriptor containing page indices for this view.
     public let spread: PDFSpread
+    
+    /// Action callback triggered when the user taps anywhere on the spread canvas.
     public let onTap: () -> Void
     
+    /// Memberwise designated initializer.
+    ///
+    /// - Parameters:
+    ///   - document: Underlying PDFKit document.
+    ///   - spread: Spread descriptor.
+    ///   - onTap: Tap gesture handler.
     public init(document: PDFDocument, spread: PDFSpread, onTap: @escaping () -> Void) {
         self.document = document
         self.spread = spread

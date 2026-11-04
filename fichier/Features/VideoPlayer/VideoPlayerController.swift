@@ -8,39 +8,96 @@ import AVKit
 import Observation
 import OSLog
 
+/// Master `@Observable` controller isolated to the `@MainActor` driving custom AVPlayer video playback.
+///
+/// ### Core Responsibilities
+/// - **Asset Initialization & Streaming**: Plays local and cached files directly, or configures on-demand SMB
+///   streaming using custom `smbstream://` URLs handled by `SMBResourceLoaderDelegate`.
+/// - **Playback State Machine**: Tracks state transitions across `.idle`, `.loading`, `.buffering`, `.playing`,
+///   `.paused`, and `.failed` with continuous `timeControlStatus` monitoring.
+/// - **Progress Preservation**: Automatically restores saved playback timestamps from `VideoPlaybackStore`
+///   (suppressed if video was previously finished or within 4.0s of ending) and debounces real-time progress saves.
+/// - **Audio Session Management**: Activates `.playback` mode on `AVAudioSession` on background threads to ensure
+///   uninterrupted playback through system mute switches.
+/// - **Picture-in-Picture & Tracks**: Coordinates inline PiP via `CustomVideoPlayerCoordinator` and track selection
+///   via `VideoTrackManager`.
+/// - **Error Sanitization**: Redacts network IP addresses and SMB user credentials from user-facing error dialogs.
 @Observable
 @MainActor
 public final class VideoPlayerController {
+    /// Shared storage location manager handling network workers and credentials.
     public let manager: StorageLocationManager
+    
+    /// Playlist of video items available in the active playback queue.
     public let videos: [MediaItem]
+    
+    /// The currently selected video media item.
     public var currentItem: MediaItem
+    
+    /// The video media item currently mounted and playing in the AVPlayer instance.
     public private(set) var currentlyLoadedItem: MediaItem?
     
+    /// Underlying AVFoundation player instance.
     public private(set) var player: AVPlayer?
+    
+    /// Current AVURLAsset reference configured for custom resource loading.
     private var currentAsset: AVURLAsset?
+    
+    /// Active resource loader delegate streaming chunks over SMB.
     private var loaderDelegate: SMBResourceLoaderDelegate?
     
+    /// Current high-level playback state.
     public var playbackState: VideoPlaybackState = .idle
-    public var errorMessage: String? = nil
     
+    /// User-presentable sanitized error description, or `nil` if healthy.
+    public var errorMessage: String?
+    
+    /// Current playback progress in seconds.
     public var currentPlaybackSeconds: Double = 0
+    
+    /// Total duration of the loaded video in seconds.
     public var totalDurationSeconds: Double = 0
+    
+    /// Current player volume level normalized between `0.0` and `1.0`.
     public var volume: Double = 1.0
+    
+    /// Indicates whether audio output is currently muted.
     public var isMuted: Bool = false
+    
+    /// Controls visibility of floating top, center, and bottom HUD overlays.
     public var showControls: Bool = true
     
+    /// Indicates whether Picture-in-Picture presentation is actively running.
     public var isPiPActive: Bool = false
+    
+    /// Coordinator managing Picture-in-Picture lifecycle and delegate callbacks.
     public let pipCoordinator = CustomVideoPlayerCoordinator()
+    
+    /// Manager handling audio tracks, subtitle streams, and playback speed.
     public let trackManager = VideoTrackManager()
+    
+    /// Coordinator managing timeline scrubbing, live frame seeking, and debounce timers.
     public let seekCoordinator = VideoSeekCoordinator()
     
+    /// Indicates whether export to Camera Roll is actively in flight.
     public var isSaving: Bool = false
-    public var saveStatusMessage: String? = nil
-    public var shareableVideoURL: URL? = nil
-    public var resumedToastMessage: String? = nil
     
+    /// Temporary toast message displayed after saving to Camera Roll.
+    public var saveStatusMessage: String?
+    
+    /// Local file URL suitable for sharing via the system share sheet.
+    public var shareableVideoURL: URL?
+    
+    /// Temporary toast banner notifying the user that playback resumed from a saved position.
+    public var resumedToastMessage: String?
+    
+    /// Indicates whether playback started by restoring a previously saved timestamp.
     public var didRestorePlaybackPosition: Bool = false
-    public var restoredFromSeconds: Double? = nil
+    
+    /// The timestamp in seconds from which playback was restored.
+    public var restoredFromSeconds: Double?
+    
+    /// Timestamp when playback began for this video.
     public var playbackStartTime: Date = Date()
     
     private var hideControlsTask: Task<Void, Never>?
@@ -50,6 +107,12 @@ public final class VideoPlayerController {
     private var resumeBannerTask: Task<Void, Never>?
     private var periodicTimeObserverToken: Any?
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - videos: Array of candidate media items (filtered for video types).
+    ///   - initialItem: Initial video media item to load.
     public init(
         manager: StorageLocationManager,
         videos: [MediaItem],
@@ -61,14 +124,21 @@ public final class VideoPlayerController {
         self.currentItem = initialItem
     }
     
+    /// Zero-based index of the current video within the active playlist.
     public var currentIndex: Int {
         videos.firstIndex(where: { $0.id == currentItem.id }) ?? 0
     }
     
+    /// Loads and begins playback of a specified media item.
+    ///
+    /// - Parameter item: Target video media item.
     public func loadItem(_ item: MediaItem) {
         setupPlayer(for: item)
     }
     
+    /// Initializes player instances, audio session, and resource loaders for a video item.
+    ///
+    /// - Parameter item: The media item to mount and play.
     public func setupPlayer(for item: MediaItem) {
         playbackStartTime = Date()
         didRestorePlaybackPosition = false
@@ -141,6 +211,7 @@ public final class VideoPlayerController {
             let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem, chunkSize: 512 * 1024)
             self.loaderDelegate = delegate
             
+            // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
@@ -156,6 +227,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Configures volume, saved resume positions, periodic time observers, and track managers.
     private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem, loadTracksImmediately: Bool) {
         self.volume = Double(avPlayer.volume)
         self.isMuted = avPlayer.isMuted
@@ -241,11 +313,12 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Continuous background monitoring task checking AVPlayer health and buffering states every 120ms.
     private func startContinuousPlaybackMonitoring(for avPlayer: AVPlayer) {
         monitorTask?.cancel()
         monitorTask = Task { @MainActor [weak self, weak avPlayer] in
             var tracksLoaded = false
-            var waitingStartTime: Date? = nil
+            var waitingStartTime: Date?
             
             while !Task.isCancelled {
                 guard let self, let p = avPlayer else { break }
@@ -314,6 +387,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Toggles between playing and paused states, wrapping to beginning if reaching the end.
     public func togglePlayPause() {
         guard let player = player else { return }
         if player.timeControlStatus != .paused {
@@ -335,6 +409,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Starts or resumes playback.
     public func play() {
         guard let player = player, player.timeControlStatus == .paused else { return }
         player.play()
@@ -342,6 +417,7 @@ public final class VideoPlayerController {
         scheduleControlsAutoHide()
     }
     
+    /// Pauses active playback and retains control bar visibility.
     public func pause() {
         guard let player = player, player.timeControlStatus != .paused else { return }
         player.pause()
@@ -349,10 +425,14 @@ public final class VideoPlayerController {
         hideControlsTask?.cancel()
     }
     
+    /// Performs an exact seek to a specific timestamp in seconds.
     public func seekTo(_ targetSeconds: Double, resumePlaying: Bool = false) {
         finishSeeking(at: targetSeconds, resumePlaying: resumePlaying)
     }
     
+    /// Jumps forward or backward relative to the current playback position.
+    ///
+    /// - Parameter deltaSeconds: Offset in seconds (e.g. +10 or -10).
     public func seekRelative(_ deltaSeconds: Double) {
         let current = currentPlaybackSeconds
         let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
@@ -366,6 +446,7 @@ public final class VideoPlayerController {
         scheduleControlsAutoHide()
     }
     
+    /// Executes the final seek when the user releases timeline or gesture scrubbing.
     public func finishSeeking(at targetSeconds: Double, resumePlaying: Bool) {
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
@@ -399,15 +480,18 @@ public final class VideoPlayerController {
         )
     }
     
+    /// Callback from timeline scrubber when the user finishes dragging.
     public func onTimelineSeek(targetSeconds: Double) {
         finishSeeking(at: targetSeconds, resumePlaying: seekCoordinator.wasPlayingBeforeScrub)
     }
     
+    /// Callback from timeline scrubber as the user actively drags their finger.
     public func onTimelineScrubbing(targetSeconds: Double) {
         currentPlaybackSeconds = targetSeconds
         seekCoordinator.requestLiveFrameSeek(to: targetSeconds, player: player)
     }
     
+    /// Callback tracking changes in timeline scrubbing active state.
     public func onTimelineScrubStateChanged(isScrubbing: Bool) {
         if isScrubbing {
             guard !seekCoordinator.isScrubbingTimeline else { return }
@@ -426,6 +510,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Toggles the audio output between muted and unmuted.
     public func toggleMute() {
         isMuted.toggle()
         player?.isMuted = isMuted
@@ -435,6 +520,9 @@ public final class VideoPlayerController {
         scheduleControlsAutoHide()
     }
     
+    /// Adjusts the player volume by a given delta offset.
+    ///
+    /// - Parameter delta: Normalized volume delta (e.g. `+0.1` or `-0.1`).
     public func adjustVolume(by delta: Double) {
         let newVol = min(max(0.0, volume + delta), 1.0)
         volume = newVol
@@ -447,6 +535,7 @@ public final class VideoPlayerController {
         scheduleControlsAutoHide()
     }
     
+    /// Navigates to the next video in the queue with cyclic wrapping.
     public func goToNext() {
         guard !videos.isEmpty else { return }
         let nextIndex = (currentIndex + 1) % videos.count
@@ -455,6 +544,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Advances to the next video upon playback reaching the end (does not loop to start).
     public func playNextVideo() {
         guard videos.count > 1 else { return }
         let nextIndex = currentIndex + 1
@@ -465,6 +555,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Navigates to the previous video in the queue with cyclic wrapping.
     public func goToPrevious() {
         guard !videos.isEmpty else { return }
         let prevIndex = (currentIndex - 1 + videos.count) % videos.count
@@ -473,6 +564,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Downloads or copies the current video file into the system Photos library.
     public func saveToCameraRoll() {
         isSaving = true
         saveTask?.cancel()
@@ -501,6 +593,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Restarts the video from `0:00` and purges any saved resume progress from persistent store.
     public func restartVideo() {
         guard player != nil else { return }
         let targetItem = currentlyLoadedItem ?? currentItem
@@ -515,6 +608,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Displays a temporary banner notifying the user that playback resumed from a saved timestamp.
     public func showResumeBanner(at savedSeconds: Double) {
         resumeBannerTask?.cancel()
         withAnimation(.easeInOut(duration: 0.3)) {
@@ -529,6 +623,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Formats a time in seconds into a standard digital clock string (e.g. "1:23" or "1:02:45").
     public func formatSeconds(_ totalSeconds: Double) -> String {
         guard totalSeconds.isFinite && !totalSeconds.isNaN && totalSeconds >= 0 else { return "0:00" }
         let secs = Int(totalSeconds)
@@ -542,6 +637,9 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Schedules automatic fading of HUD overlay controls after a period of user inactivity.
+    ///
+    /// - Parameter delay: Delay in seconds (defaults to 3.5s).
     public func scheduleControlsAutoHide(delay: Double = 3.5) {
         guard showControls && playbackState.isPlaying && !playbackState.isBuffering && !seekCoordinator.isScrubbing else {
             hideControlsTask?.cancel()
@@ -558,17 +656,20 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Cancels the auto-hide timer, keeping controls visible.
     public func cancelAutoHideTimer() {
         hideControlsTask?.cancel()
         hideControlsTask = nil
     }
     
+    /// Resets the auto-hide timer if controls are currently displayed and playing.
     public func resetAutoHideTimer() {
         if showControls && playbackState.isPlaying {
             scheduleControlsAutoHide()
         }
     }
     
+    /// Toggles the visibility of overlay HUD controls.
     public func toggleControls() {
         guard !seekCoordinator.isScrubbing else { return }
         withAnimation(.easeInOut(duration: 0.35)) {
@@ -581,11 +682,15 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Action handler for two-finger tap gestures, toggling play and pause with haptic feedback.
     public func handleTwoFingerTap() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         togglePlayPause()
     }
     
+    /// Tears down the active player instance, flushing saved progress and cancelling in-flight tasks.
+    ///
+    /// - Parameter deactivateAudioSession: Whether to release the system audio session.
     public func tearDownPlayer(deactivateAudioSession: Bool = false) {
         if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
@@ -631,6 +736,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Notification handler invoked when the active player item reaches its end timestamp.
     public func handleItemDidPlayToEndTime(_ notification: Notification) {
         guard let item = notification.object as? AVPlayerItem,
               let current = player?.currentItem,
@@ -658,6 +764,7 @@ public final class VideoPlayerController {
         playNextVideo()
     }
     
+    /// Notification handler invoked when playback fails prematurely before reaching the end.
     public func handleItemFailedToPlayToEndTime(_ notification: Notification) {
         guard let item = notification.object as? AVPlayerItem,
               let current = player?.currentItem,
@@ -670,6 +777,7 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Saves current playback progress when the application enters the background scene phase.
     public func handleScenePhaseBackground() {
         if let p = player, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
@@ -681,6 +789,7 @@ public final class VideoPlayerController {
     
     // MARK: - Error Sanitization
     
+    /// Strips sensitive host IP addresses and SMB connection credentials from error message strings.
     private func sanitizeErrorDescription(_ rawDescription: String) -> String {
         // Redact IP addresses (e.g. 192.168.1.100)
         var sanitized = rawDescription.replacingOccurrences(

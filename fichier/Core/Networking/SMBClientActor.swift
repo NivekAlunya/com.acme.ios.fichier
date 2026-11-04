@@ -11,14 +11,38 @@ import AMSMB2
 import AVFoundation
 import OSLog
 
-/// Serial actor that ensures libsmb2 operations never collide concurrently on the same socket
+/// A serialized network actor responsible for coordinating all low-level SMB2/3 operations.
+///
+/// ### Architecture & Concurrency Overview
+/// - **Socket Thread-Safety**: The underlying C-library `libsmb2` is not thread-safe over a single TCP socket connection.
+///   Isolating all client commands within `actor SMBClientActor` strictly serializes I/O requests, preventing protocol framing collisions.
+/// - **Lockless Synchronous Thumbnail Lookups**: Exposes `thumbnailCache` as `nonisolated` via `ThreadSafeMemoryCache`
+///   so SwiftUI rendering passes can query cached images synchronously without awaiting the actor's busy I/O mailbox.
+/// - **Atomic Persistence**: Large video and document downloads stream to ephemeral `.part` files on disk and are promoted
+///   atomically to their destination paths once integrity and cancellation checks pass.
+/// - **Zero-Full-Download EXIF Streaming**: Extracts photo metadata by issuing a 64 KB range request over SMB, bypassing
+///   multi-megabyte full-file downloads.
 actor SMBClientActor {
+    
+    // MARK: - State Properties
+    
+    /// The active `AMSMB2` manager instance managing the underlying TCP socket and protocol state.
     private var client: SMB2Manager?
+    
+    /// The unique identifier of the currently connected saved server configuration.
     private var currentConnectionID: String = ""
+    
+    /// The name of the currently mounted SMB share (e.g. "Public", "Media").
     private var currentShareName: String?
+    
+    /// Active directory identifier used to cancel or drop out-of-date thumbnail requests when the user rapidly switches folders.
     private var activeFolderID: String?
-    /// Thread-safe in-memory thumbnail cache allowing lockless, synchronous lookup without serializing behind SMB socket I/O
+    
+    /// High-performance thread-safe in-memory cache for downsampled thumbnails.
+    /// Marked `nonisolated` to allow instant, non-blocking synchronous cache hits on the main thread.
     nonisolated private let thumbnailCache = ThreadSafeMemoryCache<NSString, UIImage>()
+    
+    /// Bounded in-memory cache for full-resolution pictures, sized dynamically according to physical system RAM.
     private let fullImageCache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 5
@@ -27,20 +51,46 @@ actor SMBClientActor {
         cache.totalCostLimit = Int(min(Int64(250 * 1024 * 1024), Int64(physicalMemory / 16)))
         return cache
     }()
+    
+    /// In-memory cache storing parsed EXIF metadata boxes indexed by `MediaItem.id`.
     private let metadataCache = NSCache<NSString, PictureEXIFBox>()
     
+    // MARK: - Active Directory Scope
+    
+    /// Updates the active folder identifier to facilitate cooperative cancellation of background thumbnail queues.
+    ///
+    /// - Parameter id: The unique path or ID string of the newly navigated directory.
     func setActiveFolder(id: String?) {
         self.activeFolderID = id
     }
     
+    // MARK: - Nonisolated In-Memory Thumbnail Cache Access
+    
+    /// Synchronously retrieves a cached thumbnail from memory without queuing on the actor mailbox.
+    ///
+    /// - Parameter key: The cache key string.
+    /// - Returns: The cached `UIImage`, or `nil` if not present.
     nonisolated func getCachedThumbnail(forKey key: NSString) -> UIImage? {
         thumbnailCache.object(forKey: key)
     }
     
+    /// Stores a rendered thumbnail directly into the nonisolated in-memory cache.
+    ///
+    /// - Parameters:
+    ///   - image: The downsampled thumbnail image.
+    ///   - key: The unique cache key string.
     nonisolated func cacheThumbnail(_ image: UIImage, forKey key: NSString) {
         thumbnailCache.setObject(image, forKey: key)
     }
     
+    // MARK: - Share Enumeration & Connection Management
+    
+    /// Maps raw share names and comments into canonical `MediaItem` folder entities.
+    ///
+    /// - Parameters:
+    ///   - shares: Raw tuples containing share names and commentary returned by the SMB IPC$ pipe.
+    ///   - connectionID: The connection identifier assigned to the host.
+    /// - Returns: A sorted list of root directory `MediaItem` instances.
     private func makeShareItems(from shares: [(name: String, comment: String)], connectionID: String) -> [MediaItem] {
         shares
             .map { share in
@@ -57,13 +107,20 @@ actor SMBClientActor {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
     
-    /// Connects to the server and enumerates all shared folders automatically
+    /// Connects to an SMB host, validates user credentials, and automatically enumerates all non-hidden shared volumes.
+    ///
+    /// - Parameters:
+    ///   - url: The network URL identifying the host (`smb://host:port`).
+    ///   - credential: The username and password credential pair.
+    ///   - connectionID: The stable identifier for the connection profile.
+    /// - Returns: A list of discovered root shares.
+    /// - Throws: `URLError(.badURL)` if connection initialization fails.
     func connectAndListShares(url: URL, credential: URLCredential, connectionID: String = "") async throws -> [MediaItem] {
         guard let manager = SMB2Manager(url: url, credential: credential) else {
             throw URLError(.badURL)
         }
         
-        // Fetch all non-hidden shares from the Mac mini via IPC$
+        // Fetch all non-hidden shares from the remote host via IPC$
         let shares = try await manager.listShares(enumerateHidden: false)
         try? await self.client?.disconnectShare()
         self.client = manager
@@ -73,7 +130,10 @@ actor SMBClientActor {
         return makeShareItems(from: shares, connectionID: connectionID)
     }
     
-    /// Re-fetches the list of shared folders on the currently connected server
+    /// Refreshes the list of available shares on the currently active connection.
+    ///
+    /// - Returns: An updated list of root shares.
+    /// - Throws: `URLError(.notConnectedToInternet)` if no client session is currently active.
     func refreshShares() async throws -> [MediaItem] {
         guard let client else {
             throw URLError(.notConnectedToInternet)
@@ -83,8 +143,13 @@ actor SMBClientActor {
         return makeShareItems(from: shares, connectionID: self.currentConnectionID)
     }
     
-    /// Ensures connection to a specific share, optionally forcing a disconnect & reconnect
-    /// if a previous socket error occurred.
+    /// Mounts and connects to a specific named share if not already active, optionally forcing a socket reconnection.
+    ///
+    /// - Parameters:
+    ///   - shareName: The volume name to connect to.
+    ///   - forceReconnect: When `true`, explicitly tears down existing tree connections before reconnecting.
+    /// - Returns: The verified `SMB2Manager` instance ready for file I/O.
+    /// - Throws: `URLError(.notConnectedToInternet)` if disconnected.
     private func ensureConnected(to shareName: String, forceReconnect: Bool = false) async throws -> SMB2Manager {
         guard let client else {
             throw URLError(.notConnectedToInternet)
@@ -100,6 +165,7 @@ actor SMBClientActor {
         return client
     }
     
+    /// Disconnects from the current SMB share and purges all in-memory image and metadata caches.
     func disconnect() async {
         try? await client?.disconnectShare()
         client = nil
@@ -110,8 +176,21 @@ actor SMBClientActor {
         metadataCache.removeAllObjects()
     }
     
-    /// Scans a directory inside a specific share and returns both its subfolders and its media files.
-    /// Includes automatic retry with socket reconnection to survive momentary network drops.
+    // MARK: - Directory Enumeration
+    
+    /// Scans a directory within a specific share and segregates entries into subfolders and supported media files.
+    ///
+    /// ### Complex Code Breakdown:
+    /// - **Automatic Socket Recovery**: Executes inside an attempt loop (`maxAttempts = 2`). If a network glitch drops
+    ///   the TCP session, attempt 2 triggers `ensureConnected(..., forceReconnect: true)` with backoff sleep.
+    /// - **Cancellation Checking**: Evaluates `Task.checkCancellation()` before and after every asynchronous network call.
+    /// - **Hidden File Filtering**: Automatically ignores UNIX hidden entries (starting with `.`) and dot-underscore AppleDouble files.
+    ///
+    /// - Parameters:
+    ///   - shareName: The name of the share volume.
+    ///   - path: The directory path relative to the share root.
+    /// - Returns: A tuple containing sorted subfolders and media items.
+    /// - Throws: `CancellationError` if cancelled, or network error upon exhausted attempts.
     func scanFolder(shareName: String, at path: String) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
         let maxAttempts = 2
         var lastError: Error?
@@ -185,8 +264,23 @@ actor SMBClientActor {
         throw lastError ?? URLError(.cannotConnectToHost)
     }
     
-    /// Downloads and downsamples a picture/video thumbnail sequentially with 2-tier cache (RAM + Disk).
-    /// If expectedFolderID doesn't match the current activeFolderID, it bails immediately.
+    // MARK: - Thumbnail Retrieval & Downsampling
+    
+    /// Fetches and downsamples a media thumbnail using a 2-tier caching hierarchy (RAM + Disk).
+    ///
+    /// ### Complex Code Breakdown:
+    /// 1. **RAM Cache (Tier 1)**: Checked first via synchronous `ThreadSafeMemoryCache`.
+    /// 2. **Persistent Disk Cache (Tier 2)**: Checks for pre-rendered JPEG thumbnails stored in Caches directory, bypassing SMB I/O entirely.
+    /// 3. **Scope Guard**: Validates `expectedFolderID == activeFolderID` to discard requests if the user has navigated away.
+    /// 4. **PDF Staging**: Remote PDFs stream to a temporary local file so `CGPDFDocument` can render the cover without buffering entire books in RAM.
+    /// 5. **Off-Actor Detached Downsampling**: CPU-intensive image resizing executes within `Task.detached(priority: .userInitiated)`
+    ///    to immediately free up the actor's mailbox for incoming network packets.
+    ///
+    /// - Parameters:
+    ///   - item: The target `MediaItem`.
+    ///   - expectedFolderID: The folder ID at the time the request was dispatched.
+    ///   - maxDimension: Maximum pixel dimension for the rendered thumbnail.
+    /// - Returns: A downsampled `UIImage`, or `nil` on failure or cancellation.
     func fetchThumbnail(for item: MediaItem, expectedFolderID: String? = nil, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
@@ -234,22 +328,35 @@ actor SMBClientActor {
                 return nil
             }
             
-            // Remote PDF: Stream to temporary staging file to avoid loading entire 100MB+ document into RAM
+            // Remote PDF: Fast-path prefix thumbnailing with bounded fallback
             if item.isPDF {
-                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
-                defer { try? FileManager.default.removeItem(at: tempURL) }
-                do {
-                    try await client.downloadItem(atPath: item.path, to: tempURL) { _, _ in
-                        !Task.isCancelled
-                    }
-                    if !Task.isCancelled, let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: tempURL, maxDimension: maxDimension) {
-                        thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                        MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                        return thumb
-                    }
-                } catch {
-                    return nil
+                if let prefixThumb = await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
+                    return prefixThumb
                 }
+                
+                // Fallback for non-linearized documents: fetch full document if within safe bounded size (<= 12 MB)
+                // to prevent socket starvation during gallery browsing
+                let fileSize = item.size > 0 ? item.size : await fetchFileSize(for: item)
+                let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
+                if fileSize > 0 && fileSize <= maxDirectDownloadBytes {
+                    do {
+                        let localURL = try await fetchDocumentURL(for: item)
+                        // fetchDocumentURL internally renders and caches the thumbnail; reuse it directly if available
+                        if let cachedThumb = thumbnailCache.object(forKey: memoryCacheKey) ?? MediaCacheManager.shared.getThumbnail(for: diskKey) {
+                            return cachedThumb
+                        }
+                        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
+                            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                            return thumb
+                        }
+                    } catch {
+                        if !Task.isCancelled {
+                            AppLog.smb.warning("Fallback PDF thumbnailing failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                        }
+                    }
+                }
+                return nil
             }
             
             // Photo Thumbnail Handling
@@ -289,7 +396,86 @@ actor SMBClientActor {
         }
     }
     
-    /// Fetches and streams a video to local disk cache so AVPlayer can play it smoothly
+    /// Attempts fast-path prefix thumbnail generation for linearized / web-optimized PDFs.
+    ///
+    /// Reads only the initial 1 MB prefix of the document. If linearized, Page 1 can be parsed
+    /// and rendered immediately without downloading the full document. If non-linearized, returns `nil`
+    /// without saturating the SMB socket.
+    ///
+    /// - Parameters:
+    ///   - item: The target PDF `MediaItem`.
+    ///   - maxDimension: Maximum thumbnail bounding dimension.
+    /// - Returns: A rendered cover `UIImage`, or `nil` if the document is not linearized or read fails.
+    func fetchPDFPrefixThumbnail(for item: MediaItem, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        
+        // 1. In-memory RAM Cache check
+        if let memoryCached = thumbnailCache.object(forKey: memoryCacheKey) {
+            return memoryCached
+        }
+        
+        // 2. Persistent On-Disk Cache check (Tier 2 - bypasses SMB network entirely if already rendered)
+        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+            thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        
+        do {
+            let client = try await ensureConnected(to: item.shareName)
+            if Task.isCancelled { return nil }
+            
+            // Resolve actual file size to avoid out-of-bounds byte range requests for files < 1 MB
+            var fileSize = item.size
+            if fileSize <= 0 {
+                fileSize = await fetchFileSize(for: item)
+            }
+            guard fileSize > 0 else { return nil }
+            
+            let prefixLength: Int64 = min(fileSize, 1_048_576)
+            let range: Range<Int64> = 0..<prefixLength
+            do {
+                let prefixData = try await client.contents(atPath: item.path, range: range) { _, _ in
+                    !Task.isCancelled
+                }
+                if !prefixData.isEmpty,
+                   let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: prefixData, maxDimension: maxDimension) {
+                    thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                    MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                    return thumb
+                }
+            } catch {
+                if !Task.isCancelled {
+                    AppLog.smb.warning("Fast-path prefix read failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                }
+            }
+            return nil
+        } catch {
+            if !Task.isCancelled {
+                AppLog.smb.error("Failed to connect for PDF prefix thumbnail at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+            }
+            return nil
+        }
+    }
+    
+    // MARK: - Video & Document Local Caching
+    
+    /// Streams a video file from SMB directly to disk cache for smooth AVPlayer playback.
+    ///
+    /// ### Complex Code Breakdown:
+    /// - **Atomic Staging**: Downloads to `.part` file. Upon completion, replaces or moves to final destination.
+    /// - **LRU Eviction**: Calls `evictVideosIfNeeded` to prevent cache bloating, protecting the newly landed file.
+    /// - **Video Thumbnail Upgrading**: Extracts an actual video frame from the downloaded file at 0.5s to replace placeholder icons.
+    ///
+    /// - Parameters:
+    ///   - item: The video `MediaItem`.
+    ///   - progress: Optional callback delivering `(bytesDownloaded, totalBytes)`.
+    /// - Returns: The local `URL` referencing the cached video file.
     func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         let localURL = MediaCacheManager.shared.localVideoURL(for: item)
         if MediaCacheManager.shared.hasCachedVideo(for: item) {
@@ -354,7 +540,12 @@ actor SMBClientActor {
         return localURL
     }
     
-    /// Fetches a document (PDF) to local disk cache so PDFView can render and search it smoothly
+    /// Downloads an entire document (e.g. PDF) to persistent local disk cache so `PDFView` can render and search it.
+    ///
+    /// - Parameters:
+    ///   - item: The document `MediaItem`.
+    ///   - progress: Optional callback delivering `(bytesDownloaded, totalBytes)`.
+    /// - Returns: The local `URL` referencing the cached document file.
     func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
         let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
         if MediaCacheManager.shared.hasCachedDocument(for: item) {
@@ -393,6 +584,9 @@ actor SMBClientActor {
             throw error
         }
         
+        // Evict older documents if cache exceeds limit, protecting the newly downloaded one
+        MediaCacheManager.shared.evictDocumentsIfNeeded(keeping: [localURL])
+        
         // Upgrade thumbnail cache with rendered PDF cover page
         let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
@@ -409,16 +603,36 @@ actor SMBClientActor {
         return localURL
     }
     
-    /// Flushes all in-memory caches to immediately release RAM during system memory pressure warnings
+    /// Flushes all in-memory caches to immediately release RAM upon system low-memory warnings.
     func clearMemoryCache() {
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
         metadataCache.removeAllObjects()
     }
     
-    /// Reads a specific byte range on demand over SMB for video streaming (avoids full file downloads).
-    /// Features automatic retry (up to 3 attempts with exponential backoff) and forces socket reconnection
-    /// if a transient socket drop, broken pipe, or timeout occurs during playback.
+    /// Removes memory cached thumbnails matching the specified item identifiers.
+    ///
+    /// - Parameter itemIDs: The array of `MediaItem.id` strings to evict from RAM.
+    func removeThumbnailsFromMemory(for itemIDs: [String]) {
+        for id in itemIDs {
+            thumbnailCache.removeObject(forKey: "\(id)_thumb" as NSString)
+        }
+    }
+    
+    // MARK: - Streaming Media Byte Range Requests
+    
+    /// Reads a discrete byte range over SMB for on-demand video streaming without downloading full files.
+    ///
+    /// ### Complex Code Breakdown:
+    /// - **Exponential Backoff Retry**: If a socket read fails (broken pipe or timeout), retries up to 3 times
+    ///   with increasing backoff delays (250ms, 500ms) and forces tree reconnection.
+    /// - **Cancellation Checking**: Immediately halts transfers when `Task.isCancelled` occurs.
+    ///
+    /// - Parameters:
+    ///   - item: The target media item.
+    ///   - offset: The zero-based starting byte offset.
+    ///   - length: The number of bytes to retrieve.
+    /// - Returns: The retrieved raw `Data` payload.
     func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
         let maxAttempts = 3
         var lastError: Error?
@@ -450,7 +664,10 @@ actor SMBClientActor {
         throw lastError ?? URLError(.cannotConnectToHost)
     }
     
-    /// Queries the remote file size directly if item.size was 0
+    /// Queries the file size attribute from the server if not populated during directory traversal.
+    ///
+    /// - Parameter item: The target `MediaItem`.
+    /// - Returns: The remote file size in bytes, or 0 if unreachable.
     func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.size > 0 { return item.size }
         if Task.isCancelled { return 0 }
@@ -464,11 +681,17 @@ actor SMBClientActor {
         }
     }
     
+    /// Safely extracts the 64-bit file size integer from URL resource dictionaries across diverse system representations.
     private static func extractFileSize(from dict: [URLResourceKey: Any]) -> Int64 {
         (dict[.fileSizeKey] as? NSNumber)?.int64Value ?? (dict[.fileSizeKey] as? Int64) ?? (dict[.fileSizeKey] as? Int).map(Int64.init) ?? 0
     }
     
-    /// Downloads the full-resolution image (cached for smooth navigation & slideshow)
+    // MARK: - Full Image & EXIF Metadata Fetching
+    
+    /// Downloads the full-resolution picture, decoding and caching it in `fullImageCache` for slideshow presentation.
+    ///
+    /// - Parameter item: The photo `MediaItem` to load.
+    /// - Returns: The decoded `UIImage`, or `nil` on failure or cancellation.
     func fetchFullImage(for item: MediaItem) async -> UIImage? {
         // Videos must never be loaded as full images into RAM
         if Task.isCancelled || item.isVideo { return nil }
@@ -496,7 +719,12 @@ actor SMBClientActor {
             }
             
             guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
-            let pixelCost = Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+            
+            // Broken up into distinct sub-expressions to prevent compiler type-checking timeouts
+            let widthInPixels = image.size.width * image.scale
+            let heightInPixels = image.size.height * image.scale
+            let pixelCost = Int(widthInPixels * heightInPixels * 4.0)
+            
             fullImageCache.setObject(image, forKey: cacheKey, cost: max(data.count, pixelCost))
             return image
         } catch {
@@ -507,7 +735,17 @@ actor SMBClientActor {
         }
     }
     
-    /// Extracts EXIF / camera metadata for an item
+    /// Extracts EXIF and camera metadata for an item.
+    ///
+    /// ### Complex Code Breakdown:
+    /// - **Video Bypass**: Videos return lightweight metadata directly without downloading gigabytes of stream payload.
+    /// - **Memory Cache**: Checks `metadataCache` first.
+    /// - **64 KB Partial Header Request**: Executes an initial byte-range read (`0..<65536`) to extract EXIF headers.
+    ///   If headers are resolved in this first block, returns immediately without downloading the full image.
+    /// - **Full Payload Fallback**: Only downloads the complete file if EXIF tags were located further down in the stream.
+    ///
+    /// - Parameter item: The `MediaItem` to inspect.
+    /// - Returns: The extracted `PictureEXIFData`, or `nil` on failure.
     func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
         // For video files, return basic file metadata directly without downloading gigabytes of data into RAM
@@ -565,6 +803,17 @@ actor SMBClientActor {
         }
     }
     
+    // MARK: - CoreGraphics Image Downsampling
+    
+    /// Downsamples compressed image data directly into a display thumbnail using `ImageIO` and `CoreGraphics`.
+    ///
+    /// Setting `kCGImageSourceShouldCache: false` prevents the operating system from allocating a full-resolution
+    /// backing bitmap in RAM, decoding only the target pixel bounding box specified by `maxDimension`.
+    ///
+    /// - Parameters:
+    ///   - data: Raw encoded image bytes (JPEG, HEIC, PNG).
+    ///   - maxDimension: The maximum pixel size for the longest edge.
+    /// - Returns: A decoded, downscaled `UIImage`, or `nil` on decode failure.
     private static func downsample(data: Data, maxDimension: CGFloat) -> UIImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }

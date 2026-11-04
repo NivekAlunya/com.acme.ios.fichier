@@ -6,12 +6,31 @@
 import UIKit
 import PDFKit
 
+/// Coordinator managing `PDFViewDelegate` callbacks, notification observers, and gestures for `PDFView`.
+///
+/// ### Core Responsibilities
+/// - **Page Synchronization**: Listens for `.PDFViewPageChanged` notifications to report active page numbers
+///   and visible multi-page ranges to parent SwiftUI views.
+/// - **Scroll / Zoom State Management**: In book mode, disables internal scroll view panning when at 1.0x scale
+///   so that finger drags turn pages instead of panning. Re-enables scrolling when zoomed in for deep reading.
+/// - **Debounced Navigation**: Provides `goToNext()` and `goToPrevious()` methods throttled by a 250ms window
+///   with tactile haptic feedback (`UIImpactFeedbackGenerator`).
+/// - **Pan Gesture Recognition**: Captures swipe velocity and horizontal translation in book mode to turn pages.
 @MainActor
 final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDelegate {
+    /// Weak reference to the underlying `PDFView` being managed.
     weak var pdfView: PDFView?
+    
+    /// Indicates whether the view is operating in horizontal book mode rather than vertical continuous scroll.
     var isBookMode: Bool = false
+    
+    /// Callback delivering the 1-based current page and total page count.
     var onPageChange: ((Int, Int) -> Void)?
+    
+    /// Callback delivering the 1-based visible range (`firstPage`, `lastPage`, `total`).
     var onPageRangeChange: ((Int, Int, Int) -> Void)?
+    
+    /// Callback invoked when a single tap is detected on the canvas.
     var onTap: (() -> Void)?
     
     private nonisolated(unsafe) var pageObserver: (any NSObjectProtocol)?
@@ -19,6 +38,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
     private var panGesture: UIPanGestureRecognizer?
     private var lastPageTurnTime: TimeInterval = 0
     
+    /// Recursively discovers the nested `UIScrollView` embedded inside PDFKit's view hierarchy.
     var internalScrollView: UIScrollView? {
         func findScrollView(in view: UIView) -> UIScrollView? {
             for sub in view.subviews {
@@ -34,6 +54,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         return pdfView.flatMap { findScrollView(in: $0) }
     }
     
+    /// Memberwise initializer.
     init(
         isBookMode: Bool = false,
         onPageChange: ((Int, Int) -> Void)? = nil,
@@ -47,6 +68,9 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         super.init()
     }
     
+    /// Attaches delegate, gestures, and notification center observers to the specified `PDFView`.
+    ///
+    /// - Parameter pdfView: The PDFView instance to configure.
     func attach(to pdfView: PDFView) {
         self.pdfView = pdfView
         pdfView.delegate = self
@@ -92,6 +116,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Unregisters notification observers safely off actor isolation boundaries.
     private nonisolated func detachObservers() {
         if let pageObserver {
             NotificationCenter.default.removeObserver(pageObserver)
@@ -103,6 +128,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Detaches all gestures, delegates, and observers when the view is dismantled.
     func detach() {
         detachObservers()
         if let panGesture, let pdfView {
@@ -115,6 +141,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Adjusts scrolling capability on the internal scroll view based on zoom factor.
     func updateScrollState() {
         guard let pdfView else { return }
         if isBookMode {
@@ -125,6 +152,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Reads visible page indices from `pdfView.visiblePages` and dispatches page update callbacks.
     func updatePageInfo() {
         guard let pdfView = self.pdfView, let doc = pdfView.document else { return }
         let total = doc.pageCount
@@ -148,6 +176,9 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         onPageRangeChange?(firstPage, lastPage, total)
     }
     
+    /// Navigates directly to a target zero-based page index in the document.
+    ///
+    /// - Parameter index: Target zero-based page index.
     func goToPage(index: Int) {
         guard let pdfView, let doc = pdfView.document else { return }
         guard index >= 0, index < doc.pageCount, let page = doc.page(at: index) else { return }
@@ -155,6 +186,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         updatePageInfo()
     }
     
+    /// Advances forward to the next page or facing spread with a minimum 250ms debounce and haptic pulse.
     func goToNext() {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastPageTurnTime > 0.25 else { return }
@@ -182,6 +214,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Regresses backward to the preceding page or facing spread with a minimum 250ms debounce and haptic pulse.
     func goToPrevious() {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastPageTurnTime > 0.25 else { return }
@@ -216,6 +249,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Pan gesture handler detecting horizontal finger swipes in book mode to flip pages.
     @objc func handlePanGesture(_ recognizer: UIPanGestureRecognizer) {
         guard isBookMode else { return }
         guard let pdfView, pdfView.scaleFactor <= pdfView.minScaleFactor + 0.05 else { return }
@@ -240,10 +274,12 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         }
     }
     
+    /// Single tap action handler triggering HUD visibility toggle.
     @objc func handleSingleTap() {
         onTap?()
     }
     
+    /// Allows simultaneous gesture recognition with system navigation gestures.
     nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         true
     }

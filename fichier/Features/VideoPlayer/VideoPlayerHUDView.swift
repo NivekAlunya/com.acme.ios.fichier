@@ -5,10 +5,22 @@
 
 import SwiftUI
 
+/// Composed overlay layer integrating top, center, and bottom HUD controls for video playback.
+///
+/// Features smooth animated fading (`opacity`) based on `controller.showControls`, and suppresses
+/// touch hit testing when controls are invisible so background gestures pass directly to the player canvas.
 public struct VideoPlayerHUDView: View {
+    /// Active video player controller.
     public var controller: VideoPlayerController
+    
+    /// Callback triggered upon tapping the top bar dismiss button.
     public var onDismiss: () -> Void
     
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - controller: Active video player controller.
+    ///   - onDismiss: Dismissal handler.
     public init(controller: VideoPlayerController, onDismiss: @escaping () -> Void) {
         self.controller = controller
         self.onDismiss = onDismiss
