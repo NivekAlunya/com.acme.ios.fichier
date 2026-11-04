@@ -74,11 +74,6 @@ struct FolderTreeNodeView: View {
                 withAnimation(.snappy) {
                     isExpanded.toggle()
                 }
-                if isExpanded && node.children == nil {
-                    Task {
-                        await manager.loadSubfoldersForTree(at: node)
-                    }
-                }
             } label: {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -94,11 +89,6 @@ struct FolderTreeNodeView: View {
                     isExpanded = true
                 }
                 onSelectFolder(node)
-                if node.children == nil {
-                    Task {
-                        await manager.loadSubfoldersForTree(at: node)
-                    }
-                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: nodeIconName)

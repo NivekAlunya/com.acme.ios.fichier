@@ -833,7 +833,7 @@ public final class StorageLocationManager {
         }
     }
     
-    public func downloadImage(for item: MediaItem) async -> UIImage? {
+    nonisolated public func downloadImage(for item: MediaItem) async -> UIImage? {
         if Task.isCancelled || item.isVideo { return nil }
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchImage(for: item)
@@ -844,7 +844,7 @@ public final class StorageLocationManager {
         return await worker.fetchFullImage(for: item)
     }
     
-    public func fetchFileSize(for item: MediaItem) async -> Int64 {
+    nonisolated public func fetchFileSize(for item: MediaItem) async -> Int64 {
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchFileSize(for: item)
         }
@@ -854,7 +854,7 @@ public final class StorageLocationManager {
         return await worker.fetchFileSize(for: item)
     }
     
-    public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
+    nonisolated public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
         if Task.isCancelled { return nil }
         if item.phAssetIdentifier != nil {
             return await photosWorker.fetchMetadata(for: item)
