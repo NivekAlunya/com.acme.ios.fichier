@@ -312,13 +312,28 @@ nonisolated public final class MediaCacheManager: Sendable {
         return page.thumbnail(of: size, for: .mediaBox)
     }
     
-    /// Renders a PDF cover thumbnail from an in-memory byte buffer without blocking synchronous disk I/O.
+    /// Renders a PDF cover thumbnail from an in-memory byte buffer.
+    ///
+    /// For payloads exceeding 5 MB, stages to temporary disk storage to utilize virtual memory
+    /// mapping (`mmap`) via `PDFDocument(url:)`, avoiding large dirty heap spikes during rasterization.
+    /// For payloads $\le 5\text{ MB}$ (including 1 MB fast-path prefix reads), decodes purely in-memory.
     ///
     /// - Parameters:
     ///   - data: The raw PDF byte data.
     ///   - maxDimension: Maximum thumbnail pixel size.
     /// - Returns: A rendered `UIImage` cover image, or `nil` on failure.
     public func generatePDFThumbnail(from data: Data, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        if data.isEmpty { return nil }
+        if data.count > 5 * 1024 * 1024 {
+            let tempURL = fileManager.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
+            do {
+                try data.write(to: tempURL, options: .atomic)
+                defer { try? fileManager.removeItem(at: tempURL) }
+                return generatePDFThumbnail(from: tempURL, maxDimension: maxDimension)
+            } catch {
+                // Fall back to in-memory decoding if temporary write fails
+            }
+        }
         guard let doc = PDFDocument(data: data), let page = doc.page(at: 0) else { return nil }
         let size = CGSize(width: maxDimension, height: maxDimension)
         return page.thumbnail(of: size, for: .mediaBox)

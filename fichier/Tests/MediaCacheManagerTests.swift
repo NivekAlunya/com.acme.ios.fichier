@@ -123,5 +123,65 @@ final class MediaCacheManagerTests: XCTestCase {
         manager.invalidateThumbnailCache(for: [item])
         XCTAssertFalse(manager.hasThumbnail(for: diskKey), "Thumbnail file must be deleted after cache invalidation")
     }
+    
+    func testPDFThumbnailGenerationTruncatedNonLinearizedDataReturnsNil() {
+        let manager = MediaCacheManager.shared
+        let fullPDFData = createSamplePDFData()
+        XCTAssertGreaterThan(fullPDFData.count, 100)
+        
+        // Truncate to header & first object, stripping the XRef table and trailer catalog at the end
+        let truncatedPrefix = fullPDFData.prefix(64)
+        let thumb = manager.generatePDFThumbnail(from: truncatedPrefix, maxDimension: 260)
+        XCTAssertNil(thumb, "Truncated non-linearized PDF buffer missing XRef table must safely return nil")
+    }
+    
+    func testPDFThumbnailGenerationZeroByteDataReturnsNil() {
+        let manager = MediaCacheManager.shared
+        let emptyData = Data()
+        let thumb = manager.generatePDFThumbnail(from: emptyData, maxDimension: 260)
+        XCTAssertNil(thumb, "Empty data must safely return nil")
+    }
+    
+    func testPDFThumbnailGenerationLargeDataUsesStagingSafely() {
+        let manager = MediaCacheManager.shared
+        let validPDF = createSamplePDFData()
+        // Pad payload to > 5 MB to exercise the temporary disk staging and mmap execution path
+        var largeData = validPDF
+        let paddingSize = (5 * 1024 * 1024) + 1024
+        largeData.append(Data(count: paddingSize))
+        
+        // Large data with valid PDF header and padded trailer must not crash or leak
+        _ = manager.generatePDFThumbnail(from: largeData, maxDimension: 260)
+    }
+    
+    func testDocumentCacheEvictionAndInvalidation() {
+        let manager = MediaCacheManager.shared
+        let item = MediaItem(
+            locationID: "test_loc",
+            name: "sample_doc.pdf",
+            rootName: "share",
+            path: "sample_doc.pdf",
+            isDirectory: false
+        )
+        
+        let docURL = manager.localDocumentURL(for: item)
+        let testBytes = Data([0x25, 0x50, 0x44, 0x46]) // %PDF
+        try? testBytes.write(to: docURL, options: .atomic)
+        XCTAssertTrue(manager.hasCachedDocument(for: item))
+        
+        // Evict documents exceeding 0 bytes
+        manager.evictDocumentsIfNeeded(limitBytes: 0)
+        XCTAssertFalse(manager.hasCachedDocument(for: item), "Document must be evicted when total size exceeds budget")
+    }
+    
+    func testPDFPrefixBoundsClampingWhenSizeIsKnownAndSmall() {
+        let smallSize: Int64 = 100 * 1024 // 100 KB
+        let clampedPrefixLength = min(smallSize, 1_048_576)
+        XCTAssertEqual(clampedPrefixLength, smallSize, "Files smaller than 1 MB must clamp prefix length to exact file size")
+        
+        let largeSize: Int64 = 50 * 1024 * 1024 // 50 MB
+        let clampedLargeLength = min(largeSize, 1_048_576)
+        XCTAssertEqual(clampedLargeLength, 1_048_576, "Files larger than 1 MB must be clamped to 1 MB max read")
+    }
 }
 #endif

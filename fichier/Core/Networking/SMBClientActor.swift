@@ -402,7 +402,7 @@ actor SMBClientActor {
     ///   - maxDimension: Maximum thumbnail bounding dimension.
     /// - Returns: A rendered cover `UIImage`, or `nil` if the document is not linearized or read fails.
     func fetchPDFPrefixThumbnail(for item: MediaItem, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
-        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: item.path,
             dimension: maxDimension,
@@ -410,13 +410,29 @@ actor SMBClientActor {
         )
         let memoryCacheKey = "\(item.id)_thumb" as NSString
         
+        // 1. In-memory RAM Cache check
+        if let memoryCached = thumbnailCache.object(forKey: memoryCacheKey) {
+            return memoryCached
+        }
+        
+        // 2. Persistent On-Disk Cache check (Tier 2 - bypasses SMB network entirely if already rendered)
+        if let diskCached = MediaCacheManager.shared.getThumbnail(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+            thumbnailCache.setObject(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        
         do {
             let client = try await ensureConnected(to: item.shareName)
             if Task.isCancelled { return nil }
             
-            let prefixLength: Int64 = min(item.size > 0 ? item.size : 1_048_576, 1_048_576)
-            guard prefixLength > 0 else { return nil }
+            // Resolve actual file size to avoid out-of-bounds byte range requests for files < 1 MB
+            var fileSize = item.size
+            if fileSize <= 0 {
+                fileSize = await fetchFileSize(for: item)
+            }
+            guard fileSize > 0 else { return nil }
             
+            let prefixLength: Int64 = min(fileSize, 1_048_576)
             let range: Range<Int64> = 0..<prefixLength
             do {
                 let prefixData = try await client.contents(atPath: item.path, range: range) { _, _ in
