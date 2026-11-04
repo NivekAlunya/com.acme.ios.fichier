@@ -274,7 +274,7 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         true
     }
     
-    deinit {
+    isolated deinit {
         detachObservers()
     }
 }
