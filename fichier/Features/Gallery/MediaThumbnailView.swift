@@ -78,6 +78,8 @@ public struct MediaThumbnailView: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            } else if item.isPDF && !loadFailed {
+                pdfPlaceholderView
             } else if loadFailed {
                 Button {
                     retryLoading()
@@ -179,7 +181,7 @@ public struct MediaThumbnailView: View {
                     .clipShape(Capsule())
                     .padding(isCompact ? 2 : 6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            } else if item.isPDF {
+            } else if item.isPDF && image != nil {
                 Text("PDF")
                     .font(.system(size: isCompact ? 7 : 8, weight: .bold))
                     .foregroundColor(.white)
@@ -199,12 +201,54 @@ public struct MediaThumbnailView: View {
         .onDisappear {
             cancelLoading()
         }
+        .onChange(of: manager.thumbnailVersions[item.id]) { _, _ in
+            startLoading(force: true)
+        }
+    }
+    
+    // MARK: - Lightweight PDF Placeholder View
+    
+    /// Lightweight, zero-allocation vector document placeholder rendered natively in SwiftUI.
+    @ViewBuilder
+    private var pdfPlaceholderView: some View {
+        if isCompact {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(.red.opacity(0.85))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        } else {
+            VStack(spacing: 6) {
+                Image(systemName: "doc.richtext.fill")
+                    .font(.system(size: maxDimension * 0.16))
+                    .foregroundStyle(.red.gradient)
+                    .shadow(color: .red.opacity(0.18), radius: 3, y: 2)
+                
+                Text(item.name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 8)
+                
+                if !item.formattedSize.isEmpty && item.formattedSize != "…" {
+                    Text(item.formattedSize)
+                        .font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+            .background(Color(.tertiarySystemFill))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        }
     }
     
     // MARK: - Loading & Retry Logic
     
     /// Spawns an asynchronous task to download or retrieve the thumbnail from cache.
-    private func startLoading() {
+    ///
+    /// - Parameter force: When `true`, overrides currently displayed image to fetch freshly upgraded thumbnails.
+    private func startLoading(force: Bool = false) {
+        if !force && image != nil { return }
         loadTask?.cancel()
         loadFailed = false
         
@@ -218,6 +262,9 @@ public struct MediaThumbnailView: View {
                     self.image = loaded
                     self.loadFailed = false
                 }
+            } else if item.isPDF {
+                // Remote PDF without a cached thumbnail: display lightweight SwiftUI placeholder without error
+                self.loadFailed = false
             } else if item.isVideo {
                 if retryCount < 1 {
                     retryCount += 1
@@ -240,7 +287,7 @@ public struct MediaThumbnailView: View {
     /// Resets the retry counter and reinitiates thumbnail loading.
     private func retryLoading() {
         retryCount = 0
-        startLoading()
+        startLoading(force: true)
     }
     
     /// Cancels in-flight loading tasks and clears references.

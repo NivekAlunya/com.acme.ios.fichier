@@ -204,6 +204,42 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
+    /// Invalidates disk thumbnail and cached document copies for the provided media items.
+    ///
+    /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.
+    public func invalidateThumbnailCache(for items: [MediaItem]) {
+        for item in items {
+            let (photoDiskKey, photoFallbackKey, photoLegacyKey) = thumbnailKeys(
+                for: item.shareName,
+                path: item.path,
+                dimension: Self.standardThumbnailDimension,
+                connectionID: item.connectionID
+            )
+            let allKeys = [photoDiskKey, photoFallbackKey, photoLegacyKey].compactMap { $0 }
+            for key in allKeys {
+                let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
+                try? fileManager.removeItem(at: fileURL)
+            }
+            if item.isVideo {
+                let (vidKey, vidFallback, vidLegacy) = thumbnailKeys(
+                    for: item.shareName,
+                    path: "\(item.path)_vidstream_v7",
+                    dimension: Self.standardThumbnailDimension,
+                    connectionID: item.connectionID
+                )
+                let vidKeys = [vidKey, vidFallback, vidLegacy].compactMap { $0 }
+                for key in vidKeys {
+                    let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
+                    try? fileManager.removeItem(at: fileURL)
+                }
+            }
+            if item.isPDF {
+                let docURL = localDocumentURL(for: item)
+                try? fileManager.removeItem(at: docURL)
+            }
+        }
+    }
+    
     // MARK: - Video Disk Cache
     
     /// Resolves the canonical on-disk cached video URL for a media item, performing automatic legacy migrations.
@@ -260,6 +296,18 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// - Returns: A rendered `UIImage` cover image, or `nil` on failure.
     public func generatePDFThumbnail(from url: URL, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
         guard let doc = PDFDocument(url: url), let page = doc.page(at: 0) else { return nil }
+        let size = CGSize(width: maxDimension, height: maxDimension)
+        return page.thumbnail(of: size, for: .mediaBox)
+    }
+    
+    /// Renders the first page of an active parsed `PDFDocument` instance into a thumbnail.
+    ///
+    /// - Parameters:
+    ///   - doc: The parsed `PDFDocument` instance.
+    ///   - maxDimension: Maximum thumbnail pixel size.
+    /// - Returns: A rendered `UIImage` cover image, or `nil` on failure.
+    public func generatePDFThumbnail(from doc: PDFDocument, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        guard let page = doc.page(at: 0) else { return nil }
         let size = CGSize(width: maxDimension, height: maxDimension)
         return page.thumbnail(of: size, for: .mediaBox)
     }
@@ -352,17 +400,19 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     /// Cleans up any orphaned partial download files (`.part`) older than the given duration (default 1 hour).
     public func cleanOrphanedPartFiles(olderThan seconds: TimeInterval = 3600) {
-        guard let enumerator = fileManager.enumerator(
-            at: videosDirectory,
-            includingPropertiesForKeys: [.contentModificationDateKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-        
         let now = Date()
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "part" {
-            if let modDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-               now.timeIntervalSince(modDate) > seconds {
-                try? fileManager.removeItem(at: fileURL)
+        for dir in [videosDirectory, documentsDirectory] {
+            guard let enumerator = fileManager.enumerator(
+                at: dir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+            
+            for case let fileURL as URL in enumerator where fileURL.pathExtension == "part" {
+                if let modDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                   now.timeIntervalSince(modDate) > seconds {
+                    try? fileManager.removeItem(at: fileURL)
+                }
             }
         }
     }
@@ -378,9 +428,11 @@ nonisolated public final class MediaCacheManager: Sendable {
         
         // Dynamically adjust disk budget according to host volume capacity
         let videoLimit: Int64 = isLowDiskSpace ? 400_000_000 : 2_000_000_000
+        let docLimit: Int64 = isLowDiskSpace ? 200_000_000 : 1_000_000_000
         let thumbLimit: Int64 = isLowDiskSpace ? 100_000_000 : 300_000_000
         
         evictVideosIfNeeded(limitBytes: videoLimit, keeping: protecting)
+        evictDocumentsIfNeeded(limitBytes: docLimit, keeping: protecting)
         evictThumbnailsIfNeeded(limitBytes: thumbLimit)
     }
     
@@ -425,6 +477,51 @@ nonisolated public final class MediaCacheManager: Sendable {
         videoFiles.sort { $0.date < $1.date }
         
         for file in videoFiles {
+            if totalSize <= limitBytes { break }
+            if protectedURLs.contains(file.url) { continue }
+            do {
+                try fileManager.removeItem(at: file.url)
+                totalSize -= file.size
+            } catch {
+                // Ignore failure to remove individual item
+            }
+        }
+    }
+    
+    /// Evicts oldest cached document files (FIFO) if total document cache size exceeds `limitBytes` (default 1 GB).
+    ///
+    /// - Parameters:
+    ///   - limitBytes: Maximum allowed aggregate size in bytes.
+    ///   - protectedURLs: File URLs that must be shielded from eviction.
+    public func evictDocumentsIfNeeded(limitBytes: Int64 = 1_000_000_000, keeping protectedURLs: Set<URL> = []) {
+        guard let enumerator = fileManager.enumerator(
+            at: documentsDirectory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        
+        var docFiles: [(url: URL, size: Int64, date: Date)] = []
+        var totalSize: Int64 = 0
+        
+        for case let fileURL as URL in enumerator {
+            if fileURL.pathExtension == "part" {
+                try? fileManager.removeItem(at: fileURL)
+                continue
+            }
+            guard let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize else { continue }
+            let fileSize = Int64(size)
+            let date = values.contentModificationDate ?? Date.distantPast
+            totalSize += fileSize
+            docFiles.append((url: fileURL, size: fileSize, date: date))
+        }
+        
+        guard totalSize > limitBytes else { return }
+        
+        // Sort oldest first (FIFO eviction)
+        docFiles.sort { $0.date < $1.date }
+        
+        for file in docFiles {
             if totalSize <= limitBytes { break }
             if protectedURLs.contains(file.url) { continue }
             do {
@@ -481,7 +578,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Internal synchronous summation of file sizes across thumbnail and video cache directories.
     private func calculateTotalCacheSizeInternal() -> Int64 {
         var total: Int64 = 0
-        for dir in [thumbnailsDirectory, videosDirectory] {
+        for dir in [thumbnailsDirectory, videosDirectory, documentsDirectory] {
             if let enumerator = fileManager.enumerator(at: dir, includingPropertiesForKeys: [.fileSizeKey]) {
                 for case let fileURL as URL in enumerator {
                     if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
@@ -510,6 +607,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Deletes all cached thumbnails and videos, optionally protecting designated URLs.
     public func clearAllCache(protecting: Set<URL> = []) {
         try? fileManager.removeItem(at: thumbnailsDirectory)
+        try? fileManager.removeItem(at: documentsDirectory)
         
         if protecting.isEmpty {
             try? fileManager.removeItem(at: videosDirectory)
@@ -526,6 +624,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         ]
         try? fileManager.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true, attributes: attributes)
         try? fileManager.createDirectory(at: videosDirectory, withIntermediateDirectories: true, attributes: attributes)
+        try? fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true, attributes: attributes)
     }
     
     /// Asynchronous wrapper for `clearAllCache` executed on background utility QoS.

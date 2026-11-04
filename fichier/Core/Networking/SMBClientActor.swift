@@ -328,22 +328,9 @@ actor SMBClientActor {
                 return nil
             }
             
-            // Remote PDF: Stream to temporary staging file to avoid loading entire 100MB+ document into RAM
+            // Remote PDF: Fast-path prefix thumbnailing (linearized / web-optimized documents)
             if item.isPDF {
-                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).pdf")
-                defer { try? FileManager.default.removeItem(at: tempURL) }
-                do {
-                    try await client.downloadItem(atPath: item.path, to: tempURL) { _, _ in
-                        !Task.isCancelled
-                    }
-                    if !Task.isCancelled, let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: tempURL, maxDimension: maxDimension) {
-                        thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                        MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                        return thumb
-                    }
-                } catch {
-                    return nil
-                }
+                return await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension)
             }
             
             // Photo Thumbnail Handling
@@ -379,6 +366,46 @@ actor SMBClientActor {
             if !Task.isCancelled {
                 AppLog.smb.error("Failed to load thumbnail at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
             }
+            return nil
+        }
+    }
+    
+    /// Attempts fast-path prefix thumbnail generation for linearized / web-optimized PDFs.
+    ///
+    /// Reads only the initial 1 MB prefix of the document. If linearized, Page 1 can be parsed
+    /// and rendered immediately without downloading the full document. If non-linearized, returns `nil`
+    /// without saturating the SMB socket.
+    ///
+    /// - Parameters:
+    ///   - item: The target PDF `MediaItem`.
+    ///   - maxDimension: Maximum thumbnail bounding dimension.
+    /// - Returns: A rendered cover `UIImage`, or `nil` if the document is not linearized or read fails.
+    func fetchPDFPrefixThumbnail(for item: MediaItem, maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension) async -> UIImage? {
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        
+        do {
+            let client = try await ensureConnected(to: item.shareName)
+            if Task.isCancelled { return nil }
+            
+            let prefixLength: Int64 = min(item.size > 0 ? item.size : 1_048_576, 1_048_576)
+            guard prefixLength > 0 else { return nil }
+            
+            let range: Range<Int64> = 0..<prefixLength
+            if let prefixData = try? await client.contents(atPath: item.path, range: range, progress: { _, _ in !Task.isCancelled }),
+               !prefixData.isEmpty,
+               let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: prefixData, maxDimension: maxDimension) {
+                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
+                return thumb
+            }
+            return nil
+        } catch {
             return nil
         }
     }
@@ -504,6 +531,9 @@ actor SMBClientActor {
             throw error
         }
         
+        // Evict older documents if cache exceeds limit, protecting the newly downloaded one
+        MediaCacheManager.shared.evictDocumentsIfNeeded(keeping: [localURL])
+        
         // Upgrade thumbnail cache with rendered PDF cover page
         let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
@@ -525,6 +555,15 @@ actor SMBClientActor {
         thumbnailCache.removeAllObjects()
         fullImageCache.removeAllObjects()
         metadataCache.removeAllObjects()
+    }
+    
+    /// Removes memory cached thumbnails matching the specified item identifiers.
+    ///
+    /// - Parameter itemIDs: The array of `MediaItem.id` strings to evict from RAM.
+    func removeThumbnailsFromMemory(for itemIDs: [String]) {
+        for id in itemIDs {
+            thumbnailCache.removeObject(forKey: "\(id)_thumb" as NSString)
+        }
     }
     
     // MARK: - Streaming Media Byte Range Requests

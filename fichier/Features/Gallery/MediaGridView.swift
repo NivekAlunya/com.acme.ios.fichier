@@ -110,6 +110,9 @@ struct MediaGridView: View {
     /// Controls presentation of the application settings sheet on compact size classes.
     @State private var showingSettings = false
     
+    /// Unique identity token incremented or refreshed to force complete invalidation and reload of visible thumbnail cells.
+    @State private var thumbnailReloadToken = UUID()
+    
     // MARK: - Directory Identification
     
     /// Stable identifier representing the current browsing scope, used to reset scroll positions when switching folders.
@@ -236,14 +239,17 @@ struct MediaGridView: View {
                         description: Text(.Strings.galleryEmptyFolderDescription(manager.selectedFolder?.name ?? String(localized: .Strings.galleryEmptyFolderDefaultName)))
                     )
                 } else {
-                    switch viewMode {
-                    case .grid:
-                        gridContent(folders: displayFolders, pictures: displayPictures)
-                            .transition(.opacity)
-                    case .list:
-                        listContent(folders: displayFolders, pictures: displayPictures)
-                            .transition(.opacity)
+                    Group {
+                        switch viewMode {
+                        case .grid:
+                            gridContent(folders: displayFolders, pictures: displayPictures)
+                                .transition(.opacity)
+                        case .list:
+                            listContent(folders: displayFolders, pictures: displayPictures)
+                                .transition(.opacity)
+                        }
                     }
+                    .id(thumbnailReloadToken)
                 }
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
@@ -441,6 +447,19 @@ struct MediaGridView: View {
                                 }
                             }
                             
+                            #if DEBUG
+                            Section("Debug") {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await manager.invalidateCurrentFolderThumbnails()
+                                        thumbnailReloadToken = UUID()
+                                    }
+                                } label: {
+                                    Label("Invalidate Folder Thumbnails", systemImage: "arrow.triangle.2.circlepath.circle")
+                                }
+                            }
+                            #endif
+                            
                             if horizontalSizeClass == .compact {
                                 Section {
                                     Button {
@@ -484,6 +503,17 @@ struct MediaGridView: View {
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac
             Group {
+                #if DEBUG
+                // Cmd+Option+R: Invalidate thumbnails for current folder
+                Button("") {
+                    Task {
+                        await manager.invalidateCurrentFolderThumbnails()
+                        thumbnailReloadToken = UUID()
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+                #endif
+                
                 // Space: Start slideshow of pictures in current folder
                 Button("") {
                     if hasImages {

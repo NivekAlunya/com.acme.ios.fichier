@@ -7,6 +7,7 @@ import Foundation
 import Observation
 import UIKit
 import AVFoundation
+import PDFKit
 import OSLog
 
 /// Centralized state manager and coordinator for all media storage backends in the application.
@@ -78,6 +79,9 @@ public final class StorageLocationManager {
     /// Identifier representing the current connection session, used for cache partitioning.
     public private(set) var currentConnectionID: String = ""
     
+    /// Tracks dynamic thumbnail generation tokens per media item, allowing observing SwiftUI views to react to on-the-fly upgrades.
+    public private(set) var thumbnailVersions: [String: Int] = [:]
+    
     /// In-flight asynchronous folder scanning task, cancelled when switching folders rapidly.
     private var loadFolderTask: Task<Void, Never>?
     
@@ -98,6 +102,9 @@ public final class StorageLocationManager {
     
     /// Concurrency limiter preventing socket saturation during parallel video keyframe extraction.
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
+    
+    /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
+    private let pdfThumbnailLimiter = PDFThumbnailLimiter()
     
     /// UserDefaults key for persisted SMB connection records.
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
@@ -864,6 +871,11 @@ public final class StorageLocationManager {
             return nil
         }
         
+        // PDF document thumbnail streaming, fast-path prefix caching, and placeholder generation
+        if item.isPDF {
+            return await fetchPDFThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension)
+        }
+        
         // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
         let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
@@ -876,15 +888,7 @@ public final class StorageLocationManager {
             return diskCached
         }
         
-        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
-            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: MediaCacheManager.standardThumbnailDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: photoDiskKey)
-                return thumb
-            }
-        }
-        
+        // Debounce briefly (40ms for photos) to prevent network thrashing during fast scrolls
         try? await Task.sleep(for: .milliseconds(40))
         guard !Task.isCancelled else { return nil }
         
@@ -1008,6 +1012,147 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - PDF Document Thumbnail Streaming & Placeholders
+    
+    /// Progressive PDF document thumbnail generator with fast-path prefix reading and stylized placeholder fallbacks.
+    ///
+    /// ### Three-Tier Thumbnailing Strategy:
+    /// 1. **Cache / Local Ingestion**: Checks RAM, persistent disk thumbnails, or local document cache.
+    /// 2. **Fast-Path Prefix Read**: Reads the initial 1 MB prefix over SMB. For linearized (web-optimized) PDFs,
+    ///    Page 1 is rendered and cached in ~200ms without transferring the remaining document.
+    /// 3. **Bounded Ingestion or Stylized Cover**:
+    ///    - If the document is $\le 12 \text{ MB}$, downloads via `PDFThumbnailLimiter` (max 1 concurrent operation)
+    ///      with a strict 8-second timeout to prevent socket starvation.
+    ///    - If the document exceeds $12 \text{ MB}$, or if download fails/times out, immediately generates an
+    ///      elegant stylized vector PDF cover card with title and file size.
+    ///
+    /// - Parameters:
+    ///   - item: The target PDF `MediaItem`.
+    ///   - expectedFolderID: Active directory token to verify folder consistency.
+    ///   - maxDimension: Maximum thumbnail bounding dimension.
+    /// - Returns: A rendered cover `UIImage`, or `nil` if cancelled.
+    private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
+        if Task.isCancelled { return nil }
+        
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        
+        // 1. Check persistent on-disk thumbnail cache
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        
+        // 2. Check if complete document is already cached locally (e.g. previously opened in PDFDetailView)
+        if MediaCacheManager.shared.hasCachedDocument(for: item) {
+            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
+        // 3. Debounce briefly (100ms) to cancel fast-scrolling cells before touching SMB
+        try? await Task.sleep(for: .milliseconds(100))
+        guard !Task.isCancelled else { return nil }
+        if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+            return nil
+        }
+        
+        // 4. Fast-Path Prefix Read (Linearized / Web-Optimized PDFs)
+        if let fastThumb = await worker.fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
+            worker.cacheThumbnail(fastThumb, forKey: memoryCacheKey)
+            MediaCacheManager.shared.saveThumbnailAsync(fastThumb, for: diskKey)
+            return fastThumb
+        }
+        guard !Task.isCancelled else { return nil }
+        
+        // 5. Size Ceiling & Concurrency Limiting:
+        // Only attempt full download during grid browsing for documents <= 12 MB.
+        let maxThumbnailDownloadBytes: Int64 = 12 * 1024 * 1024
+        if item.size > 0 && item.size <= maxThumbnailDownloadBytes {
+            let thumb = await pdfThumbnailLimiter.withPermit { () -> UIImage? in
+                guard !Task.isCancelled else { return nil }
+                if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+                    return nil
+                }
+                
+                // Re-check disk cache in case a previous task finished it while waiting
+                if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
+                    return diskCached
+                }
+                
+                do {
+                    // Race download against an 8-second timeout using structured concurrency
+                    return try await withThrowingTaskGroup(of: UIImage?.self) { group in
+                        group.addTask {
+                            let localURL = try await self.worker.fetchDocumentURL(for: item)
+                            return MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension)
+                        }
+                        group.addTask {
+                            try await Task.sleep(for: .seconds(8))
+                            return nil
+                        }
+                        let result = (try await group.next()).flatMap { $0 }
+                        group.cancelAll()
+                        return result
+                    }
+                } catch {
+                    return nil
+                }
+            }
+            if let thumb {
+                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                return thumb
+            }
+        }
+        
+        // 6. Documents > 12 MB or without a pre-computed thumbnail return nil.
+        // MediaThumbnailView will render a zero-allocation lightweight SwiftUI vector placeholder.
+        return nil
+    }
+    
+    // MARK: - On-the-Fly Thumbnail Upgrades
+    
+    /// Upgrades or creates the master thumbnail for a PDF document currently opened in the reader.
+    ///
+    /// Extracted directly from Page 1 of the parsed in-memory `PDFDocument`, saving network I/O
+    /// and disk parsing overhead. Persists the rendered thumbnail to both RAM and disk caches,
+    /// and notifies active gallery cells to update immediately.
+    ///
+    /// - Parameters:
+    ///   - item: The target document `MediaItem`.
+    ///   - document: The parsed `PDFDocument` currently displayed in the reader.
+    public func upgradePDFThumbnail(for item: MediaItem, from document: PDFDocument) async {
+        let maxDimension = MediaCacheManager.standardThumbnailDimension
+        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: maxDimension,
+            connectionID: item.connectionID
+        )
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        
+        // Render first page directly from in-memory document
+        guard let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: document, maxDimension: maxDimension) else {
+            return
+        }
+        
+        // Persist to disk and RAM
+        MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+        worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+        
+        // Trigger SwiftUI observation update for this item
+        thumbnailVersions[item.id, default: 0] += 1
+    }
+    
     /// Downloads the full-resolution image for a media item from the active backend.
     ///
     /// - Parameter item: The media item to download.
@@ -1109,6 +1254,19 @@ public final class StorageLocationManager {
             await worker.clearMemoryCache()
             await refreshMediaCacheSize()
         }
+    }
+    
+    /// Clears both memory and persistent disk thumbnail caches for all items in the currently loaded folder.
+    public func invalidateCurrentFolderThumbnails() async {
+        let items = pictures
+        guard !items.isEmpty else { return }
+        
+        MediaCacheManager.shared.invalidateThumbnailCache(for: items)
+        
+        let ids = items.map(\.id)
+        await worker.removeThumbnailsFromMemory(for: ids)
+        
+        await refreshMediaCacheSize()
     }
     
     // MARK: - Disconnect

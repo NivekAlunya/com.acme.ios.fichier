@@ -491,6 +491,20 @@ struct PDFDetailView: View {
     
     // MARK: - Loading Logic
     
+    /// Configures reader state once the PDF document is successfully parsed, and triggers background thumbnail generation.
+    @MainActor
+    private func onDocumentLoaded(_ doc: PDFDocument) {
+        self.document = doc
+        self.totalPages = max(1, doc.pageCount)
+        self.syncCurrentSpread()
+        self.isLoading = false
+        
+        // Asynchronously generate or upgrade the thumbnail from the in-memory document while reading
+        Task {
+            await manager.upgradePDFThumbnail(for: item, from: doc)
+        }
+    }
+    
     /// Asynchronously locates or streams the PDF document, updating progress and instantiating `PDFDocument`.
     @MainActor
     private func loadDocument() async {
@@ -504,10 +518,7 @@ struct PDFDetailView: View {
         if let local = item.localURL, FileManager.default.fileExists(atPath: local.path) {
             self.localFileURL = local
             if let doc = PDFDocument(url: local) {
-                self.document = doc
-                self.totalPages = max(1, doc.pageCount)
-                self.syncCurrentSpread()
-                self.isLoading = false
+                onDocumentLoaded(doc)
                 return
             }
         }
@@ -517,10 +528,7 @@ struct PDFDetailView: View {
             let cachedURL = MediaCacheManager.shared.localDocumentURL(for: item)
             if let doc = PDFDocument(url: cachedURL) {
                 self.localFileURL = cachedURL
-                self.document = doc
-                self.totalPages = max(1, doc.pageCount)
-                self.syncCurrentSpread()
-                self.isLoading = false
+                onDocumentLoaded(doc)
                 return
             }
         }
@@ -539,10 +547,7 @@ struct PDFDetailView: View {
             guard !Task.isCancelled else { return }
             self.localFileURL = url
             if let doc = PDFDocument(url: url) {
-                self.document = doc
-                self.totalPages = max(1, doc.pageCount)
-                self.syncCurrentSpread()
-                self.isLoading = false
+                onDocumentLoaded(doc)
             } else {
                 self.errorMessage = String(localized: "Unable to parse PDF content", comment: "Invalid PDF format")
                 self.isLoading = false
