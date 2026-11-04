@@ -27,10 +27,10 @@ struct MediaGridView: View {
     
     /// Optional closure invoked when the user selects a subfolder to navigate into.
     /// If `nil`, the view defaults to driving folder navigation directly through `manager.selectAndLoadFolder(_:)`.
-    var onSelectFolder: ((MediaItem) -> Void)? = nil
+    var onSelectFolder: ((MediaItem) -> Void)?
     
     /// Optional closure invoked when starting a fullscreen slideshow presentation with the current set of filtered pictures.
-    var onStartSlideshow: (([MediaItem]) -> Void)? = nil
+    var onStartSlideshow: (([MediaItem]) -> Void)?
     
     /// Callback closure invoked when an individual picture is tapped to open fullscreen viewer,
     /// providing the tapped item alongside the contextual list of all sibling pictures for swiping.
@@ -144,7 +144,7 @@ struct MediaGridView: View {
         case .all:
             break
         case .photos:
-            listPictures = listPictures.filter { !$0.isVideo && !$0.isPDF }
+            listPictures = listPictures.filter(\.isImage)
         case .videos:
             listPictures = listPictures.filter { $0.isVideo }
         case .documents:
@@ -208,6 +208,7 @@ struct MediaGridView: View {
     
     var body: some View {
         let (displayFolders, displayPictures) = filterAndSortData()
+        let hasImages = displayPictures.contains(where: \.isImage)
         
         ZStack(alignment: .bottom) {
             Group {
@@ -333,46 +334,48 @@ struct MediaGridView: View {
                         .accessibilityLabel(parentFolderAccessibilityLabel)
                         
                         if !displayPictures.isEmpty {
-                            Button(.Strings.galleryButtonSelect) {
+                            Button {
                                 withAnimation {
                                     isSelectionMode = true
                                 }
+                            } label: {
+                                Image(systemName: viewMode.selectionIconName)
                             }
+                            .accessibilityLabel(.Strings.galleryButtonSelect)
                         }
                         
                         // Slideshow trigger & duration menu
-                        if !displayPictures.isEmpty {
-                            Menu {
-                                Button {
-                                    onStartSlideshow?(displayPictures)
-                                } label: {
-                                    Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
-                                }
-                                
-                                Section(.Strings.slideshowSectionTransitionStyle) {
-                                    Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
-                                        ForEach(SlideshowTransitionStyle.allCases) { style in
-                                            Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                        }
-                                    }
-                                }
-                                
-                                Section(.Strings.slideshowSectionSlideDuration) {
-                                    Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
-                                        Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                        Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                        Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                        Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                        Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                        Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                    }
-                                }
-                            } label: {
-                                Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
-                            } primaryAction: {
+                        Menu {
+                            Button {
                                 onStartSlideshow?(displayPictures)
+                            } label: {
+                                Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
                             }
+                            
+                            Section(.Strings.slideshowSectionTransitionStyle) {
+                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
+                                    ForEach(SlideshowTransitionStyle.allCases) { style in
+                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
+                                    }
+                                }
+                            }
+                            
+                            Section(.Strings.slideshowSectionSlideDuration) {
+                                Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
+                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
+                                }
+                            }
+                        } label: {
+                            Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
+                        } primaryAction: {
+                            onStartSlideshow?(displayPictures)
                         }
+                        .disabled(!hasImages)
                         
                         // Unified View, Sort & Grid Size Menu
                         Menu {
@@ -483,11 +486,12 @@ struct MediaGridView: View {
             Group {
                 // Space: Start slideshow of pictures in current folder
                 Button("") {
-                    if !displayPictures.isEmpty {
+                    if hasImages {
                         onStartSlideshow?(displayPictures)
                     }
                 }
                 .keyboardShortcut(.space, modifiers: [])
+                .disabled(!hasImages)
                 
                 // Escape: Cancel batch selection mode
                 Button("") {
@@ -1045,14 +1049,12 @@ struct MediaGridView: View {
                 var queueIndex = 0
                 let maxConcurrent = 3
                 
-                for _ in 0..<min(maxConcurrent, total) {
-                    if queueIndex < itemQueue.count {
-                        let (idx, item) = itemQueue[queueIndex]
-                        queueIndex += 1
-                        group.addTask { [manager = self.manager] in
-                            let result = await Self.prepareSingleItemForShare(item, manager: manager)
-                            return (idx, result)
-                        }
+                for _ in 0..<min(maxConcurrent, total) where queueIndex < itemQueue.count {
+                    let (idx, item) = itemQueue[queueIndex]
+                    queueIndex += 1
+                    group.addTask { [manager = self.manager] in
+                        let result = await Self.prepareSingleItemForShare(item, manager: manager)
+                        return (idx, result)
                     }
                 }
                 

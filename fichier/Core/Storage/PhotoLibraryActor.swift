@@ -258,7 +258,10 @@ public actor PhotoLibraryActor {
             }
         }.makeAsyncIterator()
         
-        return await streamIterator.next() ?? nil
+        if let result = await streamIterator.next() {
+            return result
+        }
+        return nil
     }
     
     /// Retrieves a high-resolution display image from PhotoKit.
@@ -304,7 +307,10 @@ public actor PhotoLibraryActor {
             }
         }.makeAsyncIterator()
         
-        return await streamIterator.next() ?? nil
+        if let result = await streamIterator.next() {
+            return result
+        }
+        return nil
     }
     
     /// Cancels an in-flight `PHImageRequestID`.

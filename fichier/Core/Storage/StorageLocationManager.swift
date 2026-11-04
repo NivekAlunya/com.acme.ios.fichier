@@ -363,7 +363,7 @@ public final class StorageLocationManager {
                 // Restore previously selected album/folder if available
                 let locID = location.id
                 if let remembered = lastSelectedFolderPerLocation[locID],
-                   (albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id) {
+                   albums.contains(where: { $0.id == remembered.id }) || remembered.id == rootWithChildren.id {
                     await selectAndLoadFolder(remembered)
                 } else if let firstAlbum = albums.first {
                     await selectAndLoadFolder(firstAlbum)
@@ -957,6 +957,7 @@ public final class StorageLocationManager {
             let asset = AVURLAsset(url: streamURL)
             // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
             let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
+            // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
@@ -994,7 +995,7 @@ public final class StorageLocationManager {
                         return nil
                     }
                     
-                    let first = await group.next() ?? nil
+                    let first = (await group.next()).flatMap { $0 }
                     group.cancelAll()
                     generator.cancelAllCGImageGeneration()
                     delegate.cancelAll()

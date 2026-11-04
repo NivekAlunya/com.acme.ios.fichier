@@ -50,7 +50,7 @@ public final class VideoPlayerController {
     public var playbackState: VideoPlaybackState = .idle
     
     /// User-presentable sanitized error description, or `nil` if healthy.
-    public var errorMessage: String? = nil
+    public var errorMessage: String?
     
     /// Current playback progress in seconds.
     public var currentPlaybackSeconds: Double = 0
@@ -83,19 +83,19 @@ public final class VideoPlayerController {
     public var isSaving: Bool = false
     
     /// Temporary toast message displayed after saving to Camera Roll.
-    public var saveStatusMessage: String? = nil
+    public var saveStatusMessage: String?
     
     /// Local file URL suitable for sharing via the system share sheet.
-    public var shareableVideoURL: URL? = nil
+    public var shareableVideoURL: URL?
     
     /// Temporary toast banner notifying the user that playback resumed from a saved position.
-    public var resumedToastMessage: String? = nil
+    public var resumedToastMessage: String?
     
     /// Indicates whether playback started by restoring a previously saved timestamp.
     public var didRestorePlaybackPosition: Bool = false
     
     /// The timestamp in seconds from which playback was restored.
-    public var restoredFromSeconds: Double? = nil
+    public var restoredFromSeconds: Double?
     
     /// Timestamp when playback began for this video.
     public var playbackStartTime: Date = Date()
@@ -211,6 +211,7 @@ public final class VideoPlayerController {
             let delegate = SMBResourceLoaderDelegate(worker: self.manager.clientActor, item: validItem, chunkSize: 512 * 1024)
             self.loaderDelegate = delegate
             
+            // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(uniqueID)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
             
@@ -317,7 +318,7 @@ public final class VideoPlayerController {
         monitorTask?.cancel()
         monitorTask = Task { @MainActor [weak self, weak avPlayer] in
             var tracksLoaded = false
-            var waitingStartTime: Date? = nil
+            var waitingStartTime: Date?
             
             while !Task.isCancelled {
                 guard let self, let p = avPlayer else { break }

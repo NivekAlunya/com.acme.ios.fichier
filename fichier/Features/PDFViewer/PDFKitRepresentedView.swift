@@ -27,13 +27,13 @@ struct PDFKitRepresentedView: UIViewRepresentable {
     let onPageChange: ((Int, Int) -> Void)?
     
     /// Callback delivering visible page range and total count.
-    var onPageRangeChange: ((Int, Int, Int) -> Void)? = nil
+    var onPageRangeChange: ((Int, Int, Int) -> Void)?
     
     /// Callback invoked when tapping the canvas.
     let onTap: (() -> Void)?
     
     /// Closure receiving the created coordinator instance.
-    var onCoordinatorCreated: ((PDFKitCoordinator) -> Void)? = nil
+    var onCoordinatorCreated: ((PDFKitCoordinator) -> Void)?
     
     /// Closure receiving the created `PDFView` instance.
     let onPDFViewCreated: ((PDFView) -> Void)?

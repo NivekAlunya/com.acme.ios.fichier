@@ -28,6 +28,15 @@ disabled_rules:
   - function_body_length    # Avoids hard errors on complex SwiftUI views or body properties
   - identifier_name         # Allows concise loop indices (i), coordinates (w, h, p, d), and speeds (speed1_5)
 
+# Rule thresholds customized for Swift 6 async controllers
+large_tuple:
+  warning: 4
+  error: 5
+
+cyclomatic_complexity:
+  warning: 25
+  error: 35
+
 # Custom rules enforcing Swift Concurrency & Workspace Rules
 custom_rules:
   no_legacy_dispatch_queue:

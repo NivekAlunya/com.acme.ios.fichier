@@ -86,7 +86,7 @@ public actor LocalStorageActor {
         activeSecurityScopedURL = resolvedURL
         activeLocationID = location.id
         
-        var updatedBookmark: Data? = nil
+        var updatedBookmark: Data?
         if isStale {
             // Attempt minimal bookmark refresh first, falling back to standard bookmark options
             updatedBookmark = (try? resolvedURL.bookmarkData(

@@ -96,7 +96,7 @@ public struct RootSMBView: View {
                             }
                         },
                         onStartSlideshow: { currentDisplayPictures in
-                            let photosOnly = currentDisplayPictures.filter { !$0.isVideo && !$0.isPDF }
+                            let photosOnly = currentDisplayPictures.filter(\.isImage)
                             if let first = photosOnly.first {
                                 activeContextMedia = currentDisplayPictures
                                 activePictureForViewer = first

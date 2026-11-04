@@ -29,7 +29,7 @@ struct MediaSelectionBottomBar: View {
     var showSaveToPhotos: Bool = true
     
     /// Optional closure triggered when the user cancels an ongoing batch operation.
-    var onCancel: (() -> Void)? = nil
+    var onCancel: (() -> Void)?
     
     /// Handler invoked to toggle favorite state across all selected items.
     let onToggleFavorite: () -> Void

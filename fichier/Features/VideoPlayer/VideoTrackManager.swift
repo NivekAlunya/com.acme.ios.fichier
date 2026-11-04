@@ -20,13 +20,13 @@ public final class VideoTrackManager {
     public private(set) var availableAudios: [VideoTrackOption] = []
     
     /// Unique identifier of the currently selected audio track.
-    public private(set) var selectedAudioID: String? = nil
+    public private(set) var selectedAudioID: String?
     
     /// Discovered subtitle and closed caption options, including the synthetic "Off" option.
     public private(set) var availableSubtitles: [VideoTrackOption] = []
     
     /// Unique identifier of the currently selected subtitle option.
-    public private(set) var selectedSubtitleID: String? = nil
+    public private(set) var selectedSubtitleID: String?
     
     /// Live rendered subtitle string currently visible on screen.
     public var currentSubtitleText: String = ""

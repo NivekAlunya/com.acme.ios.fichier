@@ -13,13 +13,13 @@ import Foundation
 /// - `.twoUp`: Two pages side-by-side starting immediately with Pages 1 and 2 paired.
 public enum PDFReadingMode: String, CaseIterable, Identifiable, Sendable {
     /// Vertical scrolling single page reading experience.
-    case continuous = "continuous"
+    case continuous
     
     /// Traditional book spread with a standalone cover page followed by facing page pairs.
-    case book = "book"
+    case book
     
     /// Side-by-side spread pairing pages without a standalone cover.
-    case twoUp = "twoUp"
+    case twoUp
     
     /// Stable string identifier for `Identifiable` conformance.
     public var id: String { rawValue }

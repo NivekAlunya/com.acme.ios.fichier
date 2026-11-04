@@ -41,7 +41,7 @@ public final class VideoSeekCoordinator {
     public var wasPlayingBeforeScrub: Bool = false
     
     /// Queued seek timestamp awaiting throttle window completion.
-    public var pendingSeekSeconds: Double? = nil
+    public var pendingSeekSeconds: Double?
     
     /// Timestamp of the most recent seek dispatch.
     public var lastSeekTime: Date = Date.distantPast

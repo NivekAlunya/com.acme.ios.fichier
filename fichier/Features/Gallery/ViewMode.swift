@@ -23,4 +23,12 @@ enum ViewMode: String, CaseIterable, Identifiable {
         case .list: return .Strings.galleryViewModeList
         }
     }
+    
+    /// System SF Symbol name for the selection mode toggle button matching this layout mode.
+    var selectionIconName: String {
+        switch self {
+        case .list: return "checklist"
+        case .grid: return "circle.grid.2x2.topleft.checkmark.filled"
+        }
+    }
 }

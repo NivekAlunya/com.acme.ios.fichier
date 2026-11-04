@@ -359,12 +359,10 @@ nonisolated public final class MediaCacheManager: Sendable {
         ) else { return }
         
         let now = Date()
-        for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension == "part" {
-                if let modDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-                   now.timeIntervalSince(modDate) > seconds {
-                    try? fileManager.removeItem(at: fileURL)
-                }
+        for case let fileURL as URL in enumerator where fileURL.pathExtension == "part" {
+            if let modDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+               now.timeIntervalSince(modDate) > seconds {
+                try? fileManager.removeItem(at: fileURL)
             }
         }
     }
@@ -517,10 +515,8 @@ nonisolated public final class MediaCacheManager: Sendable {
             try? fileManager.removeItem(at: videosDirectory)
         } else {
             if let enumerator = fileManager.enumerator(at: videosDirectory, includingPropertiesForKeys: nil) {
-                for case let fileURL as URL in enumerator {
-                    if !protecting.contains(fileURL) {
-                        try? fileManager.removeItem(at: fileURL)
-                    }
+                for case let fileURL as URL in enumerator where !protecting.contains(fileURL) {
+                    try? fileManager.removeItem(at: fileURL)
                 }
             }
         }

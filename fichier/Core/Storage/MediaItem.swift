@@ -208,4 +208,9 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         let ext = (name as NSString).pathExtension
         return SupportedMediaTypes.isDocument(extension: ext)
     }
+    
+    /// Indicates whether the item represents a photo or image format (excluding videos and documents).
+    public var isImage: Bool {
+        !isVideo && !isPDF && !isDocument
+    }
 }

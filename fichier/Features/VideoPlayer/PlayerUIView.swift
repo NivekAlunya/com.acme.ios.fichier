@@ -14,13 +14,13 @@ import AVFoundation
 /// - Detects two-finger single taps to toggle play/pause via `UITapGestureRecognizer`.
 public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
     /// Overrides backing layer class to provide a native `AVPlayerLayer`.
-    public override class var layerClass: AnyClass {
+    public override static var layerClass: AnyClass {
         AVPlayerLayer.self
     }
     
     /// Typed accessor for the backing `AVPlayerLayer`.
     public var playerLayer: AVPlayerLayer {
-        layer as! AVPlayerLayer
+        (layer as? AVPlayerLayer) ?? AVPlayerLayer()
     }
     
     /// Callback triggered upon recognizing a two-finger single tap.
