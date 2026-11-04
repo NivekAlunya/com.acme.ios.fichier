@@ -86,10 +86,15 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     
     public static func == (lhs: MediaItem, rhs: MediaItem) -> Bool {
         lhs.id == rhs.id &&
+        lhs.name == rhs.name &&
         lhs.size == rhs.size &&
         lhs.modifiedDate == rhs.modifiedDate &&
-        (lhs.children?.count == rhs.children?.count) &&
-        ((lhs.children == nil) == (rhs.children == nil))
+        lhs.children == rhs.children
+    }
+    
+    /// Path components split on both "/" and "\" without intermediate string allocations.
+    public var normalizedComponents: [Substring] {
+        path.split { $0 == "/" || $0 == "\\" }
     }
     
     public func hash(into hasher: inout Hasher) {

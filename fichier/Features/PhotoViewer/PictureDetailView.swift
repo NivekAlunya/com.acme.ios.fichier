@@ -198,14 +198,23 @@ public struct PictureDetailView: View {
             activeMetadata = nil
             currentImage = nil
             prefetchNext(after: currentItem)
-            if !currentItem.isVideo {
-                let img = await manager.downloadImage(for: currentItem)
-                if !Task.isCancelled {
-                    self.currentImage = img
+            
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask { @MainActor in
+                    let meta = await manager.fetchMetadata(for: currentItem)
+                    if !Task.isCancelled {
+                        self.activeMetadata = meta
+                    }
                 }
-            }
-            if !Task.isCancelled {
-                activeMetadata = await manager.fetchMetadata(for: currentItem)
+                
+                if !currentItem.isVideo {
+                    group.addTask { @MainActor in
+                        let img = await manager.downloadImage(for: currentItem)
+                        if !Task.isCancelled {
+                            self.currentImage = img
+                        }
+                    }
+                }
             }
         }
         .background {

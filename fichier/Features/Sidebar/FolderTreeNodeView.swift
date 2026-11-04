@@ -122,21 +122,16 @@ struct FolderTreeNodeView: View {
             .buttonStyle(.plain)
         }
         .listRowBackground(isSelected ? Color.blue.opacity(0.14) : Color.clear)
-        .task {
+        .task(id: isExpanded) {
             if isExpanded && node.children == nil {
                 await manager.loadSubfoldersForTree(at: node)
             }
         }
-        .task(id: manager.selectedFolder?.id) {
-            guard let selected = manager.selectedFolder else { return }
-            if selected.id == node.id || isAncestor(of: selected) {
-                if !isExpanded {
-                    withAnimation(.snappy) {
-                        isExpanded = true
-                    }
-                }
-                if node.children == nil {
-                    await manager.loadSubfoldersForTree(at: node)
+        .onChange(of: manager.selectedFolder) { _, newSelected in
+            guard let newSelected else { return }
+            if !isExpanded && (newSelected.id == node.id || isAncestor(of: newSelected)) {
+                withAnimation(.snappy) {
+                    isExpanded = true
                 }
             }
         }
@@ -160,10 +155,8 @@ struct FolderTreeNodeView: View {
         if node.path == "/" || node.path.isEmpty {
             return target.path != node.path
         }
-        let normalizedNode = node.path.replacingOccurrences(of: "\\", with: "/")
-        let normalizedTarget = target.path.replacingOccurrences(of: "\\", with: "/")
-        let nodeComponents = normalizedNode.split(separator: "/").filter { !$0.isEmpty }
-        let targetComponents = normalizedTarget.split(separator: "/").filter { !$0.isEmpty }
+        let nodeComponents = node.normalizedComponents
+        let targetComponents = target.normalizedComponents
         return targetComponents.starts(with: nodeComponents) && targetComponents.count > nodeComponents.count
     }
     
@@ -172,10 +165,6 @@ struct FolderTreeNodeView: View {
         if selected.id == child.id { return true }
         guard selected.locationID == child.locationID, selected.rootName == child.rootName else { return false }
         if child.path.isEmpty || child.path == "/" { return true }
-        let normalizedChild = child.path.replacingOccurrences(of: "\\", with: "/")
-        let normalizedSelected = selected.path.replacingOccurrences(of: "\\", with: "/")
-        let childComponents = normalizedChild.split(separator: "/").filter { !$0.isEmpty }
-        let selectedComponents = normalizedSelected.split(separator: "/").filter { !$0.isEmpty }
-        return selectedComponents.starts(with: childComponents)
+        return selected.normalizedComponents.starts(with: child.normalizedComponents)
     }
 }
