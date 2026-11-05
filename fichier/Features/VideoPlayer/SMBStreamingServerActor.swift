@@ -17,6 +17,7 @@ actor SMBStreamingServerActor {
     private var listener: NWListener?
     private var activeConnections: [NWConnection] = []
     private var serverPort: UInt16?
+    private var startupContinuation: CheckedContinuation<URL, any Error>?
     
     /// Default maximum chunk size served in a single partial content response (2 MB).
     private static let maxChunkSize: Int = 2 * 1024 * 1024
@@ -54,30 +55,12 @@ actor SMBStreamingServerActor {
         self.listener = newListener
         
         return try await withCheckedThrowingContinuation { continuation in
-            var didResume = false
+            self.startupContinuation = continuation
             
             newListener.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
                 Task {
-                    switch state {
-                    case .ready:
-                        if let port = newListener.port?.rawValue {
-                            await self.setPort(port)
-                            if !didResume {
-                                didResume = true
-                                continuation.resume(returning: await self.makeStreamURL(for: port))
-                            }
-                        }
-                    case .failed(let error):
-                        if !didResume {
-                            didResume = true
-                            continuation.resume(throwing: error)
-                        }
-                    case .cancelled:
-                        break
-                    default:
-                        break
-                    }
+                    await self.handleListenerStateUpdate(state)
                 }
             }
             
@@ -96,6 +79,8 @@ actor SMBStreamingServerActor {
     
     /// Cancels the loopback listener and closes all active client connections.
     func stop() {
+        startupContinuation?.resume(throwing: CancellationError())
+        startupContinuation = nil
         listener?.cancel()
         listener = nil
         serverPort = nil
@@ -107,8 +92,24 @@ actor SMBStreamingServerActor {
     
     // MARK: - Private Connection Management
     
-    private func setPort(_ port: UInt16) {
-        self.serverPort = port
+    private func handleListenerStateUpdate(_ state: NWListener.State) {
+        guard let continuation = startupContinuation else { return }
+        switch state {
+        case .ready:
+            if let port = listener?.port?.rawValue {
+                self.serverPort = port
+                self.startupContinuation = nil
+                continuation.resume(returning: makeStreamURL(for: port))
+            }
+        case .failed(let error):
+            self.startupContinuation = nil
+            continuation.resume(throwing: error)
+        case .cancelled:
+            self.startupContinuation = nil
+            continuation.resume(throwing: CancellationError())
+        default:
+            break
+        }
     }
     
     private func makeStreamURL(for port: UInt16) -> URL {
@@ -208,18 +209,29 @@ actor SMBStreamingServerActor {
             break
         }
         
+        let contentType = SupportedMediaTypes.mimeType(for: (item.name as NSString).pathExtension)
+        
         if method == "HEAD" {
             let headers: [String: String] = [
                 "Accept-Ranges": "bytes",
                 "Content-Length": "\(totalSize)",
-                "Content-Type": "video/x-matroska",
+                "Content-Type": contentType,
                 "Connection": "close"
             ]
             sendHTTPResponse(status: "200 OK", headers: headers, body: nil, on: connection)
             return
         }
         
-        if let rangeHeader, let (start, end) = parseRangeHeader(rangeHeader, totalSize: totalSize) {
+        if let rangeHeader {
+            guard let (start, end) = Self.parseRangeHeader(rangeHeader, totalSize: totalSize) else {
+                let headers: [String: String] = [
+                    "Content-Range": "bytes */\(totalSize)",
+                    "Connection": "close"
+                ]
+                sendHTTPResponse(status: "416 Range Not Satisfiable", headers: headers, body: nil, on: connection)
+                return
+            }
+            
             let requestedLength = Int(end - start + 1)
             let fetchLength = min(requestedLength, Self.maxChunkSize)
             
@@ -227,7 +239,7 @@ actor SMBStreamingServerActor {
                 let payload = try await worker.fetchMediaRange(for: item, offset: start, length: fetchLength)
                 let actualEnd = start + Int64(payload.count) - 1
                 let headers: [String: String] = [
-                    "Content-Type": "video/x-matroska",
+                    "Content-Type": contentType,
                     "Content-Range": "bytes \(start)-\(actualEnd)/\(totalSize)",
                     "Content-Length": "\(payload.count)",
                     "Accept-Ranges": "bytes",
@@ -245,7 +257,7 @@ actor SMBStreamingServerActor {
                 let payload = try await worker.fetchMediaRange(for: item, offset: 0, length: fetchLength)
                 let actualEnd = Int64(payload.count) - 1
                 let headers: [String: String] = [
-                    "Content-Type": "video/x-matroska",
+                    "Content-Type": contentType,
                     "Content-Range": "bytes 0-\(actualEnd)/\(totalSize)",
                     "Content-Length": "\(payload.count)",
                     "Accept-Ranges": "bytes",
@@ -259,21 +271,46 @@ actor SMBStreamingServerActor {
         }
     }
     
-    private func parseRangeHeader(_ header: String, totalSize: Int64) -> (start: Int64, end: Int64)? {
-        // e.g. "Range: bytes=0-1024" or "Range: bytes=1024-"
+    /// Parses and validates an HTTP byte Range header against the resource size.
+    ///
+    /// - Parameters:
+    ///   - header: The raw Range header string (e.g. "Range: bytes=0-1024", "Range: bytes=1024-", "Range: bytes=-500").
+    ///   - totalSize: The total byte size of the target file.
+    /// - Returns: A valid `(start, end)` tuple if satisfiable; `nil` if malformed or unsatisfiable (should return 416).
+    static func parseRangeHeader(_ header: String, totalSize: Int64) -> (start: Int64, end: Int64)? {
+        guard totalSize > 0 else { return nil }
         guard let eqIndex = header.firstIndex(of: "=") else { return nil }
+        
+        let prefix = header[..<eqIndex].trimmingCharacters(in: .whitespaces).lowercased()
+        guard prefix == "range: bytes" || prefix == "bytes" else { return nil }
+        
         let spec = header[header.index(after: eqIndex)...].trimmingCharacters(in: .whitespaces)
+        guard !spec.contains(",") else { return nil }
+        
         let bounds = spec.components(separatedBy: "-")
-        guard let first = bounds.first, let start = Int64(first) else { return nil }
+        guard bounds.count == 2 else { return nil }
         
-        let end: Int64
-        if bounds.count > 1, let specifiedEnd = Int64(bounds[1]), specifiedEnd >= start {
-            end = min(specifiedEnd, totalSize - 1)
+        let startStr = bounds[0].trimmingCharacters(in: .whitespaces)
+        let endStr = bounds[1].trimmingCharacters(in: .whitespaces)
+        
+        if startStr.isEmpty {
+            // Suffix range: "-suffixLength" (e.g. "-500")
+            guard let suffixLength = Int64(endStr), suffixLength > 0 else { return nil }
+            let start = max(0, totalSize - suffixLength)
+            let end = totalSize - 1
+            return (start, end)
+        } else if endStr.isEmpty {
+            // Open-ended range: "start-" (e.g. "1024-")
+            guard let start = Int64(startStr), start >= 0, start < totalSize else { return nil }
+            let end = totalSize - 1
+            return (start, end)
         } else {
-            end = min(start + Int64(Self.maxChunkSize) - 1, totalSize - 1)
+            // Explicit bounded range: "start-end" (e.g. "0-1024")
+            guard let start = Int64(startStr), let endVal = Int64(endStr) else { return nil }
+            guard start >= 0, start < totalSize, endVal >= start else { return nil }
+            let end = min(endVal, totalSize - 1)
+            return (start, end)
         }
-        
-        return (start, end)
     }
     
     private nonisolated func sendHTTPResponse(status: String, headers: [String: String], body: Data?, on connection: NWConnection) {

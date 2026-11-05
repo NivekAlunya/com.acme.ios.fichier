@@ -34,5 +34,16 @@ final class SupportedMediaTypesTests: XCTestCase {
             XCTAssertTrue(SupportedMediaTypes.isSupported(extension: ext), "Expected \(ext) to be supported")
         }
     }
+    
+    func testMimeTypeResolution() {
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "mkv"), "video/x-matroska")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "webm"), "video/webm")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "avi"), "video/x-msvideo")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "mp4"), "video/mp4")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "mov"), "video/quicktime")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "wmv"), "video/x-ms-wmv")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "ts"), "video/mp2t")
+        XCTAssertEqual(SupportedMediaTypes.mimeType(for: "pdf"), "application/pdf")
+    }
 }
 #endif

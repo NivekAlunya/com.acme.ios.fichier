@@ -1072,10 +1072,25 @@ public final class VideoPlayerController {
     
     /// Saves current playback progress when the application enters the background scene phase.
     public func handleScenePhaseBackground() {
-        if let p = player, let loadedItem = currentlyLoadedItem {
-            let secs = p.currentTime().seconds
-            let dur = p.currentItem?.duration.seconds ?? 0
-            VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+        if let loadedItem = currentlyLoadedItem {
+            let secs: Double
+            let dur: Double
+            if let currentEngine = engine {
+                secs = currentEngine.currentTimeSeconds
+                let engineDur = currentEngine.durationSeconds
+                dur = engineDur > 0 ? engineDur : totalDurationSeconds
+            } else if let p = player {
+                secs = p.currentTime().seconds
+                dur = p.currentItem?.duration.seconds ?? totalDurationSeconds
+            } else {
+                secs = currentPlaybackSeconds
+                dur = totalDurationSeconds
+            }
+            
+            let isNearEnd = dur > 0 && (secs >= dur - 4.0 || secs >= dur * 0.90)
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 && !isNearEnd {
+                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+            }
         }
         VideoPlaybackStore.shared.flush()
     }
