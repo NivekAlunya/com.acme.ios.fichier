@@ -147,21 +147,24 @@
 /* Begin PBXShellScriptBuildPhase section */
 		D14BDE20309B4039007D8134 /* Run SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
 			name = "Run SwiftLint";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nif [ \"$CI\" = \"true\" ]; then\n  if ! which swiftlint >/dev/null 2>&1; then\n    echo \"error: SwiftLint is required in CI environment.\"\n    exit 1\n  fi\n  cd \"${SRCROOT}\" && swiftlint lint --strict\nelif which swiftlint >/dev/null 2>&1; then\n  cd \"${SRCROOT}\" && swiftlint lint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
+			shellScript = (
+				"export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"",
+				"",
+				"if [ \"$CI\" = \"true\" ]; then",
+				"  if ! which swiftlint >/dev/null 2>&1; then",
+				"    echo \"error: SwiftLint is required in CI environment.\"",
+				"    exit 1",
+				"  fi",
+				"  cd \"${SRCROOT}\" && swiftlint lint --strict",
+				"elif which swiftlint >/dev/null 2>&1; then",
+				"  cd \"${SRCROOT}\" && swiftlint lint",
+				"else",
+				"  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"",
+				"fi",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 

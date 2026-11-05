@@ -124,6 +124,11 @@ public final class VideoPlayerController {
         self.currentItem = initialItem
     }
     
+    /// Indicates whether the current video reached its end timestamp and is in a terminal paused state.
+    public var isAtEnd: Bool {
+        totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 && !playbackState.isPlaying
+    }
+    
     /// Zero-based index of the current video within the active playlist.
     public var currentIndex: Int {
         videos.firstIndex(where: { $0.id == currentItem.id }) ?? 0
@@ -360,8 +365,10 @@ public final class VideoPlayerController {
                 case .paused:
                     waitingStartTime = nil
                     if self.playbackState.isBuffering {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            self.playbackState = .paused
+                        if currentItem?.status == .readyToPlay {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                self.playbackState = .paused
+                            }
                         }
                     }
                     if self.playbackState.isPlaying && !self.seekCoordinator.isScrubbing && !self.seekCoordinator.isFinishingSeek {
@@ -373,6 +380,8 @@ public final class VideoPlayerController {
                         waitingStartTime = Date()
                     } else if let start = waitingStartTime, Date().timeIntervalSince(start) > 0.85 {
                         if !self.playbackState.isBuffering && !self.seekCoordinator.isScrubbing {
+                            self.hideControlsTask?.cancel()
+                            self.hideControlsTask = nil
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 self.playbackState = .buffering
                             }
@@ -454,6 +463,8 @@ public final class VideoPlayerController {
         
         if resumePlaying {
             playbackState = .buffering
+            hideControlsTask?.cancel()
+            hideControlsTask = nil
         }
         
         seekCoordinator.finishSeeking(
@@ -464,6 +475,8 @@ public final class VideoPlayerController {
                 guard let self else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if buffering {
+                        self.hideControlsTask?.cancel()
+                        self.hideControlsTask = nil
                         self.playbackState = .buffering
                     } else if self.player?.timeControlStatus == .playing {
                         self.playbackState = .playing
@@ -546,12 +559,23 @@ public final class VideoPlayerController {
     
     /// Advances to the next video upon playback reaching the end (does not loop to start).
     public func playNextVideo() {
-        guard videos.count > 1 else { return }
+        guard videos.count > 1 else {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+            cancelAutoHideTimer()
+            return
+        }
         let nextIndex = currentIndex + 1
         if nextIndex < videos.count {
-            withAnimation(.easeInOut) {
+            withAnimation(.easeInOut(duration: 0.3)) {
                 currentItem = videos[nextIndex]
             }
+        } else {
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+            cancelAutoHideTimer()
         }
     }
     
@@ -695,7 +719,8 @@ public final class VideoPlayerController {
         if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
-            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+            let isNearEnd = dur > 0 && secs >= dur * 0.90
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 && !isNearEnd {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
             }
         }
@@ -744,24 +769,24 @@ public final class VideoPlayerController {
         
         let targetItem = currentlyLoadedItem ?? currentItem
         
-        if didRestorePlaybackPosition && (totalDurationSeconds > 3.0 || totalDurationSeconds == 0) {
-            didRestorePlaybackPosition = false
-            restoredFromSeconds = nil
-            player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
-            currentPlaybackSeconds = 0
-            VideoPlaybackStore.shared.clearPosition(for: targetItem)
-            player?.play()
-            playbackState = .playing
-            return
-        }
-        
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
         
         if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
             VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
         }
-        playNextVideo()
+        
+        if videos.count > 1 && currentIndex + 1 < videos.count {
+            playNextVideo()
+        } else {
+            // Reached the end of playlist or single video:
+            // Reveal controls so user can replay or navigate, and pause
+            playbackState = .paused
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+            cancelAutoHideTimer()
+        }
     }
     
     /// Notification handler invoked when playback fails prematurely before reaching the end.

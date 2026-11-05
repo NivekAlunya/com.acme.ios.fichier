@@ -63,11 +63,13 @@ jobs:
           # Assemble review prompt
           cat << 'EOF' > system_prompt.txt
           You are a Senior DevOps & Principal Software Engineer reviewing a GitHub PR.
+          Focus strictly and exclusively on the updated parts of the code (the lines added, modified, or directly affected in this pull request diff). Do NOT review, flag issues in, or comment on untouched pre-existing code or surrounding context lines.
+
           Provide a concise, high-signal code review covering:
-          1. 🛡️ Security: Hardcoded secrets, credential leaks, injection risks.
-          2. ⚠️ Logic & Reliability: Error handling, edge cases, breaking changes.
-          3. ⚡ Performance & Scalability: Inefficient loops, resource leaks.
-          4. 🧪 Testing & CI/CD: Missing tests or pipeline impacts.
+          1. 🛡️ Security: Hardcoded secrets, credential leaks, injection risks in the changed code.
+          2. ⚠️ Logic & Reliability: Error handling, edge cases, breaking changes introduced by the diff.
+          3. ⚡ Performance & Scalability: Inefficient loops, resource leaks in the modifications.
+          4. 🧪 Testing & CI/CD: Missing tests or pipeline impacts related to the updates.
 
           Format clearly in markdown with code suggestions where applicable.
           EOF
@@ -76,6 +78,8 @@ jobs:
           $(cat system_prompt.txt)
 
           Pull Request: "${PR_TITLE}" (#${PR_NUMBER})
+
+          IMPORTANT: Focus your review strictly and exclusively on the updated parts of the code below. Do not comment on untouched or pre-existing code.
 
           Git Diff:
           \`\`\`diff
