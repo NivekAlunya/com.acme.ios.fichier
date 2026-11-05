@@ -772,6 +772,10 @@ public final class VideoPlayerController {
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
         
+        if totalDurationSeconds > 0 {
+            currentPlaybackSeconds = totalDurationSeconds
+        }
+        
         if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
             VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
         }
