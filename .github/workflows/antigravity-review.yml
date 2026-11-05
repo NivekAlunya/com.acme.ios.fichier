@@ -140,7 +140,7 @@ jobs:
           echo "---" >> review.md
           echo "*Reviewed by Antigravity Agent using \`${GEMINI_MODEL}\` on commit \`${GITHUB_SHA:0:7}\`*" >> review.md
 
-      - name: Post or Update PR Comment
+      - name: Post PR Review Comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -151,14 +151,5 @@ jobs:
             exit 0
           fi
 
-          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/$PR_NUMBER/comments \
-            --jq '.[] | select(.body | contains("<!-- antigravity-pr-reviewer -->")) | .id' | head -n 1)
-
-          if [ -n "$COMMENT_ID" ]; then
-            echo "Updating existing comment ID: $COMMENT_ID..."
-            gh api --method PATCH repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
-              -F body=@review.md
-          else
-            echo "Posting new PR review comment..."
-            gh pr comment $PR_NUMBER --body-file review.md
-          fi
+          echo "Posting new PR review comment..."
+          gh pr comment $PR_NUMBER --body-file review.md
