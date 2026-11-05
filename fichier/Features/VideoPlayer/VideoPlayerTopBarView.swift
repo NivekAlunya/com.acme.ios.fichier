@@ -122,11 +122,12 @@ public struct VideoPlayerTopBarView: View {
         } label: {
             Image(systemName: "chevron.left")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(controller.videos.count > 1 ? 1 : 0.35))
                 .frame(width: 32, height: 36)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(controller.videos.count <= 1)
         .accessibilityLabel(String(localized: "Previous Video", comment: "Accessibility label for previous video"))
     }
     
@@ -137,11 +138,12 @@ public struct VideoPlayerTopBarView: View {
         } label: {
             Image(systemName: "chevron.right")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(controller.videos.count > 1 ? 1 : 0.35))
                 .frame(width: 32, height: 36)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(controller.videos.count <= 1)
         .accessibilityLabel(String(localized: "Next Video", comment: "Accessibility label for next video"))
     }
     
@@ -155,18 +157,14 @@ public struct VideoPlayerTopBarView: View {
     /// Floating capsule container hosting action icons.
     private var centerToolsBar: some View {
         HStack(spacing: 6) {
-            if controller.videos.count > 1 {
-                previousButton
-                toolsDivider
-            }
+            previousButton
+            toolsDivider
             
             actionToolsIcons(spacing: 12)
                 .padding(.horizontal, 4)
             
-            if controller.videos.count > 1 {
-                toolsDivider
-                nextButton
-            }
+            toolsDivider
+            nextButton
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

@@ -7,8 +7,9 @@ import SwiftUI
 
 /// Composed overlay layer integrating top, center, and bottom HUD controls for video playback.
 ///
-/// Features smooth animated fading (`opacity`) based on `controller.showControls`, and suppresses
-/// touch hit testing when controls are invisible so background gestures pass directly to the player canvas.
+/// Features smooth animated fading (`opacity`) for transient control bars and transport buttons based on
+/// `controller.showControls`, while keeping persistent status indicators (such as the buffering spinner)
+/// visible until buffering completes.
 public struct VideoPlayerHUDView: View {
     /// Active video player controller.
     public var controller: VideoPlayerController
@@ -28,6 +29,7 @@ public struct VideoPlayerHUDView: View {
     
     public var body: some View {
         ZStack {
+            // Bars & Overlays (Top, Toast, Bottom) - explicitly tied to showControls
             VStack(spacing: 12) {
                 VideoPlayerTopBarView(controller: controller, onDismiss: onDismiss)
                 
@@ -37,12 +39,16 @@ public struct VideoPlayerHUDView: View {
                 
                 VideoPlayerBottomBarView(controller: controller)
             }
+            .opacity(controller.showControls ? 1 : 0)
+            .animation(.easeInOut(duration: 0.35), value: controller.showControls)
+            .allowsHitTesting(controller.showControls)
+            .accessibilityHidden(!controller.showControls)
             
+            // Center Controls & Buffering / Error Overlay
+            // The buffering popup and error indicator remain independent of showControls
+            // so buffering stays visible until buffering is done!
             VideoPlayerCenterControlsView(controller: controller)
         }
-        .opacity(controller.showControls ? 1 : 0)
-        .animation(.easeInOut(duration: 0.35), value: controller.showControls)
         .animation(.easeInOut(duration: 0.25), value: controller.playbackState.isBuffering)
-        .allowsHitTesting(controller.showControls)
     }
 }

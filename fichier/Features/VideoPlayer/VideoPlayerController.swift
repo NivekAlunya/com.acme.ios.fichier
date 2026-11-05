@@ -124,6 +124,11 @@ public final class VideoPlayerController {
         self.currentItem = initialItem
     }
     
+    /// Indicates whether the current video reached its end timestamp and is in a terminal paused state.
+    public var isAtEnd: Bool {
+        totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 && !playbackState.isPlaying
+    }
+    
     /// Zero-based index of the current video within the active playlist.
     public var currentIndex: Int {
         videos.firstIndex(where: { $0.id == currentItem.id }) ?? 0
@@ -322,11 +327,11 @@ public final class VideoPlayerController {
             
             while !Task.isCancelled {
                 guard let self, let p = avPlayer else { break }
-                let currentItem = p.currentItem
+                let playerItem = p.currentItem
                 
                 // 1. Terminal error check
-                let playbackError = p.error ?? currentItem?.error
-                if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
+                let playbackError = p.error ?? playerItem?.error
+                if playbackError != nil || p.status == .failed || playerItem?.status == .failed {
                     let desc = playbackError?.localizedDescription ?? "Playback error"
                     let sanitized = self.sanitizeErrorDescription(desc)
                     let localizedDesc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
@@ -336,7 +341,7 @@ public final class VideoPlayerController {
                 }
                 
                 // 2. Load audio/subtitle tracks once playerItem is ready
-                if !tracksLoaded, let item = currentItem, item.status == .readyToPlay {
+                if !tracksLoaded, let item = playerItem, item.status == .readyToPlay {
                     tracksLoaded = true
                     Task { @MainActor in
                         await self.trackManager.loadTracks(for: item)
@@ -360,8 +365,10 @@ public final class VideoPlayerController {
                 case .paused:
                     waitingStartTime = nil
                     if self.playbackState.isBuffering {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            self.playbackState = .paused
+                        if playerItem?.status == .readyToPlay {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                self.playbackState = .paused
+                            }
                         }
                     }
                     if self.playbackState.isPlaying && !self.seekCoordinator.isScrubbing && !self.seekCoordinator.isFinishingSeek {
@@ -373,6 +380,7 @@ public final class VideoPlayerController {
                         waitingStartTime = Date()
                     } else if let start = waitingStartTime, Date().timeIntervalSince(start) > 0.85 {
                         if !self.playbackState.isBuffering && !self.seekCoordinator.isScrubbing {
+                            self.cancelAutoHideTimer()
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 self.playbackState = .buffering
                             }
@@ -390,6 +398,11 @@ public final class VideoPlayerController {
     /// Toggles between playing and paused states, wrapping to beginning if reaching the end.
     public func togglePlayPause() {
         guard let player = player else { return }
+        if isAtEnd {
+            seekTo(0, resumePlaying: true)
+            currentPlaybackSeconds = 0
+            return
+        }
         if player.timeControlStatus != .paused {
             player.pause()
             playbackState = .paused
@@ -398,14 +411,9 @@ public final class VideoPlayerController {
                 showControls = true
             }
         } else {
-            if totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 {
-                seekTo(0, resumePlaying: true)
-                currentPlaybackSeconds = 0
-            } else {
-                player.play()
-                playbackState = .playing
-                scheduleControlsAutoHide()
-            }
+            player.play()
+            playbackState = .playing
+            scheduleControlsAutoHide()
         }
     }
     
@@ -454,6 +462,7 @@ public final class VideoPlayerController {
         
         if resumePlaying {
             playbackState = .buffering
+            cancelAutoHideTimer()
         }
         
         seekCoordinator.finishSeeking(
@@ -464,6 +473,7 @@ public final class VideoPlayerController {
                 guard let self else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if buffering {
+                        self.cancelAutoHideTimer()
                         self.playbackState = .buffering
                     } else if self.player?.timeControlStatus == .playing {
                         self.playbackState = .playing
@@ -546,12 +556,27 @@ public final class VideoPlayerController {
     
     /// Advances to the next video upon playback reaching the end (does not loop to start).
     public func playNextVideo() {
-        guard videos.count > 1 else { return }
+        guard videos.count > 1 else {
+            player?.pause()
+            playbackState = .paused
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+            cancelAutoHideTimer()
+            return
+        }
         let nextIndex = currentIndex + 1
         if nextIndex < videos.count {
-            withAnimation(.easeInOut) {
+            withAnimation(.easeInOut(duration: 0.3)) {
                 currentItem = videos[nextIndex]
             }
+        } else {
+            player?.pause()
+            playbackState = .paused
+            withAnimation(.easeInOut(duration: 0.35)) {
+                showControls = true
+            }
+            cancelAutoHideTimer()
         }
     }
     
@@ -695,7 +720,8 @@ public final class VideoPlayerController {
         if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
-            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 {
+            let isNearEnd = dur > 0 && secs >= dur * 0.90
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 && !isNearEnd {
                 VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
             }
         }
@@ -744,23 +770,17 @@ public final class VideoPlayerController {
         
         let targetItem = currentlyLoadedItem ?? currentItem
         
-        if didRestorePlaybackPosition && (totalDurationSeconds > 3.0 || totalDurationSeconds == 0) {
-            didRestorePlaybackPosition = false
-            restoredFromSeconds = nil
-            player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
-            currentPlaybackSeconds = 0
-            VideoPlaybackStore.shared.clearPosition(for: targetItem)
-            player?.play()
-            playbackState = .playing
-            return
-        }
-        
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
+        
+        if totalDurationSeconds > 0 {
+            currentPlaybackSeconds = totalDurationSeconds
+        }
         
         if totalDurationSeconds >= 2.0 && currentPlaybackSeconds >= totalDurationSeconds * 0.9 {
             VideoPlaybackStore.shared.markFinished(for: targetItem, duration: totalDurationSeconds)
         }
+        
         playNextVideo()
     }
     
