@@ -92,7 +92,7 @@ nonisolated public enum SupportedMediaTypes: Sendable {
     /// - Parameter ext: The file extension string (e.g. "mkv", "avi", "webm").
     /// - Returns: A standard MIME type string (e.g. "video/x-matroska", "video/webm").
     public static func mimeType(for ext: String) -> String {
-        let normalized = ext.lowercased()
+        let normalized = ext.trimmingCharacters(in: .punctuationCharacters).lowercased()
         switch normalized {
         case "mkv":
             return "video/x-matroska"

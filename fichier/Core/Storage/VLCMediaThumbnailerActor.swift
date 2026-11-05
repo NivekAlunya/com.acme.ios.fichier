@@ -20,6 +20,7 @@ public actor VLCMediaThumbnailerActor {
     
     private var pendingRequests: [UUID: CheckedContinuation<UIImage?, Never>] = [:]
     private var activeSessions: [UUID: VLCMediaThumbnailerSession] = [:]
+    private var watchdogTasks: [UUID: Task<Void, Never>] = [:]
     private var inFlightCount: Int = 0
     private let maxConcurrentSessions: Int = 1
     private var waitQueue: [CheckedContinuation<Void, Never>] = []
@@ -97,10 +98,11 @@ public actor VLCMediaThumbnailerActor {
                 await session.start(with: media, maxDimension: maxDimension, snapshotPosition: position)
             }
             
-            Task { [weak self] in
+            let watchdog = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
                 await self?.handleWatchdogTimeout(for: sessionID)
             }
+            self.watchdogTasks[sessionID] = watchdog
         }
         #else
         return nil
@@ -139,10 +141,11 @@ public actor VLCMediaThumbnailerActor {
                 await session.start(with: media, maxDimension: maxDimension, snapshotPosition: clamped)
             }
             
-            Task { [weak self] in
+            let watchdog = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
                 await self?.handleWatchdogTimeout(for: sessionID)
             }
+            self.watchdogTasks[sessionID] = watchdog
         }
         #else
         return nil
@@ -151,6 +154,7 @@ public actor VLCMediaThumbnailerActor {
     
     /// Internal callback invoked by `VLCMediaThumbnailerSession` upon successful extraction or failure.
     public func handleSessionCompletion(id: UUID, image: UIImage?) async {
+        watchdogTasks.removeValue(forKey: id)?.cancel()
         guard let continuation = pendingRequests.removeValue(forKey: id) else { return }
         if let session = activeSessions.removeValue(forKey: id) {
             await session.cancel()
@@ -159,6 +163,7 @@ public actor VLCMediaThumbnailerActor {
     }
     
     private func handleWatchdogTimeout(for id: UUID) async {
+        watchdogTasks.removeValue(forKey: id)?.cancel()
         guard let continuation = pendingRequests.removeValue(forKey: id) else { return }
         if let session = activeSessions.removeValue(forKey: id) {
             await session.cancel()

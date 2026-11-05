@@ -22,7 +22,8 @@ public enum VideoFormatStyle: Sendable {
     /// - Parameter ext: The video file extension.
     /// - Returns: A dedicated `Color` for the format family.
     public static func color(for ext: String) -> Color {
-        switch ext.lowercased() {
+        let normalized = ext.trimmingCharacters(in: .punctuationCharacters).lowercased()
+        switch normalized {
         case "mp4":
             return Color.blue
         case "mov":

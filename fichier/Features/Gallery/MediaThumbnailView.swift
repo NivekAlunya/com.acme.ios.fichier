@@ -238,7 +238,7 @@ public struct MediaThumbnailView: View {
                     .foregroundColor(.white.opacity(0.8))
                 
                 if !isCompact {
-                    Text(item.isVideo ? "Play Video" : .Strings.galleryThumbnailRetryPreview)
+                    Text(item.isVideo ? .Strings.galleryThumbnailPlayVideo : .Strings.galleryThumbnailRetryPreview)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundColor(.white.opacity(0.8))
                 }
