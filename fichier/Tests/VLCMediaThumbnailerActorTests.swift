@@ -54,5 +54,27 @@ final class VLCMediaThumbnailerActorTests: XCTestCase {
             }
         }
     }
+    
+    func testGenerateThumbnailWithPreferredTimeSafelyReturnsNilOnNonexistentFile() async {
+        let nonexistentURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).mkv")
+        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            from: nonexistentURL,
+            maxDimension: 260,
+            preferredTime: CMTime(seconds: 15, preferredTimescale: 600),
+            timeoutSeconds: 0.3
+        )
+        XCTAssertNil(thumb, "Thumbnail extraction with positive preferredTime on missing file must safely return nil")
+    }
+    
+    func testGenerateThumbnailWithZeroPreferredTimeSafelyReturnsNilOnNonexistentFile() async {
+        let nonexistentURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).mkv")
+        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            from: nonexistentURL,
+            maxDimension: 260,
+            preferredTime: .zero,
+            timeoutSeconds: 0.3
+        )
+        XCTAssertNil(thumb, "Thumbnail extraction with zero preferredTime on missing file must safely return nil")
+    }
 }
 #endif

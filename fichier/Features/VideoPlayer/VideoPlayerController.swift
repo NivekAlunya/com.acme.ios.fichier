@@ -339,7 +339,8 @@ public final class VideoPlayerController {
             onTimeUpdate: { [weak self] time in
                 guard let self else { return }
                 self.currentPlaybackSeconds = time
-                if (self.playbackState.isBuffering || !self.playbackState.isPlaying) && (self.engine?.isPlaying == true || time > 0) {
+                let isEnginePlaying = self.engine?.isPlaying == true
+                if self.playbackState.isBuffering && isEnginePlaying {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.playbackState = .playing
                     }
@@ -575,6 +576,8 @@ public final class VideoPlayerController {
                     } else if self.showControls && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
                         self.scheduleControlsAutoHide()
                     }
+                } else if self.playbackState.isPlaying && !self.seekCoordinator.isScrubbing && !self.seekCoordinator.isFinishingSeek {
+                    self.playbackState = .paused
                 }
                 
                 try? await Task.sleep(for: .milliseconds(120))

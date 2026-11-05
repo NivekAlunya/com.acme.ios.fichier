@@ -5,6 +5,7 @@
 
 import Foundation
 import UIKit
+import CoreMedia
 #if canImport(MobileVLCKit)
 import MobileVLCKit
 #endif
@@ -46,7 +47,67 @@ public actor VLCMediaThumbnailerActor {
         }
     }
     
-    /// Generates a thumbnail for an extended video file from a local or stream URL.
+    /// Generates a thumbnail for an extended video file from a local or stream URL at a preferred timestamp.
+    ///
+    /// - Parameters:
+    ///   - url: Target file or HTTP stream URL.
+    ///   - maxDimension: Maximum pixel bounding dimension for the rendered thumbnail.
+    ///   - preferredTime: Target timestamp in CMTime.
+    ///   - timeoutSeconds: Watchdog timeout in seconds (defaults to 4.0).
+    /// - Returns: A rendered `UIImage`, or `nil` on failure or timeout.
+    public func generateThumbnail(
+        from url: URL,
+        maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension,
+        preferredTime: CMTime = MediaCacheManager.defaultVideoThumbnailTime,
+        timeoutSeconds: Double = 4.0
+    ) async -> UIImage? {
+        #if canImport(MobileVLCKit)
+        guard !Task.isCancelled else { return nil }
+        await acquirePermit()
+        defer { releasePermit() }
+        guard !Task.isCancelled else { return nil }
+        
+        let sessionID = UUID()
+        let media = VLCMedia(url: url)
+        
+        let position: Float
+        if preferredTime <= .zero {
+            position = 0.0
+        } else {
+            let preferredSeconds = preferredTime.seconds
+            if preferredSeconds.isFinite && !preferredSeconds.isNaN && preferredSeconds > 0 {
+                let waitLimit = Date().addingTimeInterval(0.35)
+                let lengthTime = media.lengthWait(until: waitLimit)
+                let totalSeconds = Double(lengthTime.intValue) / 1000.0
+                if totalSeconds > 0 {
+                    let fraction = Float(preferredSeconds / totalSeconds)
+                    position = min(0.95, max(0.0, fraction))
+                } else {
+                    position = Float(min(0.95, max(0.02, preferredSeconds / 300.0)))
+                }
+            } else {
+                position = 0.05
+            }
+        }
+        
+        let session = VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
+        self.activeSessions[sessionID] = session
+        
+        return await withCheckedContinuation { continuation in
+            self.pendingRequests[sessionID] = continuation
+            session.start(with: media, maxDimension: maxDimension, snapshotPosition: position)
+            
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(timeoutSeconds))
+                await self?.handleWatchdogTimeout(for: sessionID)
+            }
+        }
+        #else
+        return nil
+        #endif
+    }
+    
+    /// Generates a thumbnail for an extended video file using a direct relative snapshot position (0.0 to 1.0).
     ///
     /// - Parameters:
     ///   - url: Target file or HTTP stream URL.
@@ -57,7 +118,7 @@ public actor VLCMediaThumbnailerActor {
     public func generateThumbnail(
         from url: URL,
         maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension,
-        snapshotPosition: Float = 0.05,
+        snapshotPosition: Float,
         timeoutSeconds: Double = 4.0
     ) async -> UIImage? {
         #if canImport(MobileVLCKit)
@@ -73,7 +134,8 @@ public actor VLCMediaThumbnailerActor {
         
         return await withCheckedContinuation { continuation in
             self.pendingRequests[sessionID] = continuation
-            session.start(with: media, maxDimension: maxDimension, snapshotPosition: snapshotPosition)
+            let clamped = min(1.0, max(0.0, snapshotPosition))
+            session.start(with: media, maxDimension: maxDimension, snapshotPosition: clamped)
             
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeoutSeconds))

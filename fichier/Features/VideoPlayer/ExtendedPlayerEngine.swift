@@ -190,7 +190,7 @@ extension ExtendedPlayerEngine: VLCMediaPlayerDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             let current = self.currentTimeSeconds
-            if self.vlcPlayer.isPlaying || current > 0 {
+            if self.vlcPlayer.isPlaying {
                 self.isPlayingInternal = true
                 self.emitState(.playing)
             }

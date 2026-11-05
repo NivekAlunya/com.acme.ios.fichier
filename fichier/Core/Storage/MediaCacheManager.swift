@@ -399,22 +399,20 @@ nonisolated public final class MediaCacheManager: Sendable {
         maxDimension: CGFloat = standardThumbnailDimension,
         preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
-        let requestedPosition: Float = preferredTime <= .zero ? 0.0 : 0.05
-        
         if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
             from: localURL,
             maxDimension: maxDimension,
-            snapshotPosition: requestedPosition
+            preferredTime: preferredTime
         ) {
             return thumb
         }
         
-        // If a non-zero position was requested and failed, fall back to keyframe zero
-        if requestedPosition > 0 {
+        // If a non-zero timestamp was requested and failed, fall back to keyframe zero
+        if preferredTime > .zero {
             if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
                 from: localURL,
                 maxDimension: maxDimension,
-                snapshotPosition: 0.0
+                preferredTime: .zero
             ) {
                 return thumb
             }

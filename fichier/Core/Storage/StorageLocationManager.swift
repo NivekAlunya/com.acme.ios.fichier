@@ -1104,7 +1104,7 @@ public final class StorageLocationManager {
         // 3. Debounce briefly (100ms) to cancel fast-scrolling cells before touching SMB
         try? await Task.sleep(for: .milliseconds(100))
         guard !Task.isCancelled else { return nil }
-        if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+        if let expectedFolderID, self.activeFolderID != expectedFolderID {
             return nil
         }
         
