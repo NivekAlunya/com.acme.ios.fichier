@@ -48,14 +48,14 @@ public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
         singleTap.numberOfTouchesRequired = 1
         singleTap.numberOfTapsRequired = 1
-        singleTap.cancelsTouchesInView = true
+        singleTap.cancelsTouchesInView = false
         singleTap.delegate = self
         addGestureRecognizer(singleTap)
         
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap(_:)))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.numberOfTapsRequired = 1
-        twoFingerTap.cancelsTouchesInView = true
+        twoFingerTap.cancelsTouchesInView = false
         twoFingerTap.delegate = self
         addGestureRecognizer(twoFingerTap)
     }
