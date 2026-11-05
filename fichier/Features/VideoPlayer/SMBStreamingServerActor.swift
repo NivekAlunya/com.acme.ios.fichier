@@ -17,7 +17,13 @@ actor SMBStreamingServerActor {
     private var listener: NWListener?
     private var activeConnections: [NWConnection] = []
     private var serverPort: UInt16?
-    private var startupContinuation: CheckedContinuation<URL, any Error>?
+    private var startupContinuations: [CheckedContinuation<URL, any Error>] = []
+    
+    // swiftlint:disable:next no_legacy_dispatch_queue
+    private static let serverQueue = DispatchQueue(label: "com.acme.ios.fichier.smbstreaming.server", qos: .userInitiated)
+    
+    // swiftlint:disable:next no_legacy_dispatch_queue
+    private static let connectionQueue = DispatchQueue(label: "com.acme.ios.fichier.smbstreaming.connection", qos: .userInitiated)
     
     /// Default maximum chunk size served in a single partial content response (2 MB).
     private static let maxChunkSize: Int = 2 * 1024 * 1024
@@ -47,6 +53,13 @@ actor SMBStreamingServerActor {
             return makeStreamURL(for: port)
         }
         
+        // If another task already initiated listener startup, await readiness with it
+        if listener != nil {
+            return try await withCheckedThrowingContinuation { continuation in
+                self.startupContinuations.append(continuation)
+            }
+        }
+        
         let tcpOptions = NWProtocolTCP.Options()
         let parameters = NWParameters(tls: nil, tcp: tcpOptions)
         parameters.requiredInterfaceType = .loopback
@@ -55,7 +68,7 @@ actor SMBStreamingServerActor {
         self.listener = newListener
         
         return try await withCheckedThrowingContinuation { continuation in
-            self.startupContinuation = continuation
+            self.startupContinuations.append(continuation)
             
             newListener.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
@@ -71,16 +84,17 @@ actor SMBStreamingServerActor {
                 }
             }
             
-            // swiftlint:disable:next no_legacy_dispatch_queue
-            let queue = DispatchQueue(label: "com.acme.ios.fichier.smbstreaming.\(UUID().uuidString)")
-            newListener.start(queue: queue)
+            newListener.start(queue: Self.serverQueue)
         }
     }
     
     /// Cancels the loopback listener and closes all active client connections.
     func stop() {
-        startupContinuation?.resume(throwing: CancellationError())
-        startupContinuation = nil
+        let continuations = startupContinuations
+        startupContinuations.removeAll()
+        for continuation in continuations {
+            continuation.resume(throwing: CancellationError())
+        }
         listener?.cancel()
         listener = nil
         serverPort = nil
@@ -93,20 +107,29 @@ actor SMBStreamingServerActor {
     // MARK: - Private Connection Management
     
     private func handleListenerStateUpdate(_ state: NWListener.State) {
-        guard let continuation = startupContinuation else { return }
+        let continuations = startupContinuations
         switch state {
         case .ready:
             if let port = listener?.port?.rawValue {
                 self.serverPort = port
-                self.startupContinuation = nil
-                continuation.resume(returning: makeStreamURL(for: port))
+                self.startupContinuations.removeAll()
+                let url = makeStreamURL(for: port)
+                for continuation in continuations {
+                    continuation.resume(returning: url)
+                }
             }
         case .failed(let error):
-            self.startupContinuation = nil
-            continuation.resume(throwing: error)
+            self.listener = nil
+            self.startupContinuations.removeAll()
+            for continuation in continuations {
+                continuation.resume(throwing: error)
+            }
         case .cancelled:
-            self.startupContinuation = nil
-            continuation.resume(throwing: CancellationError())
+            self.listener = nil
+            self.startupContinuations.removeAll()
+            for continuation in continuations {
+                continuation.resume(throwing: CancellationError())
+            }
         default:
             break
         }
@@ -132,9 +155,7 @@ actor SMBStreamingServerActor {
             }
         }
         
-        // swiftlint:disable:next no_legacy_dispatch_queue
-        let queue = DispatchQueue(label: "com.acme.ios.fichier.smbstreamconn.\(UUID().uuidString)")
-        connection.start(queue: queue)
+        connection.start(queue: Self.connectionQueue)
         
         receiveNextChunk(on: connection)
     }

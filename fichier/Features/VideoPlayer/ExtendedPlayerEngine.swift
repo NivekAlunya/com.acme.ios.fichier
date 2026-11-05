@@ -139,7 +139,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
         super.init()
         
         #if canImport(MobileVLCKit)
-        player.delegate = self
+        vlcPlayer.delegate = self
         #endif
     }
     
@@ -178,6 +178,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
         isPlayingInternal = false
         lastEmittedState = nil
         #if canImport(MobileVLCKit)
+        vlcPlayer.delegate = nil
         vlcPlayer.stop()
         vlcPlayer.drawable = nil
         #endif
