@@ -139,11 +139,8 @@ public struct RootSMBView: View {
             )
         }
         .fullScreenCover(item: $activeVideoForViewer) { vid in
-            let baseMedia = activeContextMedia.isEmpty ? smbManager.pictures : activeContextMedia
-            let candidateVideos = baseMedia.filter { $0.isVideo }
-            var playlist = (candidateVideos.isEmpty && !activeContextMedia.isEmpty)
-                ? smbManager.pictures.filter { $0.isVideo }
-                : candidateVideos
+            let source = activeContextMedia.contains(where: \.isVideo) ? activeContextMedia : smbManager.pictures
+            var playlist = source.filter(\.isVideo)
             if !playlist.contains(where: { $0.id == vid.id }) {
                 playlist.append(vid)
             }
