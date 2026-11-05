@@ -67,3 +67,4 @@ script/
 *.mp4
 .DS_Store
 
+resources/
