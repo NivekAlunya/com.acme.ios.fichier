@@ -165,5 +165,24 @@ final class VideoPlaylistNavigationTests: XCTestCase {
         controller.seekRelative(15)
         XCTAssertEqual(controller.currentPlaybackSeconds, 60.0, accuracy: 0.001)
     }
+    
+    func testTogglePlayPauseWhenAtEndReplaysFromStart() {
+        let manager = StorageLocationManager()
+        let item1 = createTestMediaItem(name: "clip1.mp4")
+        
+        let controller = VideoPlayerController(
+            manager: manager,
+            videos: [item1],
+            initialItem: item1
+        )
+        
+        controller.totalDurationSeconds = 60.0
+        controller.currentPlaybackSeconds = 59.8
+        controller.playbackState = .paused
+        XCTAssertTrue(controller.isAtEnd)
+        
+        controller.togglePlayPause()
+        XCTAssertEqual(controller.currentPlaybackSeconds, 0.0, accuracy: 0.001)
+    }
 }
 #endif

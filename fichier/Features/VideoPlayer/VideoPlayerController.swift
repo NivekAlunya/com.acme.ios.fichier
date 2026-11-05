@@ -399,6 +399,11 @@ public final class VideoPlayerController {
     /// Toggles between playing and paused states, wrapping to beginning if reaching the end.
     public func togglePlayPause() {
         guard let player = player else { return }
+        if isAtEnd {
+            seekTo(0, resumePlaying: true)
+            currentPlaybackSeconds = 0
+            return
+        }
         if player.timeControlStatus != .paused {
             player.pause()
             playbackState = .paused
@@ -407,14 +412,9 @@ public final class VideoPlayerController {
                 showControls = true
             }
         } else {
-            if totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 {
-                seekTo(0, resumePlaying: true)
-                currentPlaybackSeconds = 0
-            } else {
-                player.play()
-                playbackState = .playing
-                scheduleControlsAutoHide()
-            }
+            player.play()
+            playbackState = .playing
+            scheduleControlsAutoHide()
         }
     }
     
@@ -781,6 +781,7 @@ public final class VideoPlayerController {
         } else {
             // Reached the end of playlist or single video:
             // Reveal controls so user can replay or navigate, and pause
+            player?.pause()
             playbackState = .paused
             withAnimation(.easeInOut(duration: 0.35)) {
                 showControls = true
