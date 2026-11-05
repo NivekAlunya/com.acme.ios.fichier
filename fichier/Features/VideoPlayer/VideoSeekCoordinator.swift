@@ -64,13 +64,21 @@ public final class VideoSeekCoordinator {
         isScrubbingTimeline || isScrubbingWithGesture
     }
     
-    /// Initiates timeline slider scrubbing, pausing playback if necessary.
-    public func startTimelineScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, player: AVPlayer?) {
+    /// Initiates timeline slider scrubbing, pausing playback if necessary across native or extended engines.
+    public func startTimelineScrubbing(
+        currentPlaybackSeconds: Double,
+        isPlaying: Bool,
+        player: AVPlayer? = nil,
+        engine: (any VideoPlayerEngineProtocol)? = nil
+    ) {
         guard !isScrubbingTimeline else { return }
         isScrubbingTimeline = true
         lastSeekTargetSeconds = currentPlaybackSeconds
-        wasPlayingBeforeScrub = (player?.timeControlStatus != .paused) || isPlaying
+        let isPlayerActive = (player?.timeControlStatus != .paused && player != nil)
+        let isEngineActive = (engine?.isPlaying == true)
+        wasPlayingBeforeScrub = isPlayerActive || isEngineActive || isPlaying
         if wasPlayingBeforeScrub {
+            engine?.pause()
             player?.pause()
         }
     }

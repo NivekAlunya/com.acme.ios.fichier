@@ -142,7 +142,7 @@ actor SMBStreamingServerActor {
         activeConnections.removeAll { $0 === connection }
     }
     
-    private func receiveNextChunk(on connection: NWConnection) {
+    private nonisolated func receiveNextChunk(on connection: NWConnection, buffer: Data = Data()) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self, weak connection] content, _, isComplete, error in
             guard let self, let connection else { return }
             if let error {
@@ -151,12 +151,31 @@ actor SMBStreamingServerActor {
                 return
             }
             
+            var accumulated = buffer
             if let content, !content.isEmpty {
+                accumulated.append(content)
+            }
+            
+            let headerEnd = Data([0x0D, 0x0A, 0x0D, 0x0A]) // \r\n\r\n
+            let fallbackEnd = Data([0x0A, 0x0A]) // \n\n
+            let hasCompletedHeaders = accumulated.range(of: headerEnd) != nil || accumulated.range(of: fallbackEnd) != nil
+            
+            if hasCompletedHeaders {
                 Task {
-                    await self.processHTTPRequest(content, on: connection)
+                    await self.processHTTPRequest(accumulated, on: connection)
                 }
             } else if isComplete {
-                connection.cancel()
+                if !accumulated.isEmpty {
+                    Task {
+                        await self.processHTTPRequest(accumulated, on: connection)
+                    }
+                } else {
+                    connection.cancel()
+                }
+            } else if accumulated.count > 65536 {
+                self.sendHTTPResponse(status: "400 Bad Request", headers: [:], body: nil, on: connection)
+            } else {
+                self.receiveNextChunk(on: connection, buffer: accumulated)
             }
         }
     }
@@ -257,7 +276,7 @@ actor SMBStreamingServerActor {
         return (start, end)
     }
     
-    private func sendHTTPResponse(status: String, headers: [String: String], body: Data?, on connection: NWConnection) {
+    private nonisolated func sendHTTPResponse(status: String, headers: [String: String], body: Data?, on connection: NWConnection) {
         var response = "HTTP/1.1 \(status)\r\n"
         for (key, val) in headers {
             response += "\(key): \(val)\r\n"

@@ -954,7 +954,15 @@ public final class StorageLocationManager {
             }
             
             let validItem = await resolveValidItem(for: item)
-            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
+            guard validItem.size > 0 else {
+                return nil
+            }
+            
+            if SupportedMediaTypes.isExtendedVideo(extension: (validItem.name as NSString).pathExtension) {
+                return await streamExtendedVideoThumbnail(for: validItem, maxDimension: maxDimension)
+            }
+            
+            guard let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
@@ -1011,6 +1019,39 @@ public final class StorageLocationManager {
                 delegate.cancelAll()
                 asset.resourceLoader.setDelegate(nil, queue: nil)
             }
+        }
+    }
+    
+    /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via MobileVLCKit.
+    private func streamExtendedVideoThumbnail(
+        for item: MediaItem,
+        maxDimension: CGFloat
+    ) async -> UIImage? {
+        guard !Task.isCancelled else { return nil }
+        let server = SMBStreamingServerActor(worker: self.worker, item: item)
+        do {
+            let streamURL = try await server.start()
+            defer {
+                Task {
+                    await server.stop()
+                }
+            }
+            
+            if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                from: streamURL,
+                maxDimension: maxDimension,
+                snapshotPosition: 0.05
+            ) {
+                return thumb
+            }
+            
+            return await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                from: streamURL,
+                maxDimension: maxDimension,
+                snapshotPosition: 0.0
+            )
+        } catch {
+            return nil
         }
     }
     

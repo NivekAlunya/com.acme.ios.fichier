@@ -38,6 +38,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     private var onTimeUpdate: (@MainActor @Sendable (Double) -> Void)?
     private var onDurationUpdate: (@MainActor @Sendable (Double) -> Void)?
     private var onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)?
+    private var onPlaybackEnded: (@MainActor @Sendable () -> Void)?
     
     public var isPlaying: Bool {
         #if canImport(MobileVLCKit)
@@ -105,15 +106,18 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     ///   - onTimeUpdate: Periodic time change callback.
     ///   - onDurationUpdate: Duration resolution callback.
     ///   - onStateUpdate: State machine transition callback.
+    ///   - onPlaybackEnded: Completion callback when playback reaches the end.
     public init(
         url: URL,
         onTimeUpdate: (@MainActor @Sendable (Double) -> Void)? = nil,
         onDurationUpdate: (@MainActor @Sendable (Double) -> Void)? = nil,
-        onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)? = nil
+        onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)? = nil,
+        onPlaybackEnded: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.onTimeUpdate = onTimeUpdate
         self.onDurationUpdate = onDurationUpdate
         self.onStateUpdate = onStateUpdate
+        self.onPlaybackEnded = onPlaybackEnded
         
         #if canImport(MobileVLCKit)
         let player = VLCMediaPlayer()
@@ -193,6 +197,7 @@ extension ExtendedPlayerEngine: VLCMediaPlayerDelegate {
         case .ended:
             isPlayingInternal = false
             onStateUpdate?(.paused)
+            onPlaybackEnded?()
         case .error:
             isPlayingInternal = false
             onStateUpdate?(.failed("VLC playback error"))

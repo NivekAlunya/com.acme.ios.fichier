@@ -64,6 +64,14 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 ### ⚡ Two-Tier Caching System
 - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: In-memory LRU cache wrapping `NSCache` with `@unchecked Sendable` isolation for immediate UI responsiveness.
 - **Bounded Disk Cache (`MediaCacheManager`)**: Persistent disk cache with a unified 420px master thumbnail dimension (`standardThumbnailDimension`) eliminating redundant re-encodings across grid sizes, real-time size computation, background 300MB FIFO eviction, and one-tap manual cache purging.
+- **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
+  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by MobileVLCKit (`VLCMediaThumbnailer`).
+  - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.
+  - Seamlessly bridges loopback HTTP streaming (`SMBStreamingServerActor`) to extract keyframes directly from remote SMB shares on demand.
+- **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**:
+  - When thumbnail extraction fails or times out, a non-blocking placeholder displays a centered play icon and label with `.allowsHitTesting(false)`.
+  - Tapping anywhere across the cell surface opens and plays the video without obstruction.
+  - A compact, non-interfering retry icon is located in the top-leading corner for manual preview refresh.
 
 ```mermaid
 flowchart LR
@@ -83,7 +91,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 104 independent, modular Swift files (94 application files + 10 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 106 independent, modular Swift files (95 application files + 11 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -121,6 +129,7 @@ fichier/
 │   │   ├── MediaThumbnailCell.swift        # Grid thumbnail cell wrapper
 │   │   ├── MediaThumbnailView.swift        # Reusable thumbnail loader & badges
 │   │   ├── SortOption.swift                # Name, Date, Size sort enum
+│   │   ├── VideoFormatStyle.swift          # Video format capsule styling & color registry
 │   │   ├── VideoProgressRing.swift         # Circular playback progress badge
 │   │   └── ViewMode.swift                  # Grid vs List enum
 │   │

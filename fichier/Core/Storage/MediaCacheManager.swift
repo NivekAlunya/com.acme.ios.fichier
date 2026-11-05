@@ -399,6 +399,22 @@ nonisolated public final class MediaCacheManager: Sendable {
         maxDimension: CGFloat = standardThumbnailDimension,
         preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
+        if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            from: localURL,
+            maxDimension: maxDimension,
+            snapshotPosition: 0.05
+        ) {
+            return thumb
+        }
+        
+        if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            from: localURL,
+            maxDimension: maxDimension,
+            snapshotPosition: 0.0
+        ) {
+            return thumb
+        }
+        
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
