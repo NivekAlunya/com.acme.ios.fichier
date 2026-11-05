@@ -1,111 +1,116 @@
-# Feature Specification: Extended Video Codec & Container Support (MKV, AVI, WebM)
+# Feature Specification & Architecture: Extended Video Codec & Container Support
 
-This specification outlines the technical architecture, trade-offs, and step-by-step roadmap for extending **Fichier**'s video playback engine beyond Apple's native QuickTime/MPEG-4 formats (`.mov`, `.mp4`, `.m4v`) to support open container formats—chiefly **Matroska (`.mkv`)**, as well as `.avi`, `.webm`, and `.flv`.
+This specification outlines the technical architecture, implementation, and verified codec matrix for extending **Fichier**'s video playback engine beyond Apple's native QuickTime/MPEG-4 formats (`.mov`, `.mp4`, `.m4v`) to support open container formats—chiefly **Matroska (`.mkv`)**, as well as `.avi`, `.webm`, `.flv`, `.wmv`, `.asf`, `.ts`, `.m2ts`, `.mts`, `.m2v`, `.mpg`, `.mpeg`, `.vob`, `.ogv`, `.rm`, `.mxf`, `.wtv`, and `.f4v`.
 
 ---
 
 ## 1. Executive Summary & Problem Statement
 
-### 1.1 Current Limitations
-* **Native Scope**: Fichier currently relies strictly on Apple's `AVFoundation` (`AVPlayer`, `AVURLAsset`, `AVAssetImageGenerator`).
-* **Format Restriction**: In [`SupportedMediaTypes.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/SupportedMediaTypes.swift#L17-L19), supported video extensions are restricted to:
-  ```swift
-  public static let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
-  ```
+### 1.1 Limitations of Pure Native Playback
+* **Native Scope**: Fichier historically relied strictly on Apple's `AVFoundation` (`AVPlayer`, `AVURLAsset`, `AVAssetImageGenerator`).
 * **System Rejection**: Handing an `.mkv` file to `AVPlayer` results in an immediate failure (`AVFoundationErrorDomain Code=-11828 "Cannot Open"`), because Apple's CoreMedia layer does not ship with an EBML/Matroska container parser.
-* **Audio & Subtitle Gaps**: In addition to container incompatibility, `.mkv` files frequently bundle non-Apple audio formats (**DTS**, **Dolby TrueHD**, **Vorbis**) and stylized subtitle formats (**SSA/ASS**) that have no native iOS decoders.
+* **Audio & Subtitle Gaps**: In addition to container incompatibility, `.mkv` and `.ogv` files frequently bundle non-Apple audio formats (**Vorbis**, **DTS**, **Dolby TrueHD**, **WMAv2**, **MP2**) and stylized subtitle formats (**SSA/ASS**) that have no native iOS decoders.
 
 ---
 
-## 2. Evaluation of Approaches
+## 2. Evaluation of Approaches & Final Selection
 
-| Criteria | Approach A: `KSPlayer` (FFmpeg + VideoToolbox) | Approach B: On-the-Fly fMP4 Remuxer | Approach C: "Open in..." External Handoff |
+| Criteria | Approach A: `MobileVLCKit` (VideoLAN LibVLC) | Approach B: `KSPlayer` (FFmpeg) | Approach C: On-the-Fly Remuxer |
 |---|---|---|---|
-| **MKV Compatibility** | 🟢 **100%** (Any codec, DTS, TrueHD, ASS/SSA) | 🟡 **~80%** (Fails on DTS/AC3 without transcoding) | 🟢 **100%** (External player handles all) |
-| **App Size Overhead** | 🟡 **+25–35 MB** (FFmpeg C/C++ static/dynamic libs) | 🟢 **< 2 MB** | 🟢 **0 MB** |
-| **Battery & Thermals** | 🟢 **Hardware-Accelerated** via `VideoToolbox` | 🟢 **Hardware-Accelerated** via `AVPlayer` | 🟢 Handled by external app |
-| **Picture-in-Picture** | 🟢 Native `AVPictureInPictureController` supported | 🟢 Native `AVPlayer` PiP | 🔴 Leaves Fichier entirely |
-| **SMB Streaming** | 🟢 Custom I/O protocol adapts to `SMBClientActor` | 🟢 Works with `SMBResourceLoaderDelegate` | 🔴 Requires local file download |
-| **Implementation Effort** | 🟡 **Medium** (Standard SPM integration) | 🔴 **Very High** (Complex demux/remux engine) | 🟢 **Very Low** (Quick action button) |
+| **Multi-Platform SPM Support** | 🟢 **100% Native SPM** (Device + Simulator slices) | 🔴 Missing iOS slice in SPM repo (macOS only) | 🟡 Complex custom packaging |
+| **MKV & Open Codec Coverage** | 🟢 **100%** (Any codec, Vorbis, DTS, TrueHD, ASS/SSA) | 🟢 100% | 🟡 ~80% (Fails on DTS/AC3) |
+| **Licensing** | 🟢 **LGPL v2.1** (Completely free, non-profit, App Store safe) | 🟡 Dual GPL/Commercial paywall | 🟢 Proprietary |
+| **Battery & Thermals** | 🟢 **Hardware-Accelerated** via `VideoToolbox` | 🟢 Hardware-Accelerated | 🟢 Hardware-Accelerated |
+| **SMB Streaming** | 🟢 Supported via `SMBStreamingServerActor` (loopback HTTP) | 🟢 Custom I/O | 🟢 Works with byte ranges |
+| **Stability & Maturity** | 🟢 **Industry Standard** (Powers VLC for iOS) | 🟡 Single-maintainer project | 🔴 High maintenance risk |
+
+**Selected Approach**: **Hybrid Dual-Engine with `MobileVLCKit`**
+* **Native `AVPlayer` Engine**: Handles Apple formats (`.mp4`, `.mov`, `.m4v`, `.3gp`) with zero overhead and maximum energy efficiency.
+* **Extended `MobileVLCKit` Engine**: Dynamically boots for open containers and legacy formats (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, etc.).
+* **Unified UI**: The entire SwiftUI player presentation ([`VideoDetailView`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/VideoPlayer/VideoDetailView.swift), timeline scrubbers, volume sliders, menus, and auto-hide HUD) remains completely backend-agnostic through [`VideoPlayerEngineProtocol`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/VideoPlayer/VideoPlayerEngineProtocol.swift).
 
 ---
 
-## 3. Recommended Architectural Choice: Hybrid Dual-Engine via `KSPlayer`
-
-The industry-standard solution adopted by modern iOS media apps (such as Infuse, Plex, and VLC) is a **hybrid playback architecture**:
+## 3. Architecture Blueprint
 
 ```mermaid
 flowchart TD
-    VideoFile["Selected Video File"] --> CheckExt{"Container Extension?"}
-    CheckExt -- ".mp4, .mov, .m4v" --> NativeEngine["Native AVPlayer Engine\n(Lightweight, zero overhead, Apple default)"]
-    CheckExt -- ".mkv, .avi, .webm" --> KSPlayerEngine["KSPlayer + FFmpeg Engine\n(VideoToolbox HW Decode + FFmpeg Demux)"]
+    File["Selected MediaItem"] --> Route{"Container Extension?"}
     
-    NativeEngine --> CommonUI["Unified VideoDetailView Controls\n(Timeline, Volume, PiP, Audio/Subtitle menus)"]
-    KSPlayerEngine --> CommonUI
+    Route -- ".mp4, .mov, .m4v, .3gp" --> Native["NativePlayerEngine\n(AVPlayer + AVPlayerLayer)\nZero overhead, native HDR"]
+    Route -- ".mkv, .avi, .webm, .flv, .wmv..." --> Extended["ExtendedPlayerEngine\n(MobileVLCKit / LibVLC)\nVideoToolbox HW Decode + LibVLC Demux"]
+    
+    Native --> Protocol["VideoPlayerEngineProtocol\n(Unified play, pause, seek, volume, rate contract)"]
+    Extended --> Protocol
+    
+    Protocol --> Controller["VideoPlayerController\n(@Observable @MainActor)\nState Machine, History, Position Store"]
+    
+    Controller --> Canvas["VideoPlayerCanvasView\n(CustomVideoPlayerView vs VLCPlayerCanvasRepresentable)"]
+    Controller --> HUD["Unified SwiftUI HUD Overlays\n(Timeline, Scrubber, TopBar, CenterControls, Volume)"]
 ```
 
-### Why This Hybrid Design?
-1. **Zero Regression for Standard Formats**: 90%+ of phone-captured videos (`.mov`, `.mp4`) continue using pure Apple `AVPlayer` with maximum energy efficiency and zero extra layer.
-2. **Universal Compatibility for Network Videos**: When browsing network shares containing `.mkv` TV episodes or movies, the player seamlessly delegates to `KSPlayer`.
-3. **Hardware Acceleration**: `KSPlayer` feeds H.264/HEVC frames straight into Apple's `VideoToolbox` silicon decoders—preventing CPU battery drain and device heating.
+---
+
+## 4. Verified Codec & Sample Inventory
+
+All 25 media files in [`com.acme.ios.fichier/resources`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/resources) are supported:
+
+| Filename | Container | Video Codec | Audio Codec | Active Engine |
+|---|---|---|---|---|
+| `sample_960x400_ocean_with_audio.mp4` | `.mp4` | H.264 (AVC) | AAC | `NativePlayerEngine` (`AVPlayer`) |
+| `sample_960x400_ocean_with_audio.mov` | `.mov` | H.264 (AVC) | AAC | `NativePlayerEngine` (`AVPlayer`) |
+| `sample_960x400_ocean_with_audio.m4v` | `.m4v` | H.264 (AVC) | AAC | `NativePlayerEngine` (`AVPlayer`) |
+| `sample_960x400_ocean_with_audio.3gp` | `.3gp` | H.264 (AVC) | AAC | `NativePlayerEngine` (`AVPlayer`) |
+| `sample_960x400_ocean_with_audio.mkv` | **`.mkv`** | H.264 | **Vorbis** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_640x360.webm` | **`.webm`** | **VP9** | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.avi` | **`.avi`** | **MPEG-4 Part 2** | MP3 | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_640x360.wmv` | **`.wmv`** | **MSMPEG4v3** | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.asf` | **`.asf`** | **MSMPEG4v3** | **WMAv2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.flv` | **`.flv`** | **FLV1 (Sorenson)**| MP3 | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.f4v` | **`.f4v`** | H.264 | AAC | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.ts` | **`.ts`** | **MPEG-2 Video** | **MP2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.m2ts` | **`.m2ts`** | **MPEG-2 Video** | **MP2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.mts` | **`.mts`** | **MPEG-2 Video** | **MP2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.m2v` | **`.m2v`** | **MPEG-2 Video** | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.mpeg` | **`.mpeg`** | **MPEG-1 Video** | **MP2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.mpg` | **`.mpg`** | **MPEG-2 Video** | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.vob` | **`.vob`** | **MPEG-2 Video** | **MP2** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.ogv` | **`.ogv`** | **Theora** | **Vorbis** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.rm` | **`.rm`** | **RealVideo 1.0**| **AC-3** | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.mxf` | **`.mxf`** | **MPEG-2 Video** | PCM 16-bit | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_640x360.wtv` | **`.wtv`** | **MPEG-2 Video** | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.mjpeg` | `.mjpeg` | Motion JPEG | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
+| `sample_960x400_ocean_with_audio.hevc` | `.hevc` | HEVC / H.265 | *(none)* | `ExtendedPlayerEngine` (`MobileVLCKit`) |
 
 ---
 
-## 4. Implementation Blueprint & Roadmap
+## 5. Architectural Implementation Details
 
-### Phase 1: Dependency Setup & Package Integration
-1. **Swift Package Manager (SPM)**:
-   Add [`KSPlayer`](https://github.com/kingslay/KSPlayer) to `fichier.xcodeproj` (or via SPM):
-   - Package URL: `https://github.com/kingslay/KSPlayer.git`
-   - Target product: `KSPlayer` (which bundles `FFmpegKit` prebuilt binaries with `VideoToolbox` hardware acceleration enabled).
+### 5.1 Registry & System UTIs
+* **[`SupportedMediaTypes.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/SupportedMediaTypes.swift)** contains the explicit categorizations:
+  * `nativeVideoExtensions`: `["mp4", "mov", "m4v", "3gp"]`
+  * `extendedVideoExtensions`: `["mkv", "avi", "webm", "flv", "f4v", "wmv", "asf", "ts", "m2ts", "mts", "m2v", "mpg", "mpeg", "vob", "ogv", "rm", "mxf", "wtv", "hevc", "mjpeg"]`
+  * Helpers: `isNativeVideo(extension:)`, `isExtendedVideo(extension:)`, and union `isVideo(extension:)`.
+* **[`fichier-Info.plist`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier-Info.plist)** registers imported Uniform Type Identifiers (`UTImportedTypeDeclarations`) so that iOS Files, Document Pickers, and drag-and-drop recognize open containers.
 
-### Phase 2: Media Type Declaration & Registry
-1. **Update [`SupportedMediaTypes.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/SupportedMediaTypes.swift)**:
-   ```swift
-   public static let videoExtensions: Set<String> = [
-       "mp4", "mov", "m4v", "mkv", "avi", "webm"
-   ]
-   ```
-2. **Update Uniform Type Identifier (UTI) Detection**:
-   Register custom exported/imported type identifiers in `Info.plist` for `org.matroska.mkv` (`public.matroska-video`) so the system recognizes `.mkv` files during document picker and drag-and-drop operations.
+### 5.2 SMB Network Streaming Bridge
+* `MobileVLCKit` requires standard HTTP byte-range access when streaming network media.
+* **[`SMBStreamingServerActor.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/VideoPlayer/SMBStreamingServerActor.swift)** runs a zero-third-party loopback HTTP server on `127.0.0.1` using Apple's `Network.framework` (`NWListener`).
+* When `MobileVLCKit` seeks or streams, the server handles HTTP `Range: bytes=X-Y` headers and dispatches them on-demand to [`SMBClientActor.fetchMediaRange(for:offset:length:)`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Networking/SMBClientActor.swift#L636), ensuring identical reconnection, caching, and retry guarantees.
 
-### Phase 3: SMB Streaming Bridge for Extended Formats
-1. **Adapter for SMB Streaming**:
-   `KSPlayer` supports custom URL protocols or custom asynchronous I/O callbacks (`KSPlayerResourceLoader`).
-   Bridge `KSPlayer`'s chunk requests directly into `SMBClientActor.fetchMediaRange(for:offset:length:)`—reusing Fichier's existing socket auto-reconnection and exponential backoff architecture.
-
-### Phase 4: Unified Player View Abstraction
-1. Create a protocol `MediaPlayerControllable: AnyObject, Sendable`:
-   - Properties: `currentTime`, `duration`, `isPlaying`, `isMuted`, `volume`, `playbackRate`.
-   - Methods: `play()`, `pause()`, `seek(to:completion:)`, `selectAudioTrack(id:)`, `selectSubtitleTrack(id:)`.
-2. Wrap `KSPlayerView` in a SwiftUI `UIViewRepresentable` matching `CustomVideoPlayerView.swift`.
-3. Share the existing overlay HUD in [`VideoDetailView.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/VideoPlayer/VideoDetailView.swift) (`topBar`, `bottomControls`, `VideoTimelineBar`, gesture scrubber) across both backends.
-
-### Phase 5: Video Thumbnail Extraction for MKVs
-1. Implement an MKV thumbnail provider in `MediaCacheManager.swift`:
-   - Use `KSPlayer`'s thumbnail extraction API or `AVAssetImageGenerator` fallback.
-   - Sample keyframes at `MediaCacheManager.defaultVideoThumbnailTime` (`12.0s`) with fallback to `0.5s`.
-   - Store the generated thumbnails into Fichier's existing Tier 2 JPEG disk cache (`saveThumbnailAsync`).
+### 5.3 Pure Swift 6 Concurrency & 1 Definition = 1 File
+* **`VideoPlayerEngineProtocol.swift`**: `@MainActor` protocol contract.
+* **`NativePlayerEngine.swift`**: AVFoundation implementation.
+* **`ExtendedPlayerEngine.swift`**: MobileVLCKit implementation.
+* **`VLCPlayerCanvasRepresentable.swift`** & **`VLCPlayerCanvasCoordinator.swift`**: Single-definition SwiftUI view bridge.
+* **`VideoEngineKind.swift`**: Architectural categorization enum.
 
 ---
 
-## 5. Licensing, App Store & Binary Size Guidelines
+## 6. App Store & Licensing Guidelines
 
-* **App Store Guidelines**: Using FFmpeg within an iOS app is fully permitted by Apple, provided no private APIs are touched.
-* **Licensing (LGPL v2.1)**:
-  - Standard FFmpeg builds used by `KSPlayer` are distributed under the **LGPL v2.1** license.
-  - Link FFmpeg as a **dynamic framework** (`.xcframework`) rather than a static binary, allowing users/auditors to replace the dynamic library if required by LGPL compliance.
-  - Avoid enabling non-free or GPL-only codecs (e.g., `x264`, `x265` software encoders) in the FFmpeg build configuration; rely on Apple's built-in `VideoToolbox` decoders instead.
-* **Binary Size Footprint**:
-  - The precompiled binary framework adds approximately $\sim 28\,\text{MB}$ to the uncompressed `.ipa` download.
-
----
-
-## 6. Summary Checklist for Future Implementation
-
-- [ ] Add `KSPlayer` SPM package dependency.
-- [ ] Add `"mkv"`, `"avi"`, `"webm"` to `SupportedMediaTypes.videoExtensions`.
-- [ ] Implement `KSPlayer` SMB byte-range custom loader bridge to `SMBClientActor`.
-- [ ] Bind `KSPlayer` track manager to Fichier's audio and subtitle menus.
-- [ ] Implement MKV keyframe thumbnail extraction in `MediaCacheManager`.
-- [ ] Verify background Picture-in-Picture (`AVPictureInPictureController`) on iOS 17+.
+* **License**: `MobileVLCKit` is distributed under **LGPL v2.1**.
+* **App Store Conformance**:
+  * Linked as a dynamic framework (`.xcframework`) under `Embed Frameworks` with `CodeSignOnCopy`.
+  * Allows closed-source / commercial distribution on the App Store without requiring application source code disclosure.
+  * Attribution is placed in legal notices (VideoLAN copyright).

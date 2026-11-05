@@ -81,31 +81,7 @@ public struct MediaThumbnailView: View {
             } else if item.isPDF && !loadFailed {
                 pdfPlaceholderView
             } else if loadFailed {
-                Button {
-                    retryLoading()
-                } label: {
-                    if isCompact {
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white.opacity(0.85))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                            .background(Color.black.opacity(0.35))
-                            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                    } else {
-                        VStack(spacing: 6) {
-                            Image(systemName: "arrow.clockwise.circle.fill")
-                                .font(.system(size: 26))
-                                .foregroundColor(.white.opacity(0.85))
-                            Text(.Strings.galleryThumbnailRetryPreview)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.85))
-                        }
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
-                        .background(Color.black.opacity(0.35))
-                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                    }
-                }
-                .buttonStyle(.plain)
+                failedPlaceholderView
             } else {
                 if isCompact {
                     ProgressView()
@@ -137,16 +113,19 @@ public struct MediaThumbnailView: View {
                     .allowsHitTesting(false)
                 }
                 
-                // Video Playback Status Badge (Bottom-Trailing)
-                HStack(spacing: isCompact ? 3 : 4) {
+                let ext = (item.name as NSString).pathExtension
+                let formatLabel = VideoFormatStyle.label(for: ext)
+                let badgeColor = VideoFormatStyle.color(for: ext)
+                
+                // Video Playback Status & Format Capsule (Bottom-Trailing)
+                HStack(spacing: isCompact ? 2.5 : 3.5) {
                     Image(systemName: "video.fill")
-                        .font(.system(size: isCompact ? 8 : 9))
+                        .font(.system(size: isCompact ? 7 : 8))
                         .foregroundColor(.white)
                     
-                    if !isCompact {
-                        Text(.Strings.galleryBadgeVideo)
-                            .font(.system(size: 8, weight: .bold))
-                    }
+                    Text(formatLabel)
+                        .font(.system(size: isCompact ? 7 : 8, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                     
                     switch playbackStatus {
                     case .finished:
@@ -158,17 +137,18 @@ public struct MediaThumbnailView: View {
                             progress: progress,
                             size: isCompact ? 7.5 : 9.0,
                             lineWidth: isCompact ? 1.3 : 1.5,
-                            ringColor: .blue
+                            ringColor: .white
                         )
                     case .unwatched:
                         EmptyView()
                     }
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, isCompact ? 4 : 5)
+                .padding(.horizontal, isCompact ? 4 : 6)
                 .padding(.vertical, isCompact ? 2 : 3)
-                .background(Color.black.opacity(isCompact ? 0.75 : 0.65))
+                .background(badgeColor.opacity(isCompact ? 0.88 : 0.85))
                 .clipShape(Capsule())
+                .shadow(color: Color.black.opacity(0.3), radius: 1, x: 0, y: 1)
                 .padding(isCompact ? 2 : 6)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             } else if item.isGIF {
@@ -240,6 +220,48 @@ public struct MediaThumbnailView: View {
             .background(Color(.tertiarySystemFill))
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         }
+    }
+    
+    // MARK: - Non-Blocking Failure Placeholder View
+    
+    /// Non-blocking failure placeholder allowing cell taps to pass through for video playback while offering a compact retry button.
+    @ViewBuilder
+    private var failedPlaceholderView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color.black.opacity(0.35))
+            
+            // Centered non-interactive placeholder graphic
+            VStack(spacing: 6) {
+                Image(systemName: item.isVideo ? "play.circle.fill" : (item.isPDF ? "doc.text.fill" : "photo"))
+                    .font(.system(size: isCompact ? 20 : 28))
+                    .foregroundColor(.white.opacity(0.8))
+                
+                if !isCompact {
+                    Text(item.isVideo ? .Strings.galleryThumbnailPlayVideo : .Strings.galleryThumbnailRetryPreview)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .allowsHitTesting(false)
+            
+            // Compact, non-blocking retry button isolated to the top-leading corner
+            Button {
+                retryLoading()
+            } label: {
+                Image(systemName: "arrow.clockwise.circle.fill")
+                    .font(.system(size: isCompact ? 13 : 16))
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(5)
+                    .background(Color.black.opacity(0.45))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .padding(isCompact ? 3 : 5)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .accessibilityLabel(Text(.Strings.galleryThumbnailRetryPreview))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
     
     // MARK: - Loading & Retry Logic

@@ -54,7 +54,11 @@ This document provides a comprehensive catalog of all features and capabilities 
   - **Filters**: *All Media*, *Photos Only*, *Videos Only*, *Documents Only*, or *Favorites*.
   - **Sorting**: Order files by *Name*, *Date Modified*, or *File Size* in *Ascending* or *Descending* order.
 - **Visual Badges & Type Indicators**:
-  - Distinctive badges on gallery cells: Video duration and circular watch-progress rings, **GIF** tags for animated media, and bright red **PDF** badges for documents.
+  - Distinctive badges on gallery cells: Color-coded video format capsules displaying the container type (MKV in purple, MP4 in blue, MOV in cyan, AVI in orange, WebM in green, WMV in amber, FLV in red, TS in mint) paired with watch-progress rings and completion checkmarks (`VideoFormatStyle`), **GIF** tags for animated media, and bright red **PDF** badges for documents.
+- **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**:
+  - Resilient thumbnail failure handling: when a preview cannot be decoded, displays a non-interactive centered placeholder with a direct "Play Video" prompt (`allowsHitTesting(false)`).
+  - Tapping anywhere on the cell surface immediately opens and plays the video, eliminating touch interception bugs.
+  - A compact, dedicated retry button is neatly isolated in the top-leading corner for manual preview regeneration without blocking playback.
 - **Multi-Selection & Batch Operations (`MediaSelectionBottomBar`)**:
   - Tap "Select" to enter multi-select mode.
   - Batch export to Apple Photos or share via system share sheet.
@@ -98,8 +102,17 @@ This document provides a comprehensive catalog of all features and capabilities 
 
 ## 4. Video Player & Streaming Engine
 
+- **Hybrid Dual-Engine Architecture (`VideoPlayerEngineProtocol`)**:
+  - Automatically identifies whether a media file is native to Apple (`.mp4`, `.mov`, `.m4v`) or an extended open format (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, `.rm`).
+  - **Native Engine (`NativePlayerEngine`)**: Powered by `AVFoundation` with `AVPlayer` and hardware acceleration for standard Apple-supported codecs (H.264, HEVC, ProRes, AAC, ALAC).
+  - **Extended Engine (`ExtendedPlayerEngine`)**: Powered by VideoLAN `MobileVLCKit` (LibVLC) for wide open-format container and codec compatibility (VP8, VP9, Vorbis, AC-3, E-AC-3, DTS, TrueHD, ASS/SSA subtitles).
+  - **Unified Canvas (`VideoPlayerCanvasView`)**: Seamlessly switches between `CustomVideoPlayerRepresentable` (AVPlayerLayer) and `VLCPlayerCanvasRepresentable` (UIView drawable) with 0 UI divergence for controls, gestures, scrubbing, and timeline updates.
+- **Pure Swift 6 HTTP Loopback Streaming (`SMBStreamingServerActor`)**:
+  - Runs a lightweight loopback HTTP server on `127.0.0.1` powered by Apple's `Network` framework (`NWListener`).
+  - Bridges LibVLC's HTTP stream client to the async `SMBClientActor.fetchMediaRange` interface without downloading or staging the media file on disk.
+  - Automatically translates HTTP `Range: bytes=start-end` headers into 512KB SMB range fetches with persistent connection reuse and structured task cancellation.
 - **Decoupled Architecture (Video Player 2.0)**:
-  - **Playback Controller (`VideoPlayerController`)**: `@Observable @MainActor` coordinator managing `AVPlayer`, 512KB chunk streaming over SMB, periodic time observation, volume/mute state, and audio session configuration.
+  - **Playback Controller (`VideoPlayerController`)**: `@Observable @MainActor` coordinator managing engine lifecycle, 512KB chunk streaming over SMB, periodic time observation, volume/mute state, and audio session configuration.
   - **Explicit State Machine (`VideoPlaybackState`)**: Strict `Sendable` enum (`.idle`, `.loading`, `.buffering`, `.playing`, `.paused`, `.failed`) preventing race conditions and contradictory playback flags.
   - **Seek Coordinator (`VideoSeekCoordinator`)**: Dedicated seeking pipeline isolating generational seek invalidation (`seekGeneration`), adaptive keyframe snapping (0.5s–1.5s), 100ms throttle pacing, 250ms stationary frame debounce, and 2.5s watchdog protection.
   - **Single-Responsibility View Layer**: Decoupled into `VideoPlayerCanvasView`, `VideoPlayerHUDView`, `VideoPlayerTopBarView`, `VideoPlayerCenterControlsView`, `VideoPlayerBottomBarView`, `VideoPlayerToastBannerView`, and a lightweight container `VideoDetailView`. High-frequency time observer ticks (2 Hz) only invalidate the timeline progress bar rather than re-evaluating the video canvas or HUD.
@@ -288,6 +301,10 @@ flowchart TD
 - **Two-Tier Cache Architecture**:
   - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: Fast LRU in-memory RAM cache with `@unchecked Sendable` isolation over `NSCache` for immediate scrolling and instantaneous UI updates.
   - **Standardized Master Disk Cache (`MediaCacheManager`)**: Persistent disk cache standardizing on a single 420px master thumbnail dimension (`standardThumbnailDimension`) to eliminate redundant re-encodings across grid sizes, with background FIFO eviction and one-tap manual cache clearing.
+- **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
+  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by MobileVLCKit (`VLCMediaThumbnailer`).
+  - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.
+  - Seamlessly bridges loopback HTTP streaming (`SMBStreamingServerActor`) to extract keyframes directly from remote SMB shares on demand.
 - **Actor-Isolated SMB Concurrency (`SMBClientActor`)**:
   - Encapsulates C-based SMB protocol engine (`libsmb2`) within a dedicated Swift Actor to guarantee absolute thread safety without deadlocks or race conditions.
 - **Concurrency Throttling (`VideoThumbnailLimiter`)**:

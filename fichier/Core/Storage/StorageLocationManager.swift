@@ -954,7 +954,15 @@ public final class StorageLocationManager {
             }
             
             let validItem = await resolveValidItem(for: item)
-            guard validItem.size > 0, let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
+            guard validItem.size > 0 else {
+                return nil
+            }
+            
+            if SupportedMediaTypes.isExtendedVideo(extension: (validItem.name as NSString).pathExtension) {
+                return await streamExtendedVideoThumbnail(for: validItem, maxDimension: maxDimension)
+            }
+            
+            guard let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
                 return nil
             }
             
@@ -1014,6 +1022,41 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via MobileVLCKit.
+    private func streamExtendedVideoThumbnail(
+        for item: MediaItem,
+        maxDimension: CGFloat
+    ) async -> UIImage? {
+        guard !Task.isCancelled else { return nil }
+        let server = SMBStreamingServerActor(worker: self.worker, item: item)
+        do {
+            let streamURL = try await server.start()
+            
+            let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                from: streamURL,
+                maxDimension: maxDimension,
+                snapshotPosition: 0.05
+            )
+            
+            let result: UIImage?
+            if let thumb {
+                result = thumb
+            } else {
+                result = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                    from: streamURL,
+                    maxDimension: maxDimension,
+                    snapshotPosition: 0.0
+                )
+            }
+            
+            await server.stop()
+            return result
+        } catch {
+            await server.stop()
+            return nil
+        }
+    }
+    
     // MARK: - PDF Document Thumbnail Streaming & Placeholders
     
     /// Progressive PDF document thumbnail generator with fast-path prefix reading and stylized placeholder fallbacks.
@@ -1063,7 +1106,7 @@ public final class StorageLocationManager {
         // 3. Debounce briefly (100ms) to cancel fast-scrolling cells before touching SMB
         try? await Task.sleep(for: .milliseconds(100))
         guard !Task.isCancelled else { return nil }
-        if let expectedFolderID, await self.activeFolderID != expectedFolderID {
+        if let expectedFolderID, self.activeFolderID != expectedFolderID {
             return nil
         }
         

@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "AVI Video" : {
+
+    },
     "CFBundleDisplayName" : {
       "comment" : "Bundle display name",
       "extractionState" : "extracted_with_value",
@@ -25,6 +28,12 @@
         }
       },
       "shouldTranslate" : false
+    },
+    "Flash Video" : {
+
+    },
+    "Matroska Video" : {
+
     },
     "NSLocalNetworkUsageDescription" : {
       "comment" : "Privacy - Local Network Usage Description",
@@ -240,6 +249,12 @@
           }
         }
       }
+    },
+    "WebM Video" : {
+
+    },
+    "Windows Media Video" : {
+
     }
   },
   "version" : "1.3"

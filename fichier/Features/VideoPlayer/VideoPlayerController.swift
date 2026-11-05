@@ -40,6 +40,21 @@ public final class VideoPlayerController {
     /// Underlying AVFoundation player instance.
     public private(set) var player: AVPlayer?
     
+    /// Architectural kind of the active playback engine.
+    public private(set) var engineKind: VideoEngineKind = .native
+    
+    /// Abstract active playback engine conforming to `VideoPlayerEngineProtocol`.
+    public private(set) var engine: (any VideoPlayerEngineProtocol)?
+    
+    /// Underlying native AVFoundation engine if active.
+    public private(set) var nativeEngine: NativePlayerEngine?
+    
+    /// Underlying extended MobileVLCKit engine if active.
+    public private(set) var extendedEngine: ExtendedPlayerEngine?
+    
+    /// Local loopback HTTP streaming server serving byte-range queries over SMB.
+    private var smbStreamingServer: SMBStreamingServerActor?
+    
     /// Current AVURLAsset reference configured for custom resource loading.
     private var currentAsset: AVURLAsset?
     
@@ -129,6 +144,11 @@ public final class VideoPlayerController {
         totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 && !playbackState.isPlaying
     }
     
+    /// Indicates whether the active playback engine or AVPlayer instance is actively rendering/advancing frames.
+    public var isEnginePlaying: Bool {
+        engine?.isPlaying == true || player?.timeControlStatus == .playing
+    }
+    
     /// Zero-based index of the current video within the active playlist.
     public var currentIndex: Int {
         videos.firstIndex(where: { $0.id == currentItem.id }) ?? 0
@@ -148,6 +168,8 @@ public final class VideoPlayerController {
         playbackStartTime = Date()
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
+        currentPlaybackSeconds = 0
+        totalDurationSeconds = 0
         tearDownPlayer(deactivateAudioSession: false)
         currentlyLoadedItem = item
         showControls = true
@@ -164,11 +186,34 @@ public final class VideoPlayerController {
             }
         }
         
+        let ext = (item.name as NSString).pathExtension
+        let isExtended = SupportedMediaTypes.isExtendedVideo(extension: ext)
+        
         // 1. If local file or cached locally, play immediately from file
         if let localURL = item.localURL ?? (MediaCacheManager.shared.hasCachedVideo(for: item) ? MediaCacheManager.shared.localVideoURL(for: item) : nil) {
             self.shareableVideoURL = localURL
+            if isExtended {
+                setupExtendedEngine(with: localURL, for: item)
+                return
+            }
+            
+            self.engineKind = .native
             let avPlayer = AVPlayer(url: localURL)
             self.player = avPlayer
+            let native = NativePlayerEngine(
+                player: avPlayer,
+                onTimeUpdate: { [weak self] time in
+                    self?.currentPlaybackSeconds = time
+                },
+                onDurationUpdate: { [weak self] duration in
+                    self?.totalDurationSeconds = duration
+                },
+                onStateUpdate: { [weak self] state in
+                    self?.playbackState = state
+                }
+            )
+            self.nativeEngine = native
+            self.engine = native
             self.playbackState = .playing
             configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
             avPlayer.play()
@@ -178,14 +223,30 @@ public final class VideoPlayerController {
         }
         
         // 2. Apple Photos Library Video or Progressive On-Demand SMB Stream
-        loadTask = Task { @MainActor in
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             if item.phAssetIdentifier != nil {
                 do {
                     let videoURL = try await manager.fetchVideoURL(for: item)
                     guard !Task.isCancelled else { return }
                     self.shareableVideoURL = videoURL
+                    self.engineKind = .native
                     let avPlayer = AVPlayer(url: videoURL)
                     self.player = avPlayer
+                    let native = NativePlayerEngine(
+                        player: avPlayer,
+                        onTimeUpdate: { [weak self] time in
+                            self?.currentPlaybackSeconds = time
+                        },
+                        onDurationUpdate: { [weak self] duration in
+                            self?.totalDurationSeconds = duration
+                        },
+                        onStateUpdate: { [weak self] state in
+                            self?.playbackState = state
+                        }
+                    )
+                    self.nativeEngine = native
+                    self.engine = native
                     self.playbackState = .playing
                     configurePlayer(avPlayer, for: item, loadTracksImmediately: true)
                     avPlayer.play()
@@ -204,6 +265,29 @@ public final class VideoPlayerController {
             let validItem = await manager.resolveValidItem(for: item)
             guard !Task.isCancelled else { return }
             
+            if isExtended {
+                self.engineKind = .extended
+                self.player = nil
+                self.playbackState = .buffering
+                
+                let server = SMBStreamingServerActor(worker: self.manager.clientActor, item: validItem)
+                self.smbStreamingServer = server
+                
+                do {
+                    let streamURL = try await server.start()
+                    guard !Task.isCancelled else { return }
+                    self.setupExtendedEngine(with: streamURL, for: validItem)
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    let sanitized = self.sanitizeErrorDescription(error.localizedDescription)
+                    let desc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
+                    self.errorMessage = desc
+                    self.playbackState = .failed(desc)
+                }
+                return
+            }
+            
+            self.engineKind = .native
             guard validItem.size > 0, let (streamURL, uniqueID) = StorageLocationManager.makeStreamURL(for: validItem.name) else {
                 let desc = String(localized: .Strings.videoPlayerErrorInvalidStreamUrl)
                 self.errorMessage = desc
@@ -225,6 +309,20 @@ public final class VideoPlayerController {
             let avPlayer = AVPlayer(playerItem: playerItem)
             avPlayer.automaticallyWaitsToMinimizeStalling = true
             self.player = avPlayer
+            let native = NativePlayerEngine(
+                player: avPlayer,
+                onTimeUpdate: { [weak self] time in
+                    self?.currentPlaybackSeconds = time
+                },
+                onDurationUpdate: { [weak self] duration in
+                    self?.totalDurationSeconds = duration
+                },
+                onStateUpdate: { [weak self] state in
+                    self?.playbackState = state
+                }
+            )
+            self.nativeEngine = native
+            self.engine = native
             self.playbackState = .buffering
             configurePlayer(avPlayer, for: validItem, loadTracksImmediately: false)
             avPlayer.play()
@@ -232,21 +330,75 @@ public final class VideoPlayerController {
         }
     }
     
-    /// Configures volume, saved resume positions, periodic time observers, and track managers.
-    private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem, loadTracksImmediately: Bool) {
-        self.volume = Double(avPlayer.volume)
-        self.isMuted = avPlayer.isMuted
-        
-        // 1. Resume saved position if available
+    /// Configures and mounts the extended playback engine for open video containers and codecs.
+    private func setupExtendedEngine(with url: URL, for item: MediaItem) {
+        self.engineKind = .extended
+        self.player = nil
+        self.trackManager.reset()
+        let extended = ExtendedPlayerEngine(
+            url: url,
+            onTimeUpdate: { [weak self] time in
+                guard let self else { return }
+                self.currentPlaybackSeconds = time
+                let isEnginePlaying = self.engine?.isPlaying == true
+                if self.playbackState.isBuffering && isEnginePlaying {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.playbackState = .playing
+                    }
+                    self.scheduleControlsAutoHide()
+                }
+            },
+            onDurationUpdate: { [weak self] duration in
+                guard let self else { return }
+                self.totalDurationSeconds = duration
+                if let saved = self.restoredFromSeconds, duration > 0 {
+                    if saved >= duration - 4.0 || saved / duration >= 0.90 {
+                        self.restartVideo()
+                    }
+                }
+            },
+            onStateUpdate: { [weak self] state in
+                guard let self else { return }
+                let wasPlaying = self.playbackState.isPlaying
+                if self.playbackState != state {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.playbackState = state
+                    }
+                }
+                if !wasPlaying && state.isPlaying {
+                    self.scheduleControlsAutoHide()
+                }
+            },
+            onPlaybackEnded: { [weak self] in
+                self?.handlePlaybackCompletion()
+            }
+        )
+        extended.onTracksChanged = { [weak self, weak extended] in
+            guard let self, let eng = extended else { return }
+            self.trackManager.loadTracks(for: eng)
+        }
+        self.extendedEngine = extended
+        self.engine = extended
+        self.playbackState = .buffering
+        let initialDuration: Double? = extended.durationSeconds > 0 ? extended.durationSeconds : nil
+        self.restorePlaybackPosition(for: item, knownDuration: initialDuration) { savedSeconds in
+            extended.seek(to: savedSeconds, toleranceBefore: 0, toleranceAfter: 0, completion: nil)
+        }
+        extended.play()
+        startExtendedPlaybackMonitoring(for: extended)
+        self.scheduleControlsAutoHide()
+    }
+    
+    /// Restores saved playback position from persistent store if applicable.
+    private func restorePlaybackPosition(for item: MediaItem, knownDuration: Double?, seekAction: (Double) -> Void) {
         if let savedSeconds = VideoPlaybackStore.shared.position(for: item) {
-            let knownDuration = avPlayer.currentItem?.duration.seconds ?? 0
-            if knownDuration.isFinite && knownDuration > 0 && (savedSeconds >= knownDuration - 4.0 || savedSeconds / knownDuration >= 0.90) {
+            let duration = knownDuration ?? 0
+            if duration.isFinite && duration > 0 && (savedSeconds >= duration - 4.0 || savedSeconds / duration >= 0.90) {
                 self.currentPlaybackSeconds = 0
                 self.didRestorePlaybackPosition = false
                 self.restoredFromSeconds = nil
             } else {
-                let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
-                avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
+                seekAction(savedSeconds)
                 self.currentPlaybackSeconds = savedSeconds
                 self.didRestorePlaybackPosition = true
                 self.restoredFromSeconds = savedSeconds
@@ -256,6 +408,18 @@ public final class VideoPlayerController {
             self.currentPlaybackSeconds = 0
             self.didRestorePlaybackPosition = false
             self.restoredFromSeconds = nil
+        }
+    }
+    
+    /// Configures volume, saved resume positions, periodic time observers, and track managers.
+    private func configurePlayer(_ avPlayer: AVPlayer, for item: MediaItem, loadTracksImmediately: Bool) {
+        self.volume = Double(avPlayer.volume)
+        self.isMuted = avPlayer.isMuted
+        
+        // 1. Resume saved position if available
+        restorePlaybackPosition(for: item, knownDuration: avPlayer.currentItem?.duration.seconds) { savedSeconds in
+            let targetTime = CMTime(seconds: savedSeconds, preferredTimescale: 600)
+            avPlayer.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
         
         // 2. Set playback rate
@@ -306,8 +470,12 @@ public final class VideoPlayerController {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.playbackState = isCurrentlyPlaying ? .playing : .paused
                     }
-                    self.scheduleControlsAutoHide()
+                    if isCurrentlyPlaying {
+                        self.scheduleControlsAutoHide()
+                    }
                 } else if !wasPlaying && isCurrentlyPlaying {
+                    self.scheduleControlsAutoHide()
+                } else if self.showControls && isCurrentlyPlaying && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
                     self.scheduleControlsAutoHide()
                 }
                 
@@ -352,13 +520,14 @@ public final class VideoPlayerController {
                 switch p.timeControlStatus {
                 case .playing:
                     waitingStartTime = nil
-                    if self.playbackState.isBuffering {
+                    let wasBuffering = self.playbackState.isBuffering
+                    let wasNotPlaying = !self.playbackState.isPlaying
+                    if wasBuffering || wasNotPlaying {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             self.playbackState = .playing
                         }
-                    }
-                    if !self.playbackState.isPlaying {
-                        self.playbackState = .playing
+                        self.scheduleControlsAutoHide()
+                    } else if self.showControls && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
                         self.scheduleControlsAutoHide()
                     }
                     
@@ -395,42 +564,118 @@ public final class VideoPlayerController {
         }
     }
     
+    /// Continuous monitoring task checking extended engine state every 120ms.
+    private func startExtendedPlaybackMonitoring(for engine: ExtendedPlayerEngine) {
+        monitorTask?.cancel()
+        monitorTask = Task { @MainActor [weak self, weak engine] in
+            var lastAudioCount = -1
+            var lastSubCount = -1
+            while !Task.isCancelled {
+                guard let self, let eng = engine else { break }
+                
+                let isPlayingNow = eng.isPlaying
+                if isPlayingNow {
+                    if self.playbackState.isBuffering || !self.playbackState.isPlaying {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.playbackState = .playing
+                        }
+                        self.scheduleControlsAutoHide()
+                    } else if self.showControls && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
+                        self.scheduleControlsAutoHide()
+                    }
+                } else if self.playbackState.isPlaying && !self.seekCoordinator.isScrubbing && !self.seekCoordinator.isFinishingSeek {
+                    self.playbackState = .paused
+                }
+                
+                let audioCount = eng.audioTrackOptions.count
+                let subCount = eng.subtitleTrackOptions.count
+                if audioCount != lastAudioCount || subCount != lastSubCount {
+                    lastAudioCount = audioCount
+                    lastSubCount = subCount
+                    self.trackManager.loadTracks(for: eng)
+                }
+                
+                try? await Task.sleep(for: .milliseconds(120))
+            }
+        }
+    }
+    
+    /// Toggles subtitle track selection between Off and the primary available track.
+    public func toggleSubtitles() {
+        trackManager.toggleSubtitles(in: player?.currentItem, engine: extendedEngine)
+    }
+    
+    /// Selects the specified subtitle track option.
+    public func selectSubtitle(option: VideoTrackOption) {
+        trackManager.selectSubtitle(option: option, in: player?.currentItem, engine: extendedEngine)
+    }
+    
+    /// Selects the specified audio track option.
+    public func selectAudio(option: VideoTrackOption) {
+        trackManager.selectAudio(option: option, in: player?.currentItem, engine: extendedEngine)
+    }
+    
+    /// Sets normalized volume across active player engine and AVPlayer instance.
+    public func setVolume(_ newVolume: Double) {
+        self.volume = max(0.0, min(1.0, newVolume))
+        self.engine?.volume = self.volume
+        self.player?.volume = Float(self.volume)
+    }
+    
+    /// Sets muted state across active player engine and AVPlayer instance.
+    public func setMuted(_ muted: Bool) {
+        self.isMuted = muted
+        self.engine?.isMuted = muted
+        self.player?.isMuted = muted
+    }
+    
+    /// Configures playback rate multiplier across active manager and engines.
+    public func setPlaybackRate(_ rate: VideoPlaybackRate) {
+        trackManager.setPlaybackRate(rate, for: self.engine)
+        if let player = self.player {
+            trackManager.setPlaybackRate(rate, for: player)
+        }
+    }
+    
     /// Toggles between playing and paused states, wrapping to beginning if reaching the end.
     public func togglePlayPause() {
-        guard let player = player else { return }
         if isAtEnd {
             seekTo(0, resumePlaying: true)
             currentPlaybackSeconds = 0
             return
         }
-        if player.timeControlStatus != .paused {
-            player.pause()
-            playbackState = .paused
-            hideControlsTask?.cancel()
+        
+        let currentlyPlaying = engine?.isPlaying ?? (player?.timeControlStatus != .paused)
+        if currentlyPlaying {
+            pause()
             withAnimation(.easeInOut(duration: 0.35)) {
                 showControls = true
             }
         } else {
-            player.play()
-            playbackState = .playing
-            scheduleControlsAutoHide()
+            play()
         }
     }
     
     /// Starts or resumes playback.
     public func play() {
-        guard let player = player, player.timeControlStatus == .paused else { return }
-        player.play()
+        if let engine {
+            engine.play()
+        } else if let player, player.timeControlStatus == .paused {
+            player.play()
+        }
         playbackState = .playing
         scheduleControlsAutoHide()
     }
     
     /// Pauses active playback and retains control bar visibility.
     public func pause() {
-        guard let player = player, player.timeControlStatus != .paused else { return }
-        player.pause()
+        if let engine {
+            engine.pause()
+        } else if let player, player.timeControlStatus != .paused {
+            player.pause()
+        }
         playbackState = .paused
-        hideControlsTask?.cancel()
+        cancelAutoHideTimer()
     }
     
     /// Performs an exact seek to a specific timestamp in seconds.
@@ -446,7 +691,7 @@ public final class VideoPlayerController {
         let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
         let maxLimit = dur > 0 ? dur : max(current + deltaSeconds, 0)
         let newTarget = min(max(0, current + deltaSeconds), maxLimit)
-        let resume = (player?.timeControlStatus != .paused) || playbackState.isPlaying
+        let resume = (engine?.isPlaying ?? (player?.timeControlStatus != .paused)) || playbackState.isPlaying
         seekTo(newTarget, resumePlaying: resume)
         withAnimation {
             showControls = true
@@ -465,29 +710,55 @@ public final class VideoPlayerController {
             cancelAutoHideTimer()
         }
         
-        seekCoordinator.finishSeeking(
-            at: targetSeconds,
-            resumePlaying: resumePlaying,
-            player: player,
-            onBuffering: { [weak self] buffering in
-                guard let self else { return }
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if buffering {
-                        self.cancelAutoHideTimer()
-                        self.playbackState = .buffering
-                    } else if self.player?.timeControlStatus == .playing {
+        if let engine {
+            seekCoordinator.finishSeeking(
+                at: targetSeconds,
+                resumePlaying: resumePlaying,
+                engine: engine,
+                onBuffering: { [weak self] buffering in
+                    guard let self else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if buffering {
+                            self.cancelAutoHideTimer()
+                            self.playbackState = .buffering
+                        } else if self.engine?.isPlaying == true {
+                            self.playbackState = .playing
+                        }
+                    }
+                },
+                onComplete: { [weak self] in
+                    guard let self else { return }
+                    if resumePlaying {
                         self.playbackState = .playing
                     }
+                    self.scheduleControlsAutoHide()
                 }
-            },
-            onComplete: { [weak self] in
-                guard let self else { return }
-                if resumePlaying {
-                    self.playbackState = .playing
+            )
+        } else {
+            seekCoordinator.finishSeeking(
+                at: targetSeconds,
+                resumePlaying: resumePlaying,
+                player: player,
+                onBuffering: { [weak self] buffering in
+                    guard let self else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        if buffering {
+                            self.cancelAutoHideTimer()
+                            self.playbackState = .buffering
+                        } else if self.player?.timeControlStatus == .playing {
+                            self.playbackState = .playing
+                        }
+                    }
+                },
+                onComplete: { [weak self] in
+                    guard let self else { return }
+                    if resumePlaying {
+                        self.playbackState = .playing
+                    }
+                    self.scheduleControlsAutoHide()
                 }
-                self.scheduleControlsAutoHide()
-            }
-        )
+            )
+        }
     }
     
     /// Callback from timeline scrubber when the user finishes dragging.
@@ -498,7 +769,11 @@ public final class VideoPlayerController {
     /// Callback from timeline scrubber as the user actively drags their finger.
     public func onTimelineScrubbing(targetSeconds: Double) {
         currentPlaybackSeconds = targetSeconds
-        seekCoordinator.requestLiveFrameSeek(to: targetSeconds, player: player)
+        if let engine {
+            seekCoordinator.requestLiveFrameSeek(to: targetSeconds, engine: engine)
+        } else {
+            seekCoordinator.requestLiveFrameSeek(to: targetSeconds, player: player)
+        }
     }
     
     /// Callback tracking changes in timeline scrubbing active state.
@@ -508,7 +783,8 @@ public final class VideoPlayerController {
             seekCoordinator.startTimelineScrubbing(
                 currentPlaybackSeconds: currentPlaybackSeconds,
                 isPlaying: playbackState.isPlaying,
-                player: player
+                player: player,
+                engine: engine
             )
             if seekCoordinator.wasPlayingBeforeScrub {
                 playbackState = .paused
@@ -522,8 +798,7 @@ public final class VideoPlayerController {
     
     /// Toggles the audio output between muted and unmuted.
     public func toggleMute() {
-        isMuted.toggle()
-        player?.isMuted = isMuted
+        setMuted(!isMuted)
         withAnimation {
             showControls = true
         }
@@ -535,10 +810,8 @@ public final class VideoPlayerController {
     /// - Parameter delta: Normalized volume delta (e.g. `+0.1` or `-0.1`).
     public func adjustVolume(by delta: Double) {
         let newVol = min(max(0.0, volume + delta), 1.0)
-        volume = newVol
-        isMuted = false
-        player?.isMuted = false
-        player?.volume = Float(newVol)
+        setMuted(false)
+        setVolume(newVol)
         withAnimation {
             showControls = true
         }
@@ -557,6 +830,7 @@ public final class VideoPlayerController {
     /// Advances to the next video upon playback reaching the end (does not loop to start).
     public func playNextVideo() {
         guard videos.count > 1 else {
+            engine?.pause()
             player?.pause()
             playbackState = .paused
             withAnimation(.easeInOut(duration: 0.35)) {
@@ -571,6 +845,7 @@ public final class VideoPlayerController {
                 currentItem = videos[nextIndex]
             }
         } else {
+            engine?.pause()
             player?.pause()
             playbackState = .paused
             withAnimation(.easeInOut(duration: 0.35)) {
@@ -620,7 +895,7 @@ public final class VideoPlayerController {
     
     /// Restarts the video from `0:00` and purges any saved resume progress from persistent store.
     public func restartVideo() {
-        guard player != nil else { return }
+        guard engine != nil || player != nil else { return }
         let targetItem = currentlyLoadedItem ?? currentItem
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
@@ -666,7 +941,8 @@ public final class VideoPlayerController {
     ///
     /// - Parameter delay: Delay in seconds (defaults to 3.5s).
     public func scheduleControlsAutoHide(delay: Double = 3.5) {
-        guard showControls && playbackState.isPlaying && !playbackState.isBuffering && !seekCoordinator.isScrubbing else {
+        let isPlaying = (playbackState.isPlaying || isEnginePlaying)
+        guard showControls && isPlaying && !seekCoordinator.isScrubbing else {
             hideControlsTask?.cancel()
             hideControlsTask = nil
             return
@@ -689,21 +965,26 @@ public final class VideoPlayerController {
     
     /// Resets the auto-hide timer if controls are currently displayed and playing.
     public func resetAutoHideTimer() {
-        if showControls && playbackState.isPlaying {
+        if showControls && (playbackState.isPlaying || isEnginePlaying) {
             scheduleControlsAutoHide()
         }
     }
     
+    private var lastControlsToggleTime: Date = .distantPast
+    
     /// Toggles the visibility of overlay HUD controls.
     public func toggleControls() {
         guard !seekCoordinator.isScrubbing else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastControlsToggleTime) > 0.25 else { return }
+        lastControlsToggleTime = now
         withAnimation(.easeInOut(duration: 0.35)) {
             showControls.toggle()
         }
         if showControls {
             scheduleControlsAutoHide()
         } else {
-            hideControlsTask?.cancel()
+            cancelAutoHideTimer()
         }
     }
     
@@ -717,7 +998,14 @@ public final class VideoPlayerController {
     ///
     /// - Parameter deactivateAudioSession: Whether to release the system audio session.
     public func tearDownPlayer(deactivateAudioSession: Bool = false) {
-        if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
+        if let currentEngine = engine, let loadedItem = currentlyLoadedItem {
+            let secs = currentEngine.currentTimeSeconds
+            let dur = currentEngine.durationSeconds
+            let isNearEnd = dur > 0 && secs >= dur * 0.90
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 && !isNearEnd {
+                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+            }
+        } else if let p = player, let current = p.currentItem, let loadedItem = currentlyLoadedItem {
             let secs = p.currentTime().seconds
             let dur = current.duration.seconds
             let isNearEnd = dur > 0 && secs >= dur * 0.90
@@ -750,6 +1038,17 @@ public final class VideoPlayerController {
         loaderDelegate = nil
         currentAsset?.resourceLoader.setDelegate(nil, queue: nil)
         currentAsset = nil
+        
+        Task { [server = smbStreamingServer] in
+            await server?.stop()
+        }
+        smbStreamingServer = nil
+        extendedEngine?.tearDown()
+        extendedEngine = nil
+        nativeEngine?.tearDown()
+        nativeEngine = nil
+        engine = nil
+        
         player?.pause()
         player = nil
         playbackState = .idle
@@ -762,12 +1061,8 @@ public final class VideoPlayerController {
         }
     }
     
-    /// Notification handler invoked when the active player item reaches its end timestamp.
-    public func handleItemDidPlayToEndTime(_ notification: Notification) {
-        guard let item = notification.object as? AVPlayerItem,
-              let current = player?.currentItem,
-              item == current else { return }
-        
+    /// Centralized completion handler invoked when playback reaches the end timestamp.
+    public func handlePlaybackCompletion() {
         let targetItem = currentlyLoadedItem ?? currentItem
         
         didRestorePlaybackPosition = false
@@ -782,6 +1077,14 @@ public final class VideoPlayerController {
         }
         
         playNextVideo()
+    }
+    
+    /// Notification handler invoked when the active player item reaches its end timestamp.
+    public func handleItemDidPlayToEndTime(_ notification: Notification) {
+        guard let item = notification.object as? AVPlayerItem,
+              let current = player?.currentItem,
+              item == current else { return }
+        handlePlaybackCompletion()
     }
     
     /// Notification handler invoked when playback fails prematurely before reaching the end.
@@ -799,10 +1102,25 @@ public final class VideoPlayerController {
     
     /// Saves current playback progress when the application enters the background scene phase.
     public func handleScenePhaseBackground() {
-        if let p = player, let loadedItem = currentlyLoadedItem {
-            let secs = p.currentTime().seconds
-            let dur = p.currentItem?.duration.seconds ?? 0
-            VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+        if let loadedItem = currentlyLoadedItem {
+            let secs: Double
+            let dur: Double
+            if let currentEngine = engine {
+                secs = currentEngine.currentTimeSeconds
+                let engineDur = currentEngine.durationSeconds
+                dur = engineDur > 0 ? engineDur : totalDurationSeconds
+            } else if let p = player {
+                secs = p.currentTime().seconds
+                dur = p.currentItem?.duration.seconds ?? totalDurationSeconds
+            } else {
+                secs = currentPlaybackSeconds
+                dur = totalDurationSeconds
+            }
+            
+            let isNearEnd = dur > 0 && (secs >= dur - 4.0 || secs >= dur * 0.90)
+            if secs.isFinite && !secs.isNaN && dur.isFinite && !dur.isNaN && secs >= 2.0 && !isNearEnd {
+                VideoPlaybackStore.shared.savePosition(secs, duration: dur, for: loadedItem)
+            }
         }
         VideoPlaybackStore.shared.flush()
     }

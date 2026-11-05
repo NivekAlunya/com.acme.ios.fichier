@@ -366,6 +366,10 @@ nonisolated public final class MediaCacheManager: Sendable {
         maxDimension: CGFloat = standardThumbnailDimension,
         preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
+        if SupportedMediaTypes.isExtendedVideo(extension: localURL.pathExtension) {
+            return await generateExtendedVideoThumbnail(from: localURL, maxDimension: maxDimension, preferredTime: preferredTime)
+        }
+        
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -387,6 +391,44 @@ nonisolated public final class MediaCacheManager: Sendable {
         } catch {
             return nil
         }
+    }
+    
+    /// Generates a video thumbnail frame for an extended video file (MKV, AVI, WebM, etc.).
+    public func generateExtendedVideoThumbnail(
+        from localURL: URL,
+        maxDimension: CGFloat = standardThumbnailDimension,
+        preferredTime: CMTime = defaultVideoThumbnailTime
+    ) async -> UIImage? {
+        if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            from: localURL,
+            maxDimension: maxDimension,
+            preferredTime: preferredTime
+        ) {
+            return thumb
+        }
+        
+        // If a non-zero timestamp was requested and failed, fall back to keyframe zero
+        if preferredTime > .zero {
+            if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                from: localURL,
+                maxDimension: maxDimension,
+                preferredTime: .zero
+            ) {
+                return thumb
+            }
+        }
+        
+        let asset = AVURLAsset(url: localURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxDimension, height: maxDimension)
+        if let (cgImage, _) = try? await generator.image(at: preferredTime) {
+            return UIImage(cgImage: cgImage)
+        }
+        if let (cgImage, _) = try? await generator.image(at: .zero) {
+            return UIImage(cgImage: cgImage)
+        }
+        return nil
     }
     
     // MARK: - Cache Size, Eviction & Cleanup

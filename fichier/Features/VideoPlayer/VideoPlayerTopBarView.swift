@@ -106,11 +106,11 @@ public struct VideoPlayerTopBarView: View {
         @Bindable var bindableController = controller
         return VideoVolumeBar(volume: $bindableController.volume, isMuted: $bindableController.isMuted)
             .onChange(of: controller.volume) { _, newVol in
-                controller.player?.volume = Float(newVol)
+                controller.setVolume(newVol)
                 controller.resetAutoHideTimer()
             }
             .onChange(of: controller.isMuted) { _, muted in
-                controller.player?.isMuted = muted
+                controller.setMuted(muted)
                 controller.resetAutoHideTimer()
             }
     }
@@ -194,9 +194,7 @@ public struct VideoPlayerTopBarView: View {
             if !controller.trackManager.availableSubtitles.isEmpty {
                 Section(.Strings.videoPlayerMenuSubtitles) {
                     Button {
-                        if let item = controller.player?.currentItem {
-                            controller.trackManager.toggleSubtitles(in: item)
-                        }
+                        controller.toggleSubtitles()
                     } label: {
                         Label(
                             controller.trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
@@ -205,9 +203,7 @@ public struct VideoPlayerTopBarView: View {
                     }
                     ForEach(controller.trackManager.availableSubtitles) { option in
                         Button {
-                            if let item = controller.player?.currentItem {
-                                controller.trackManager.selectSubtitle(option: option, in: item)
-                            }
+                            controller.selectSubtitle(option: option)
                         } label: {
                             HStack {
                                 Text(option.displayName)
@@ -224,9 +220,7 @@ public struct VideoPlayerTopBarView: View {
                 Section(.Strings.videoPlayerMenuAudio) {
                     ForEach(controller.trackManager.availableAudios) { option in
                         Button {
-                            if let item = controller.player?.currentItem {
-                                controller.trackManager.selectAudio(option: option, in: item)
-                            }
+                            controller.selectAudio(option: option)
                         } label: {
                             HStack {
                                 Text(option.displayName)
@@ -242,9 +236,7 @@ public struct VideoPlayerTopBarView: View {
             Section(.Strings.videoPlayerMenuPlaybackSpeed) {
                 ForEach(VideoPlaybackRate.allCases) { rate in
                     Button {
-                        if let p = controller.player {
-                            controller.trackManager.setPlaybackRate(rate, for: p)
-                        }
+                        controller.setPlaybackRate(rate)
                     } label: {
                         HStack {
                             Text(rate.displayName)

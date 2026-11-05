@@ -34,6 +34,16 @@ final class VideoSeekCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.isScrubbing)
     }
     
+    func testTimelineScrubbingWithEngine() {
+        let coordinator = VideoSeekCoordinator()
+        coordinator.startTimelineScrubbing(currentPlaybackSeconds: 30.0, isPlaying: true, engine: nil)
+        XCTAssertTrue(coordinator.isScrubbingTimeline)
+        XCTAssertTrue(coordinator.isScrubbing)
+        XCTAssertTrue(coordinator.wasPlayingBeforeScrub)
+        coordinator.endTimelineScrubbing()
+        XCTAssertFalse(coordinator.isScrubbing)
+    }
+    
     func testGestureScrubbingLifecycle() {
         let coordinator = VideoSeekCoordinator()
         

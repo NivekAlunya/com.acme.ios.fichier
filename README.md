@@ -23,7 +23,7 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
   - Filter by **All**, **Photos Only**, **Videos Only**, **Documents Only**, or **Favorites**.
   - Sort by **Name**, **Date Modified**, or **File Size** (ascending / descending).
   - Contextual photo and video paging preserves the user's active filter and sort order.
-- **32 Supported Media & Document Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), native streaming video (MP4, MOV, M4V), and native PDF documents (PDF). Extended containers (MKV, AVI, WebM) are specified in [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
+- **40+ Supported Media & Document Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), native streaming video (MP4, MOV, M4V), extended video containers (MKV, AVI, WebM, FLV, WMV, TS, OGV, RM), and native PDF documents (PDF). See [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
 - **Multi-Selection & Batch Actions**: Batch AirDrop / Share Sheet export and batch save to Apple Photos (`MediaSelectionBottomBar`).
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
 
@@ -45,6 +45,10 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Camera Roll Export**: One-tap export to Apple Photos (`PhotoLibrarySaver`) with proper permission handling.
 
 ### 🎬 Video Player & Streaming Engine (Video Player 2.0)
+- **Hybrid Dual-Engine Architecture (`VideoPlayerEngineProtocol`)**: Intelligently routes media based on container and codec while maintaining identical controls and gestures:
+  - **Native Engine (`NativePlayerEngine`)**: Hardware-accelerated Apple `AVPlayer` with `SMBResourceLoaderDelegate` for `.mp4`, `.mov`, and `.m4v`.
+  - **Extended Engine (`ExtendedPlayerEngine`)**: VideoLAN `MobileVLCKit` engine decoding open containers (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, `.rm`) and non-Apple audio/subtitles (Vorbis, AC-3, ASS/SSA).
+- **Pure Swift 6 HTTP Loopback Streaming (`SMBStreamingServerActor`)**: Uses Apple's `Network` framework (`NWListener`) on `127.0.0.1` to stream remote SMB byte ranges directly into LibVLC on demand without staging temporary files on disk.
 - **Decoupled State-Machine Architecture**: Built with `@Observable @MainActor` coordinator (`VideoPlayerController`), an explicit `Sendable` playback state machine (`VideoPlaybackState`), a hardened seek coordinator (`VideoSeekCoordinator`), and modular single-responsibility views.
 - **Byte-Range On-Demand Streaming**: Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVPlayer byte requests and streams directly from SMB servers over TCP in fast 512KB chunks.
 - **Hardened Seeking & Frame Scrubbing**:
@@ -60,6 +64,14 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 ### ⚡ Two-Tier Caching System
 - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: In-memory LRU cache wrapping `NSCache` with `@unchecked Sendable` isolation for immediate UI responsiveness.
 - **Bounded Disk Cache (`MediaCacheManager`)**: Persistent disk cache with a unified 420px master thumbnail dimension (`standardThumbnailDimension`) eliminating redundant re-encodings across grid sizes, real-time size computation, background 300MB FIFO eviction, and one-tap manual cache purging.
+- **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
+  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by MobileVLCKit (`VLCMediaThumbnailer`).
+  - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.
+  - Seamlessly bridges loopback HTTP streaming (`SMBStreamingServerActor`) to extract keyframes directly from remote SMB shares on demand.
+- **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**:
+  - When thumbnail extraction fails or times out, a non-blocking placeholder displays a centered play icon and label with `.allowsHitTesting(false)`.
+  - Tapping anywhere across the cell surface opens and plays the video without obstruction.
+  - A compact, non-interfering retry icon is located in the top-leading corner for manual preview refresh.
 
 ```mermaid
 flowchart LR
@@ -79,7 +91,7 @@ flowchart LR
 ## 🏗️ Architecture & Code Organization
 
 The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 97 independent, modular Swift files (87 application files + 10 unit test suites).
+1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 106 independent, modular Swift files (95 application files + 11 unit test suites).
 2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
 
 ### Directory Structure
@@ -117,6 +129,7 @@ fichier/
 │   │   ├── MediaThumbnailCell.swift        # Grid thumbnail cell wrapper
 │   │   ├── MediaThumbnailView.swift        # Reusable thumbnail loader & badges
 │   │   ├── SortOption.swift                # Name, Date, Size sort enum
+│   │   ├── VideoFormatStyle.swift          # Video format capsule styling & color registry
 │   │   ├── VideoProgressRing.swift         # Circular playback progress badge
 │   │   └── ViewMode.swift                  # Grid vs List enum
 │   │
@@ -152,16 +165,23 @@ fichier/
 │       ├── AirPlayButtonView.swift         # Native AVRoutePickerView wrapper
 │       ├── CustomVideoPlayerCoordinator.swift# AVPlayerViewController / PiP coordinator
 │       ├── CustomVideoPlayerView.swift     # UIViewRepresentable video canvas
+│       ├── ExtendedPlayerEngine.swift      # MobileVLCKit engine for open containers & codecs
+│       ├── NativePlayerEngine.swift        # AVFoundation AVPlayer engine implementation
 │       ├── PlayerUIView.swift              # Custom AVPlayerLayer hosting view
 │       ├── ResourceLoadingTaskTracker.swift# Actor-isolated task tracker for range requests
 │       ├── SMBResourceLoaderDelegate.swift # Custom AVAsset byte-range streaming delegate
+│       ├── SMBStreamingServerActor.swift   # Pure Swift 6 HTTP range server for LibVLC streaming
+│       ├── VLCPlayerCanvasCoordinator.swift# MobileVLCKit canvas lifecycle coordinator
+│       ├── VLCPlayerCanvasRepresentable.swift# UIViewRepresentable LibVLC render surface
 │       ├── VideoDetailView.swift           # Lightweight host container & keyboard shortcut binder
+│       ├── VideoEngineKind.swift           # Playback engine kind enum (.native vs .extended)
 │       ├── VideoPlaybackRate.swift         # Playback speed enum (0.5x – 2.0x)
 │       ├── VideoPlaybackState.swift        # Explicit Sendable playback state machine enum
 │       ├── VideoPlayerBottomBarView.swift  # Unified liquid glass deck hosting title, metadata & timeline scrubber
 │       ├── VideoPlayerCanvasView.swift     # Video canvas host with swipe & tap gesture recognizers
 │       ├── VideoPlayerCenterControlsView.swift # Buffering spinner, retry, and center play/pause
 │       ├── VideoPlayerController.swift     # Observable MainActor playback engine coordinator
+│       ├── VideoPlayerEngineProtocol.swift # Unified engine protocol contract for native & extended players
 │       ├── VideoPlayerHUDView.swift        # Auto-hiding HUD overlay container
 │       ├── VideoPlayerToastBannerView.swift# Resume & save glassmorphic toast pills
 │       ├── VideoPlayerTopBarView.swift     # Responsive top HUD toolbar (close, volume, action tools)

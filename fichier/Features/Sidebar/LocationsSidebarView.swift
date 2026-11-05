@@ -84,44 +84,84 @@ public struct LocationsSidebarView: View {
                     }
                 } else {
                     ForEach(manager.allLocations) { location in
-                        Button {
-                            onSelectLocation(location)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: location.systemIcon)
-                                    .foregroundColor(location.iconColor)
-                                    .font(.title3)
-                                    .frame(width: 28)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(location.name)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                        .lineLimit(1)
+                        HStack(spacing: 12) {
+                            Button {
+                                onSelectLocation(location)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: location.systemIcon)
+                                        .foregroundColor(location.iconColor)
+                                        .font(.title3)
+                                        .frame(width: 28)
                                     
-                                    if let subtitle = location.subtitle {
-                                        Text(subtitle)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(location.name)
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
                                             .lineLimit(1)
+                                        
+                                        if let subtitle = location.subtitle {
+                                            Text(subtitle)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
                                     }
+                                    
+                                    Spacer()
                                 }
-                                
-                                Spacer()
-                                
-                                if isConnecting(location) {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else if isCurrentLocation(location) {
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            
+                            if isConnecting(location) {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else if isCurrentLocation(location) {
+                                if location.kind == .smb {
+                                    HStack(spacing: 8) {
+                                        Circle()
+                                            .fill(Color.green)
+                                            .frame(width: 8, height: 8)
+                                        
+                                        Button {
+                                            Task {
+                                                await manager.disconnect()
+                                            }
+                                        } label: {
+                                            Image(systemName: "eject.fill")
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .accessibilityLabel(.Strings.connectionButtonDisconnect)
+                                    }
+                                } else {
                                     Circle()
                                         .fill(Color.green)
                                         .frame(width: 8, height: 8)
                                 }
                             }
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
                         .deleteDisabled(location.kind == .photos)
+                        .contextMenu {
+                            if isCurrentLocation(location) && location.kind == .smb {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await manager.disconnect()
+                                    }
+                                } label: {
+                                    Label(.Strings.connectionButtonDisconnect, systemImage: "eject")
+                                }
+                            }
+                            if location.kind != .photos {
+                                Button(role: .destructive) {
+                                    manager.removeLocation(location)
+                                } label: {
+                                    Label(String(localized: "Remove Location"), systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                     .onDelete { indexSet in
                         let locationsToRemove = indexSet.map { manager.allLocations[$0] }
@@ -155,15 +195,6 @@ public struct LocationsSidebarView: View {
                     Image(systemName: "gearshape")
                 }
                 .accessibilityLabel(.Strings.settingsTitle)
-            }
-            if manager.isConnected {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(.Strings.connectionButtonDisconnect, role: .destructive) {
-                        Task {
-                            await manager.disconnect()
-                        }
-                    }
-                }
             }
         }
         .fileImporter(
