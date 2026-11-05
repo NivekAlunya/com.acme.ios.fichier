@@ -146,7 +146,7 @@ public struct RootSMBView: View {
             }
             return VideoDetailView(
                 manager: smbManager,
-                videos: playlist.isEmpty ? [vid] : playlist,
+                videos: playlist,
                 initialItem: vid
             )
         }
