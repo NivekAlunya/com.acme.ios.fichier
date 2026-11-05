@@ -101,10 +101,11 @@ final class VideoPlaylistNavigationTests: XCTestCase {
         XCTAssertEqual(controller.currentIndex, 1)
         XCTAssertEqual(controller.currentItem.id, item2.id)
         
-        // At end of playlist, playNextVideo does not wrap (reveals controls instead)
+        // At end of playlist, playNextVideo does not wrap (reveals controls instead and pauses)
         controller.playNextVideo()
         XCTAssertEqual(controller.currentIndex, 1)
         XCTAssertTrue(controller.showControls)
+        XCTAssertEqual(controller.playbackState, .paused)
     }
     
     func testIsAtEndCalculation() {
