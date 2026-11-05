@@ -144,6 +144,11 @@ public final class VideoPlayerController {
         totalDurationSeconds > 1.0 && currentPlaybackSeconds >= totalDurationSeconds - 0.5 && !playbackState.isPlaying
     }
     
+    /// Indicates whether the active playback engine or AVPlayer instance is actively rendering/advancing frames.
+    public var isEnginePlaying: Bool {
+        engine?.isPlaying == true || player?.timeControlStatus == .playing
+    }
+    
     /// Zero-based index of the current video within the active playlist.
     public var currentIndex: Int {
         videos.firstIndex(where: { $0.id == currentItem.id }) ?? 0
@@ -163,6 +168,8 @@ public final class VideoPlayerController {
         playbackStartTime = Date()
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
+        currentPlaybackSeconds = 0
+        totalDurationSeconds = 0
         tearDownPlayer(deactivateAudioSession: false)
         currentlyLoadedItem = item
         showControls = true
@@ -216,7 +223,8 @@ public final class VideoPlayerController {
         }
         
         // 2. Apple Photos Library Video or Progressive On-Demand SMB Stream
-        loadTask = Task { @MainActor in
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             if item.phAssetIdentifier != nil {
                 do {
                     let videoURL = try await manager.fetchVideoURL(for: item)
@@ -329,13 +337,35 @@ public final class VideoPlayerController {
         let extended = ExtendedPlayerEngine(
             url: url,
             onTimeUpdate: { [weak self] time in
-                self?.currentPlaybackSeconds = time
+                guard let self else { return }
+                self.currentPlaybackSeconds = time
+                if (self.playbackState.isBuffering || !self.playbackState.isPlaying) && (self.engine?.isPlaying == true || time > 0) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.playbackState = .playing
+                    }
+                    self.scheduleControlsAutoHide()
+                }
             },
             onDurationUpdate: { [weak self] duration in
-                self?.totalDurationSeconds = duration
+                guard let self else { return }
+                self.totalDurationSeconds = duration
+                if let saved = self.restoredFromSeconds, duration > 0 {
+                    if saved >= duration - 4.0 || saved / duration >= 0.90 {
+                        self.restartVideo()
+                    }
+                }
             },
             onStateUpdate: { [weak self] state in
-                self?.playbackState = state
+                guard let self else { return }
+                let wasPlaying = self.playbackState.isPlaying
+                if self.playbackState != state {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        self.playbackState = state
+                    }
+                }
+                if !wasPlaying && state.isPlaying {
+                    self.scheduleControlsAutoHide()
+                }
             },
             onPlaybackEnded: { [weak self] in
                 self?.handlePlaybackCompletion()
@@ -344,10 +374,12 @@ public final class VideoPlayerController {
         self.extendedEngine = extended
         self.engine = extended
         self.playbackState = .buffering
-        self.restorePlaybackPosition(for: item, knownDuration: self.totalDurationSeconds > 0 ? self.totalDurationSeconds : nil) { savedSeconds in
+        let initialDuration: Double? = extended.durationSeconds > 0 ? extended.durationSeconds : nil
+        self.restorePlaybackPosition(for: item, knownDuration: initialDuration) { savedSeconds in
             extended.seek(to: savedSeconds, toleranceBefore: 0, toleranceAfter: 0, completion: nil)
         }
         extended.play()
+        startExtendedPlaybackMonitoring(for: extended)
         self.scheduleControlsAutoHide()
     }
     
@@ -432,8 +464,12 @@ public final class VideoPlayerController {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.playbackState = isCurrentlyPlaying ? .playing : .paused
                     }
-                    self.scheduleControlsAutoHide()
+                    if isCurrentlyPlaying {
+                        self.scheduleControlsAutoHide()
+                    }
                 } else if !wasPlaying && isCurrentlyPlaying {
+                    self.scheduleControlsAutoHide()
+                } else if self.showControls && isCurrentlyPlaying && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
                     self.scheduleControlsAutoHide()
                 }
                 
@@ -478,13 +514,14 @@ public final class VideoPlayerController {
                 switch p.timeControlStatus {
                 case .playing:
                     waitingStartTime = nil
-                    if self.playbackState.isBuffering {
+                    let wasBuffering = self.playbackState.isBuffering
+                    let wasNotPlaying = !self.playbackState.isPlaying
+                    if wasBuffering || wasNotPlaying {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             self.playbackState = .playing
                         }
-                    }
-                    if !self.playbackState.isPlaying {
-                        self.playbackState = .playing
+                        self.scheduleControlsAutoHide()
+                    } else if self.showControls && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
                         self.scheduleControlsAutoHide()
                     }
                     
@@ -514,6 +551,30 @@ public final class VideoPlayerController {
                     }
                 @unknown default:
                     break
+                }
+                
+                try? await Task.sleep(for: .milliseconds(120))
+            }
+        }
+    }
+    
+    /// Continuous monitoring task checking extended engine state every 120ms.
+    private func startExtendedPlaybackMonitoring(for engine: ExtendedPlayerEngine) {
+        monitorTask?.cancel()
+        monitorTask = Task { @MainActor [weak self, weak engine] in
+            while !Task.isCancelled {
+                guard let self, let eng = engine else { break }
+                
+                let isPlayingNow = eng.isPlaying
+                if isPlayingNow {
+                    if self.playbackState.isBuffering || !self.playbackState.isPlaying {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            self.playbackState = .playing
+                        }
+                        self.scheduleControlsAutoHide()
+                    } else if self.showControls && self.hideControlsTask == nil && !self.seekCoordinator.isScrubbing {
+                        self.scheduleControlsAutoHide()
+                    }
                 }
                 
                 try? await Task.sleep(for: .milliseconds(120))
@@ -581,7 +642,7 @@ public final class VideoPlayerController {
             player.pause()
         }
         playbackState = .paused
-        hideControlsTask?.cancel()
+        cancelAutoHideTimer()
     }
     
     /// Performs an exact seek to a specific timestamp in seconds.
@@ -847,7 +908,8 @@ public final class VideoPlayerController {
     ///
     /// - Parameter delay: Delay in seconds (defaults to 3.5s).
     public func scheduleControlsAutoHide(delay: Double = 3.5) {
-        guard showControls && playbackState.isPlaying && !playbackState.isBuffering && !seekCoordinator.isScrubbing else {
+        let isPlaying = (playbackState.isPlaying || isEnginePlaying)
+        guard showControls && isPlaying && !seekCoordinator.isScrubbing else {
             hideControlsTask?.cancel()
             hideControlsTask = nil
             return
@@ -870,21 +932,26 @@ public final class VideoPlayerController {
     
     /// Resets the auto-hide timer if controls are currently displayed and playing.
     public func resetAutoHideTimer() {
-        if showControls && playbackState.isPlaying {
+        if showControls && (playbackState.isPlaying || isEnginePlaying) {
             scheduleControlsAutoHide()
         }
     }
     
+    private var lastControlsToggleTime: Date = .distantPast
+    
     /// Toggles the visibility of overlay HUD controls.
     public func toggleControls() {
         guard !seekCoordinator.isScrubbing else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastControlsToggleTime) > 0.25 else { return }
+        lastControlsToggleTime = now
         withAnimation(.easeInOut(duration: 0.35)) {
             showControls.toggle()
         }
         if showControls {
             scheduleControlsAutoHide()
         } else {
-            hideControlsTask?.cancel()
+            cancelAutoHideTimer()
         }
     }
     

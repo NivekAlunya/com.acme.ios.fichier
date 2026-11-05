@@ -35,5 +35,24 @@ final class VLCMediaThumbnailerActorTests: XCTestCase {
         )
         XCTAssertNil(thumb, "Thumbnail extraction timeout must safely return nil without deadlock")
     }
+    
+    func testConcurrentThumbnailRequestsSerializeSafely() async {
+        let dummyURL = URL(string: "http://127.0.0.1:1/nonexistent.webm") ?? URL(fileURLWithPath: "/")
+        await withTaskGroup(of: UIImage?.self) { group in
+            for _ in 0..<3 {
+                group.addTask {
+                    await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                        from: dummyURL,
+                        maxDimension: 260,
+                        snapshotPosition: 0.05,
+                        timeoutSeconds: 0.2
+                    )
+                }
+            }
+            for await thumb in group {
+                XCTAssertNil(thumb)
+            }
+        }
+    }
 }
 #endif

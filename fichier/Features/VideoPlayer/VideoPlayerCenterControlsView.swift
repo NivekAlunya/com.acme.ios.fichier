@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 /// Centered controls overlay presenting playback indicators, large play/pause toggles, and transport navigation.
 ///
@@ -23,9 +24,11 @@ public struct VideoPlayerCenterControlsView: View {
     }
     
     public var body: some View {
+        let isActivelyBuffering = controller.playbackState.isBuffering && !controller.isEnginePlaying
+        
         ZStack {
             // Buffering Spinner (remains visible until buffering is done, independent of showControls)
-            if controller.playbackState.isBuffering && controller.errorMessage == nil {
+            if isActivelyBuffering && controller.errorMessage == nil {
                 VStack(spacing: 14) {
                     ProgressView()
                         .scaleEffect(1.2)
@@ -72,7 +75,7 @@ public struct VideoPlayerCenterControlsView: View {
             
             // Central Transport Controls (Backward 15s, Play/Pause/Replay, Forward 15s)
             // Controlled by showControls so they fade in/out with the rest of the UI elements
-            if !controller.playbackState.isBuffering && controller.errorMessage == nil {
+            if !isActivelyBuffering && controller.errorMessage == nil {
                 HStack(spacing: 36) {
                     // Backward 15s Button
                     Button {

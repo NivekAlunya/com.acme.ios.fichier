@@ -20,6 +20,9 @@ public struct CustomVideoPlayerView: UIViewRepresentable {
     /// Callback signaling changes in Picture-in-Picture presentation status.
     public var onPiPStatusChanged: ((Bool) -> Void)?
     
+    /// Callback triggered upon recognizing a single tap.
+    public var onSingleTap: (() -> Void)?
+    
     /// Callback triggered upon recognizing a two-finger single tap.
     public var onTwoFingerTap: (() -> Void)?
     
@@ -29,22 +32,26 @@ public struct CustomVideoPlayerView: UIViewRepresentable {
     ///   - player: Active AVPlayer.
     ///   - coordinator: PiP coordinator.
     ///   - onPiPStatusChanged: PiP status callback.
+    ///   - onSingleTap: Single tap callback.
     ///   - onTwoFingerTap: Two-finger tap callback.
     public init(
         player: AVPlayer,
         coordinator: CustomVideoPlayerCoordinator,
         onPiPStatusChanged: ((Bool) -> Void)? = nil,
+        onSingleTap: (() -> Void)? = nil,
         onTwoFingerTap: (() -> Void)? = nil
     ) {
         self.player = player
         self.coordinator = coordinator
         self.onPiPStatusChanged = onPiPStatusChanged
+        self.onSingleTap = onSingleTap
         self.onTwoFingerTap = onTwoFingerTap
     }
     
     public func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
         view.playerLayer.player = player
+        view.onSingleTap = onSingleTap
         view.onTwoFingerTap = onTwoFingerTap
         coordinator.setupPiP(with: view.playerLayer)
         coordinator.onPiPStatusChanged = onPiPStatusChanged
@@ -56,6 +63,7 @@ public struct CustomVideoPlayerView: UIViewRepresentable {
             uiView.playerLayer.player = player
             coordinator.setupPiP(with: uiView.playerLayer)
         }
+        uiView.onSingleTap = onSingleTap
         uiView.onTwoFingerTap = onTwoFingerTap
         coordinator.onPiPStatusChanged = onPiPStatusChanged
     }

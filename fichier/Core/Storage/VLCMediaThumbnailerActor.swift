@@ -19,8 +19,32 @@ public actor VLCMediaThumbnailerActor {
     
     private var pendingRequests: [UUID: CheckedContinuation<UIImage?, Never>] = [:]
     private var activeSessions: [UUID: VLCMediaThumbnailerSession] = [:]
+    private var inFlightCount: Int = 0
+    private let maxConcurrentSessions: Int = 1
+    private var waitQueue: [CheckedContinuation<Void, Never>] = []
     
     private init() {}
+    
+    /// Acquires a concurrency permit, suspending if an extraction session is already active.
+    private func acquirePermit() async {
+        if inFlightCount < maxConcurrentSessions {
+            inFlightCount += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waitQueue.append(continuation)
+        }
+    }
+    
+    /// Releases the active permit and resumes the next queued extraction request if available.
+    private func releasePermit() {
+        if !waitQueue.isEmpty {
+            let next = waitQueue.removeFirst()
+            next.resume()
+        } else {
+            inFlightCount = max(0, inFlightCount - 1)
+        }
+    }
     
     /// Generates a thumbnail for an extended video file from a local or stream URL.
     ///
@@ -37,6 +61,11 @@ public actor VLCMediaThumbnailerActor {
         timeoutSeconds: Double = 4.0
     ) async -> UIImage? {
         #if canImport(MobileVLCKit)
+        guard !Task.isCancelled else { return nil }
+        await acquirePermit()
+        defer { releasePermit() }
+        guard !Task.isCancelled else { return nil }
+        
         let sessionID = UUID()
         let media = VLCMedia(url: url)
         let session = VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)

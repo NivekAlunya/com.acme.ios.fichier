@@ -38,6 +38,9 @@ public struct VideoPlayerCanvasView: View {
                         onPiPStatusChanged: { isActive in
                             controller.isPiPActive = isActive
                         },
+                        onSingleTap: {
+                            controller.toggleControls()
+                        },
                         onTwoFingerTap: {
                             controller.handleTwoFingerTap()
                         }
@@ -48,6 +51,9 @@ public struct VideoPlayerCanvasView: View {
                 if let extended = controller.extendedEngine {
                     VLCPlayerCanvasRepresentable(
                         engine: extended,
+                        onSingleTap: {
+                            controller.toggleControls()
+                        },
                         onTwoFingerTap: {
                             controller.handleTwoFingerTap()
                         }

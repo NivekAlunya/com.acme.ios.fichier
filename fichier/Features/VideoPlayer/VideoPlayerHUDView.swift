@@ -29,6 +29,13 @@ public struct VideoPlayerHUDView: View {
     
     public var body: some View {
         ZStack {
+            // Background tap catcher to reveal or toggle controls
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    controller.toggleControls()
+                }
+            
             // Bars & Overlays (Top, Toast, Bottom) - explicitly tied to showControls
             VStack(spacing: 12) {
                 VideoPlayerTopBarView(controller: controller, onDismiss: onDismiss)

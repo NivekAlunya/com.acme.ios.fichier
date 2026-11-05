@@ -23,6 +23,9 @@ public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
         (layer as? AVPlayerLayer) ?? AVPlayerLayer()
     }
     
+    /// Callback triggered upon recognizing a single tap.
+    public var onSingleTap: (() -> Void)?
+    
     /// Callback triggered upon recognizing a two-finger single tap.
     public var onTwoFingerTap: (() -> Void)?
     
@@ -36,11 +39,18 @@ public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
         setupView()
     }
     
-    /// Configures black background, aspect scaling, and two-finger tap gesture recognizers.
+    /// Configures black background, aspect scaling, and single/two-finger tap gesture recognizers.
     private func setupView() {
         backgroundColor = .black
         playerLayer.videoGravity = .resizeAspect
         isUserInteractionEnabled = true
+        
+        let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+        singleTap.numberOfTouchesRequired = 1
+        singleTap.numberOfTapsRequired = 1
+        singleTap.cancelsTouchesInView = true
+        singleTap.delegate = self
+        addGestureRecognizer(singleTap)
         
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap(_:)))
         twoFingerTap.numberOfTouchesRequired = 2
@@ -48,6 +58,11 @@ public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
         twoFingerTap.cancelsTouchesInView = true
         twoFingerTap.delegate = self
         addGestureRecognizer(twoFingerTap)
+    }
+    
+    @objc private func handleSingleTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .recognized else { return }
+        onSingleTap?()
     }
     
     @objc private func handleTwoFingerTap(_ recognizer: UITapGestureRecognizer) {

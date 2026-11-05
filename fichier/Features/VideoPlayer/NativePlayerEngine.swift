@@ -79,14 +79,16 @@ public final class NativePlayerEngine: NSObject, VideoPlayerEngineProtocol {
     private func setupTimeObserver() {
         let interval = CMTime(seconds: 0.25, preferredTimescale: 600)
         timeObserverToken = avPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self else { return }
-            let sec = time.seconds
-            if sec.isFinite && !sec.isNaN {
-                self.onTimeUpdate?(max(0, sec))
-            }
-            let dur = self.durationSeconds
-            if dur > 0 {
-                self.onDurationUpdate?(dur)
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let sec = time.seconds
+                if sec.isFinite && !sec.isNaN {
+                    self.onTimeUpdate?(max(0, sec))
+                }
+                let dur = self.durationSeconds
+                if dur > 0 {
+                    self.onDurationUpdate?(dur)
+                }
             }
         }
     }

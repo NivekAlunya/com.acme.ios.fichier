@@ -34,11 +34,20 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     private var durationInternal: Double = 0
     private var volumeInternal: Double = 1.0
     private var isMutedInternal: Bool = false
+    private var lastEmittedState: VideoPlaybackState?
     
     private var onTimeUpdate: (@MainActor @Sendable (Double) -> Void)?
     private var onDurationUpdate: (@MainActor @Sendable (Double) -> Void)?
     private var onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)?
     private var onPlaybackEnded: (@MainActor @Sendable () -> Void)?
+    
+    @MainActor
+    private func emitState(_ state: VideoPlaybackState) {
+        if lastEmittedState != state {
+            lastEmittedState = state
+            onStateUpdate?(state)
+        }
+    }
     
     public var isPlaying: Bool {
         #if canImport(MobileVLCKit)
@@ -146,6 +155,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
         #if canImport(MobileVLCKit)
         vlcPlayer.pause()
         #endif
+        emitState(.paused)
     }
     
     public func seek(
@@ -166,6 +176,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     
     public func tearDown() {
         isPlayingInternal = false
+        lastEmittedState = nil
         #if canImport(MobileVLCKit)
         vlcPlayer.stop()
         vlcPlayer.drawable = nil
@@ -175,34 +186,59 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
 
 #if canImport(MobileVLCKit)
 extension ExtendedPlayerEngine: VLCMediaPlayerDelegate {
-    public func mediaPlayerTimeChanged(_ aNotification: Notification) {
-        let current = currentTimeSeconds
-        onTimeUpdate?(current)
-        let dur = durationSeconds
-        if dur > 0 {
-            onDurationUpdate?(dur)
+    public nonisolated func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let current = self.currentTimeSeconds
+            if self.vlcPlayer.isPlaying || current > 0 {
+                self.isPlayingInternal = true
+                self.emitState(.playing)
+            }
+            self.onTimeUpdate?(current)
+            let dur = self.durationSeconds
+            if dur > 0 {
+                self.onDurationUpdate?(dur)
+            }
         }
     }
     
-    public func mediaPlayerStateChanged(_ aNotification: Notification) {
-        switch vlcPlayer.state {
-        case .playing:
-            isPlayingInternal = true
-            onStateUpdate?(.playing)
-        case .paused:
-            isPlayingInternal = false
-            onStateUpdate?(.paused)
-        case .buffering, .opening:
-            onStateUpdate?(.buffering)
-        case .ended:
-            isPlayingInternal = false
-            onStateUpdate?(.paused)
-            onPlaybackEnded?()
-        case .error:
-            isPlayingInternal = false
-            onStateUpdate?(.failed("VLC playback error"))
-        default:
-            break
+    public nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if self.vlcPlayer.isPlaying {
+                self.isPlayingInternal = true
+                self.emitState(.playing)
+                return
+            }
+            
+            switch self.vlcPlayer.state {
+            case .playing:
+                self.isPlayingInternal = true
+                self.emitState(.playing)
+            case .paused:
+                self.isPlayingInternal = false
+                self.emitState(.paused)
+            case .buffering, .opening:
+                if self.vlcPlayer.isPlaying {
+                    self.isPlayingInternal = true
+                    self.emitState(.playing)
+                } else {
+                    self.isPlayingInternal = false
+                    self.emitState(.buffering)
+                }
+            case .ended:
+                self.isPlayingInternal = false
+                self.emitState(.paused)
+                self.onPlaybackEnded?()
+            case .error:
+                self.isPlayingInternal = false
+                self.emitState(.failed("VLC playback error"))
+            default:
+                if self.vlcPlayer.isPlaying {
+                    self.isPlayingInternal = true
+                    self.emitState(.playing)
+                }
+            }
         }
     }
 }

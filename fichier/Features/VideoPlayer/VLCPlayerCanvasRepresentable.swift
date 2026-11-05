@@ -14,6 +14,9 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
     /// Active extended player engine.
     public let engine: ExtendedPlayerEngine
     
+    /// Callback triggered upon recognizing a single tap.
+    public var onSingleTap: (() -> Void)?
+    
     /// Callback triggered upon recognizing a two-finger single tap.
     public var onTwoFingerTap: (() -> Void)?
     
@@ -21,12 +24,15 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
     ///
     /// - Parameters:
     ///   - engine: Active extended player engine.
+    ///   - onSingleTap: Optional single tap gesture callback.
     ///   - onTwoFingerTap: Optional two-finger tap gesture callback.
     public init(
         engine: ExtendedPlayerEngine,
+        onSingleTap: (() -> Void)? = nil,
         onTwoFingerTap: (() -> Void)? = nil
     ) {
         self.engine = engine
+        self.onSingleTap = onSingleTap
         self.onTwoFingerTap = onTwoFingerTap
     }
     
@@ -45,19 +51,29 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
             renderView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
         
+        let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(VLCPlayerCanvasCoordinator.handleSingleTap))
+        singleTap.numberOfTouchesRequired = 1
+        singleTap.numberOfTapsRequired = 1
+        singleTap.cancelsTouchesInView = true
+        singleTap.delegate = context.coordinator
+        container.addGestureRecognizer(singleTap)
+        
         let twoFingerTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(VLCPlayerCanvasCoordinator.handleTwoFingerTap))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.numberOfTapsRequired = 1
+        twoFingerTap.cancelsTouchesInView = true
+        twoFingerTap.delegate = context.coordinator
         container.addGestureRecognizer(twoFingerTap)
         
         return container
     }
     
     public func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.onSingleTap = onSingleTap
         context.coordinator.onTwoFingerTap = onTwoFingerTap
     }
     
     public func makeCoordinator() -> VLCPlayerCanvasCoordinator {
-        VLCPlayerCanvasCoordinator(onTwoFingerTap: onTwoFingerTap)
+        VLCPlayerCanvasCoordinator(onSingleTap: onSingleTap, onTwoFingerTap: onTwoFingerTap)
     }
 }
