@@ -76,14 +76,12 @@ public actor VLCMediaThumbnailerActor {
         } else {
             let preferredSeconds = preferredTime.seconds
             if preferredSeconds.isFinite && !preferredSeconds.isNaN && preferredSeconds > 0 {
-                let waitLimit = Date().addingTimeInterval(0.35)
-                let lengthTime = media.lengthWait(until: waitLimit)
-                let totalSeconds = Double(lengthTime.intValue) / 1000.0
+                let totalSeconds = Double(media.length.intValue) / 1000.0
                 if totalSeconds > 0 {
                     let fraction = Float(preferredSeconds / totalSeconds)
                     position = min(0.95, max(0.0, fraction))
                 } else {
-                    position = Float(min(0.95, max(0.02, preferredSeconds / 300.0)))
+                    position = 0.05
                 }
             } else {
                 position = 0.05

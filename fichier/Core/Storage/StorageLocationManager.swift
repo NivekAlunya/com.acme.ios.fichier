@@ -1031,26 +1031,28 @@ public final class StorageLocationManager {
         let server = SMBStreamingServerActor(worker: self.worker, item: item)
         do {
             let streamURL = try await server.start()
-            defer {
-                Task {
-                    await server.stop()
-                }
-            }
             
-            if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
                 from: streamURL,
                 maxDimension: maxDimension,
                 snapshotPosition: 0.05
-            ) {
-                return thumb
+            )
+            
+            let result: UIImage?
+            if let thumb {
+                result = thumb
+            } else {
+                result = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                    from: streamURL,
+                    maxDimension: maxDimension,
+                    snapshotPosition: 0.0
+                )
             }
             
-            return await VLCMediaThumbnailerActor.shared.generateThumbnail(
-                from: streamURL,
-                maxDimension: maxDimension,
-                snapshotPosition: 0.0
-            )
+            await server.stop()
+            return result
         } catch {
+            await server.stop()
             return nil
         }
     }
