@@ -42,6 +42,7 @@ public struct VideoPlayerHUDView: View {
             .opacity(controller.showControls ? 1 : 0)
             .animation(.easeInOut(duration: 0.35), value: controller.showControls)
             .allowsHitTesting(controller.showControls)
+            .accessibilityHidden(!controller.showControls)
             
             // Center Controls & Buffering / Error Overlay
             // The buffering popup and error indicator remain independent of showControls

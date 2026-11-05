@@ -327,11 +327,11 @@ public final class VideoPlayerController {
             
             while !Task.isCancelled {
                 guard let self, let p = avPlayer else { break }
-                let currentItem = p.currentItem
+                let playerItem = p.currentItem
                 
                 // 1. Terminal error check
-                let playbackError = p.error ?? currentItem?.error
-                if playbackError != nil || p.status == .failed || currentItem?.status == .failed {
+                let playbackError = p.error ?? playerItem?.error
+                if playbackError != nil || p.status == .failed || playerItem?.status == .failed {
                     let desc = playbackError?.localizedDescription ?? "Playback error"
                     let sanitized = self.sanitizeErrorDescription(desc)
                     let localizedDesc = String(localized: .Strings.videoPlayerErrorPlayback(sanitized))
@@ -341,7 +341,7 @@ public final class VideoPlayerController {
                 }
                 
                 // 2. Load audio/subtitle tracks once playerItem is ready
-                if !tracksLoaded, let item = currentItem, item.status == .readyToPlay {
+                if !tracksLoaded, let item = playerItem, item.status == .readyToPlay {
                     tracksLoaded = true
                     Task { @MainActor in
                         await self.trackManager.loadTracks(for: item)
@@ -365,7 +365,7 @@ public final class VideoPlayerController {
                 case .paused:
                     waitingStartTime = nil
                     if self.playbackState.isBuffering {
-                        if currentItem?.status == .readyToPlay {
+                        if playerItem?.status == .readyToPlay {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 self.playbackState = .paused
                             }

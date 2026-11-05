@@ -116,6 +116,7 @@ public struct VideoPlayerCenterControlsView: View {
                 .opacity(controller.showControls ? 1 : 0)
                 .animation(.easeInOut(duration: 0.35), value: controller.showControls)
                 .allowsHitTesting(controller.showControls)
+                .accessibilityHidden(!controller.showControls)
                 .transition(.opacity)
             }
         }
