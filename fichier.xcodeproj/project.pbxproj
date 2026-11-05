@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D1F1B0FF30910E5200518819 /* AMSMB2 in Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B0FE30910E5200518819 /* AMSMB2 */; };
 		D1F1B10030910E5200518819 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B0FE30910E5200518819 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B11130910E5200518819 /* MobileVLCKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -41,6 +42,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				D1F1B0FF30910E5200518819 /* AMSMB2 in Frameworks */,
+				D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -84,6 +86,7 @@
 			name = com.acme.ios.fichier;
 			packageProductDependencies = (
 				D1F1B0FE30910E5200518819 /* AMSMB2 */,
+				D1F1B11130910E5200518819 /* MobileVLCKit */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* com.acme.ios.fichier.app */;
@@ -125,6 +128,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				D1F1B0FD30910E5200518819 /* XCRemoteSwiftPackageReference "AMSMB2" */,
+				D1F1B11030910E5200518819 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -147,21 +151,24 @@
 /* Begin PBXShellScriptBuildPhase section */
 		D14BDE20309B4039007D8134 /* Run SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
 			name = "Run SwiftLint";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"\n\nif [ \"$CI\" = \"true\" ]; then\n  if ! which swiftlint >/dev/null 2>&1; then\n    echo \"error: SwiftLint is required in CI environment.\"\n    exit 1\n  fi\n  cd \"${SRCROOT}\" && swiftlint lint --strict\nelif which swiftlint >/dev/null 2>&1; then\n  cd \"${SRCROOT}\" && swiftlint lint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
+			shellScript = (
+				"export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"",
+				"",
+				"if [ \"$CI\" = \"true\" ]; then",
+				"  if ! which swiftlint >/dev/null 2>&1; then",
+				"    echo \"error: SwiftLint is required in CI environment.\"",
+				"    exit 1",
+				"  fi",
+				"  cd \"${SRCROOT}\" && swiftlint lint --strict",
+				"elif which swiftlint >/dev/null 2>&1; then",
+				"  cd \"${SRCROOT}\" && swiftlint lint",
+				"else",
+				"  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"",
+				"fi",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -458,6 +465,14 @@
 				minimumVersion = 4.0.3;
 			};
 		};
+		D1F1B11030910E5200518819 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/showbie/MobileVLCKit-SPM.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.7.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -465,6 +480,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D1F1B0FD30910E5200518819 /* XCRemoteSwiftPackageReference "AMSMB2" */;
 			productName = AMSMB2;
+		};
+		D1F1B11130910E5200518819 /* MobileVLCKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D1F1B11030910E5200518819 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */;
+			productName = MobileVLCKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

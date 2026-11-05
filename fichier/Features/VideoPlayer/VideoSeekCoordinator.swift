@@ -81,6 +81,18 @@ public final class VideoSeekCoordinator {
     }
     
     /// Initiates full-screen gesture scrubbing, pausing playback if necessary.
+    public func startGestureScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, engine: (any VideoPlayerEngineProtocol)?) {
+        guard !isScrubbingWithGesture else { return }
+        isScrubbingWithGesture = true
+        lastSeekTargetSeconds = currentPlaybackSeconds
+        wasPlayingBeforeScrub = (engine?.isPlaying == true) || isPlaying
+        if wasPlayingBeforeScrub {
+            engine?.pause()
+        }
+        initialScrubTime = currentPlaybackSeconds
+    }
+    
+    /// Backward-compatible overload delegating to player or engine.
     public func startGestureScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, player: AVPlayer?) {
         guard !isScrubbingWithGesture else { return }
         isScrubbingWithGesture = true
@@ -106,6 +118,152 @@ public final class VideoSeekCoordinator {
             return CMTime(seconds: 1.5, preferredTimescale: 600)
         } else {
             return .positiveInfinity
+        }
+    }
+    
+    /// Submits a request for live frame seeking with an abstract player engine.
+    public func requestLiveFrameSeek(to targetSeconds: Double, engine: (any VideoPlayerEngineProtocol)?) {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastSeekTime)
+        
+        stationarySeekTask?.cancel()
+        stationarySeekTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            self.performStationaryExactSeek(to: targetSeconds, engine: engine)
+        }
+        
+        if isSeekingFrame && elapsed < 0.12 {
+            pendingSeekSeconds = targetSeconds
+            return
+        }
+        
+        let minInterval: TimeInterval = 0.10
+        if elapsed < minInterval {
+            pendingSeekSeconds = targetSeconds
+            if throttleSeekTask == nil {
+                let remaining = max(0.01, minInterval - elapsed)
+                throttleSeekTask = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(Int(remaining * 1000)))
+                    guard !Task.isCancelled else { return }
+                    self.throttleSeekTask = nil
+                    if let next = self.pendingSeekSeconds {
+                        self.pendingSeekSeconds = nil
+                        self.executeLiveSeek(to: next, tolerance: self.liveSeekTolerance(for: next), engine: engine)
+                    }
+                }
+            }
+            return
+        }
+        
+        executeLiveSeek(to: targetSeconds, tolerance: liveSeekTolerance(for: targetSeconds), engine: engine)
+    }
+    
+    /// Dispatches an immediate seek operation to the engine with specified tolerance.
+    public func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime, engine: (any VideoPlayerEngineProtocol)?) {
+        guard let engine = engine else { return }
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
+        isSeekingFrame = true
+        lastSeekTime = Date()
+        lastSeekTargetSeconds = targetSeconds
+        
+        let tolSeconds = tolerance.isPositiveInfinity ? 10.0 : tolerance.seconds
+        engine.seek(to: targetSeconds, toleranceBefore: tolSeconds, toleranceAfter: tolSeconds) { _ in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                self.isSeekingFrame = false
+                if let nextTarget = self.pendingSeekSeconds {
+                    self.pendingSeekSeconds = nil
+                    self.executeLiveSeek(to: nextTarget, tolerance: self.liveSeekTolerance(for: nextTarget), engine: engine)
+                }
+            }
+        }
+    }
+    
+    /// Upgrades the active preview to an exact frame seek when scrubbing motion pauses for 250ms.
+    public func performStationaryExactSeek(to targetSeconds: Double, engine: (any VideoPlayerEngineProtocol)?) {
+        guard let engine = engine else { return }
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        pendingSeekSeconds = nil
+        
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
+        isSeekingFrame = true
+        lastSeekTime = Date()
+        lastSeekTargetSeconds = targetSeconds
+        
+        engine.seek(to: targetSeconds, toleranceBefore: 0.0, toleranceAfter: 0.0) { _ in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                self.isSeekingFrame = false
+                if let nextTarget = self.pendingSeekSeconds {
+                    self.pendingSeekSeconds = nil
+                    self.executeLiveSeek(to: nextTarget, tolerance: self.liveSeekTolerance(for: nextTarget), engine: engine)
+                }
+            }
+        }
+    }
+    
+    /// Concludes user scrubbing on an abstract engine, executing a final seek and resuming playback if desired.
+    public func finishSeeking(
+        at targetSeconds: Double,
+        resumePlaying: Bool,
+        engine: (any VideoPlayerEngineProtocol)?,
+        onBuffering: ((Bool) -> Void)? = nil,
+        onComplete: (() -> Void)? = nil
+    ) {
+        stationarySeekTask?.cancel()
+        stationarySeekTask = nil
+        throttleSeekTask?.cancel()
+        throttleSeekTask = nil
+        pendingSeekSeconds = nil
+        isSeekingFrame = false
+        seekWatchdogTask?.cancel()
+        seekWatchdogTask = nil
+        
+        seekGeneration += 1
+        let thisGeneration = seekGeneration
+        
+        guard let engine = engine else { return }
+        let tolerance: Double = resumePlaying ? 1.0 : 0.0
+        
+        if resumePlaying {
+            isFinishingSeek = true
+            engine.play()
+            onBuffering?(true)
+        }
+        
+        seekWatchdogTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled, thisGeneration == self.seekGeneration else { return }
+            if resumePlaying && !engine.isPlaying {
+                engine.play()
+            }
+        }
+        
+        engine.seek(to: targetSeconds, toleranceBefore: tolerance, toleranceAfter: tolerance) { _ in
+            Task { @MainActor in
+                guard thisGeneration == self.seekGeneration else { return }
+                self.seekWatchdogTask?.cancel()
+                self.seekWatchdogTask = nil
+                self.isFinishingSeek = false
+                
+                if resumePlaying && !engine.isPlaying {
+                    engine.play()
+                }
+                
+                onBuffering?(false)
+                onComplete?()
+            }
         }
     }
     

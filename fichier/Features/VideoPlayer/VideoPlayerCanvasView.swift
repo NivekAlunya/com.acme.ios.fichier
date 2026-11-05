@@ -9,7 +9,7 @@ import AVKit
 /// Video playback canvas combining hardware video rendering with full-screen gesture scrubbing.
 ///
 /// Features:
-/// - Embeds `CustomVideoPlayerView` to host native `AVPlayerLayer` and Picture-in-Picture.
+/// - Supports both native `AVPlayerLayer` (`CustomVideoPlayerView`) and extended MobileVLCKit (`VLCPlayerCanvasRepresentable`).
 /// - Single tap gesture toggles HUD overlay visibility (`controller.toggleControls()`).
 /// - Horizontal drag gesture (`videoSeekGesture`) enables scrubbing anywhere on the video canvas.
 ///   Calculates dynamic scrubbing sensitivity scaled to document length:
@@ -29,18 +29,31 @@ public struct VideoPlayerCanvasView: View {
     
     public var body: some View {
         ZStack {
-            if let player = controller.player {
-                CustomVideoPlayerView(
-                    player: player,
-                    coordinator: controller.pipCoordinator,
-                    onPiPStatusChanged: { isActive in
-                        controller.isPiPActive = isActive
-                    },
-                    onTwoFingerTap: {
-                        controller.handleTwoFingerTap()
-                    }
-                )
-                .ignoresSafeArea()
+            switch controller.engineKind {
+            case .native:
+                if let player = controller.player {
+                    CustomVideoPlayerView(
+                        player: player,
+                        coordinator: controller.pipCoordinator,
+                        onPiPStatusChanged: { isActive in
+                            controller.isPiPActive = isActive
+                        },
+                        onTwoFingerTap: {
+                            controller.handleTwoFingerTap()
+                        }
+                    )
+                    .ignoresSafeArea()
+                }
+            case .extended:
+                if let extended = controller.extendedEngine {
+                    VLCPlayerCanvasRepresentable(
+                        engine: extended,
+                        onTwoFingerTap: {
+                            controller.handleTwoFingerTap()
+                        }
+                    )
+                    .ignoresSafeArea()
+                }
             }
         }
         .contentShape(Rectangle())
@@ -57,14 +70,14 @@ public struct VideoPlayerCanvasView: View {
                 guard !controller.seekCoordinator.isScrubbingTimeline else { return }
                 let hTranslation = value.translation.width
                 let vTranslation = value.translation.height
-                guard let player = controller.player else { return }
+                guard let engine = controller.engine else { return }
                 
                 if !controller.seekCoordinator.isScrubbingWithGesture {
                     guard abs(hTranslation) > abs(vTranslation) else { return }
                     controller.seekCoordinator.startGestureScrubbing(
                         currentPlaybackSeconds: controller.currentPlaybackSeconds,
                         isPlaying: controller.playbackState.isPlaying,
-                        player: player
+                        engine: engine
                     )
                     if controller.seekCoordinator.wasPlayingBeforeScrub {
                         controller.playbackState = .paused
@@ -88,7 +101,7 @@ public struct VideoPlayerCanvasView: View {
                 let maxTarget = (controller.totalDurationSeconds.isFinite && !controller.totalDurationSeconds.isNaN && controller.totalDurationSeconds > 0) ? controller.totalDurationSeconds : Double.greatestFiniteMagnitude
                 let target = max(0, min(maxTarget, controller.seekCoordinator.initialScrubTime + delta))
                 controller.currentPlaybackSeconds = target
-                controller.seekCoordinator.requestLiveFrameSeek(to: target, player: player)
+                controller.seekCoordinator.requestLiveFrameSeek(to: target, engine: engine)
             }
             .onEnded { _ in
                 guard controller.seekCoordinator.isScrubbingWithGesture else { return }

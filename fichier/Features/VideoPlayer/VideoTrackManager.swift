@@ -190,6 +190,16 @@ public final class VideoTrackManager {
         selectedSubtitleID = option.id
     }
     
+    /// Configures the playback speed rate on an abstract player engine.
+    ///
+    /// - Parameters:
+    ///   - rate: Target rate enum.
+    ///   - engine: Active player engine.
+    public func setPlaybackRate(_ rate: VideoPlaybackRate, for engine: (any VideoPlayerEngineProtocol)?) {
+        playbackRate = rate
+        engine?.playbackRate = rate
+    }
+    
     /// Configures the playback speed rate on the player.
     ///
     /// - Parameters:

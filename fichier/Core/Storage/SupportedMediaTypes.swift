@@ -20,10 +20,20 @@ nonisolated public enum SupportedMediaTypes: Sendable {
         "cr2", "cr3", "nef", "arw", "dng", "orf", "rw2", "pef", "raf"
     ]
     
-    /// Set of recognized video file extensions supported by AVFoundation hardware acceleration.
-    public static let videoExtensions: Set<String> = [
-        "mp4", "mov", "m4v"
+    /// Set of recognized native video file extensions supported by AVFoundation hardware acceleration.
+    public static let nativeVideoExtensions: Set<String> = [
+        "mp4", "mov", "m4v", "3gp"
     ]
+    
+    /// Set of extended video container and codec extensions decoded via extended hardware/FFmpeg engine.
+    public static let extendedVideoExtensions: Set<String> = [
+        "mkv", "avi", "webm", "flv", "f4v", "wmv", "asf",
+        "ts", "m2ts", "mts", "m2v", "mpg", "mpeg", "vob",
+        "ogv", "rm", "mxf", "wtv", "hevc", "mjpeg"
+    ]
+    
+    /// Unified union set of all recognized video file extensions.
+    public static let videoExtensions: Set<String> = nativeVideoExtensions.union(extendedVideoExtensions)
     
     /// Set of recognized document extensions rendered via PDFKit.
     public static let documentExtensions: Set<String> = [
@@ -44,6 +54,16 @@ nonisolated public enum SupportedMediaTypes: Sendable {
     /// Determines whether the file extension corresponds to a video format.
     public static func isVideo(extension ext: String) -> Bool {
         videoExtensions.contains(ext.lowercased())
+    }
+    
+    /// Checks whether the file extension corresponds to an Apple-native AVFoundation video format.
+    public static func isNativeVideo(extension ext: String) -> Bool {
+        nativeVideoExtensions.contains(ext.lowercased())
+    }
+    
+    /// Checks whether the file extension corresponds to an extended video format requiring non-native demuxing/decoding.
+    public static func isExtendedVideo(extension ext: String) -> Bool {
+        extendedVideoExtensions.contains(ext.lowercased())
     }
     
     /// Determines whether the file extension corresponds to an image format.

@@ -106,11 +106,11 @@ public struct VideoPlayerTopBarView: View {
         @Bindable var bindableController = controller
         return VideoVolumeBar(volume: $bindableController.volume, isMuted: $bindableController.isMuted)
             .onChange(of: controller.volume) { _, newVol in
-                controller.player?.volume = Float(newVol)
+                controller.setVolume(newVol)
                 controller.resetAutoHideTimer()
             }
             .onChange(of: controller.isMuted) { _, muted in
-                controller.player?.isMuted = muted
+                controller.setMuted(muted)
                 controller.resetAutoHideTimer()
             }
     }
@@ -242,9 +242,7 @@ public struct VideoPlayerTopBarView: View {
             Section(.Strings.videoPlayerMenuPlaybackSpeed) {
                 ForEach(VideoPlaybackRate.allCases) { rate in
                     Button {
-                        if let p = controller.player {
-                            controller.trackManager.setPlaybackRate(rate, for: p)
-                        }
+                        controller.setPlaybackRate(rate)
                     } label: {
                         HStack {
                             Text(rate.displayName)
