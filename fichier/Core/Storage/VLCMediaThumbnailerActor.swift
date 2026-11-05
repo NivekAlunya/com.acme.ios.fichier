@@ -90,12 +90,14 @@ public actor VLCMediaThumbnailerActor {
             }
         }
         
-        let session = VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
+        let session = await VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
         self.activeSessions[sessionID] = session
         
         return await withCheckedContinuation { continuation in
             self.pendingRequests[sessionID] = continuation
-            session.start(with: media, maxDimension: maxDimension, snapshotPosition: position)
+            Task {
+                await session.start(with: media, maxDimension: maxDimension, snapshotPosition: position)
+            }
             
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
@@ -129,13 +131,15 @@ public actor VLCMediaThumbnailerActor {
         
         let sessionID = UUID()
         let media = VLCMedia(url: url)
-        let session = VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
+        let session = await VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
         self.activeSessions[sessionID] = session
         
         return await withCheckedContinuation { continuation in
             self.pendingRequests[sessionID] = continuation
             let clamped = min(1.0, max(0.0, snapshotPosition))
-            session.start(with: media, maxDimension: maxDimension, snapshotPosition: clamped)
+            Task {
+                await session.start(with: media, maxDimension: maxDimension, snapshotPosition: clamped)
+            }
             
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeoutSeconds))
@@ -148,18 +152,18 @@ public actor VLCMediaThumbnailerActor {
     }
     
     /// Internal callback invoked by `VLCMediaThumbnailerSession` upon successful extraction or failure.
-    public func handleSessionCompletion(id: UUID, image: UIImage?) {
+    public func handleSessionCompletion(id: UUID, image: UIImage?) async {
         guard let continuation = pendingRequests.removeValue(forKey: id) else { return }
         if let session = activeSessions.removeValue(forKey: id) {
-            session.cancel()
+            await session.cancel()
         }
         continuation.resume(returning: image)
     }
     
-    private func handleWatchdogTimeout(for id: UUID) {
+    private func handleWatchdogTimeout(for id: UUID) async {
         guard let continuation = pendingRequests.removeValue(forKey: id) else { return }
         if let session = activeSessions.removeValue(forKey: id) {
-            session.cancel()
+            await session.cancel()
         }
         continuation.resume(returning: nil)
     }

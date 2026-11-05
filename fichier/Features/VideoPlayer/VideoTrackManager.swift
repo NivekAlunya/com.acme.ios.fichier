@@ -39,6 +39,7 @@ public final class VideoTrackManager {
     private var legibleOutput: AVPlayerItemLegibleOutput?
     private var subtitleDelegate: VideoSubtitleDelegate?
     private weak var loadedPlayerItem: AVPlayerItem?
+    private weak var loadedExtendedEngine: ExtendedPlayerEngine?
     
     /// Designated public initializer.
     public init() {}
@@ -54,6 +55,7 @@ public final class VideoTrackManager {
             loadedPlayerItem?.remove(output)
         }
         loadedPlayerItem = nil
+        loadedExtendedEngine = nil
         availableAudios.removeAll()
         selectedAudioID = nil
         availableSubtitles.removeAll()
@@ -145,6 +147,40 @@ public final class VideoTrackManager {
         }
     }
     
+    /// Populates audio and subtitle track options from an active `ExtendedPlayerEngine`.
+    ///
+    /// - Parameter extendedEngine: Active extended playback engine instance.
+    public func loadTracks(for extendedEngine: ExtendedPlayerEngine) {
+        if loadedExtendedEngine !== extendedEngine {
+            reset()
+            self.loadedExtendedEngine = extendedEngine
+        }
+        
+        let audios = extendedEngine.audioTrackOptions
+        self.availableAudios = audios
+        let currentAudioIdx = extendedEngine.currentAudioTrackIndex
+        if let current = selectedAudioID, audios.contains(where: { $0.id == current }) {
+            // Retain user selection
+        } else if let matching = audios.first(where: { $0.vlcTrackIndex == currentAudioIdx }) {
+            self.selectedAudioID = matching.id
+        } else {
+            self.selectedAudioID = audios.first?.id
+        }
+        
+        let subs = extendedEngine.subtitleTrackOptions
+        self.availableSubtitles = subs
+        let currentSubIdx = extendedEngine.currentSubtitleTrackIndex
+        if let current = selectedSubtitleID, subs.contains(where: { $0.id == current }) {
+            // Retain user selection
+        } else if currentSubIdx == -1 {
+            self.selectedSubtitleID = "sub_off"
+        } else if let matching = subs.first(where: { $0.vlcTrackIndex == currentSubIdx }) {
+            self.selectedSubtitleID = matching.id
+        } else {
+            self.selectedSubtitleID = "sub_off"
+        }
+    }
+    
     /// Indicates whether a subtitle track is currently enabled.
     public var isSubtitlesEnabled: Bool {
         selectedSubtitleID != nil && selectedSubtitleID != "sub_off"
@@ -152,15 +188,20 @@ public final class VideoTrackManager {
     
     /// Toggles subtitle state between "Off" and the first available subtitle track.
     ///
-    /// - Parameter playerItem: Active `AVPlayerItem`.
-    public func toggleSubtitles(in playerItem: AVPlayerItem) {
+    /// - Parameters:
+    ///   - playerItem: Optional active `AVPlayerItem`.
+    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    public func toggleSubtitles(
+        in playerItem: AVPlayerItem? = nil,
+        engine: ExtendedPlayerEngine? = nil
+    ) {
         if isSubtitlesEnabled {
             if let offOption = availableSubtitles.first(where: { $0.id == "sub_off" }) {
-                selectSubtitle(option: offOption, in: playerItem)
+                selectSubtitle(option: offOption, in: playerItem, engine: engine)
             }
         } else {
             if let firstTrack = availableSubtitles.first(where: { $0.id != "sub_off" }) {
-                selectSubtitle(option: firstTrack, in: playerItem)
+                selectSubtitle(option: firstTrack, in: playerItem, engine: engine)
             }
         }
     }
@@ -169,10 +210,22 @@ public final class VideoTrackManager {
     ///
     /// - Parameters:
     ///   - option: Chosen audio track option.
-    ///   - playerItem: Active `AVPlayerItem`.
-    public func selectAudio(option: VideoTrackOption, in playerItem: AVPlayerItem) {
-        guard let group = audibleGroup, let mediaOption = option.mediaOption else { return }
-        playerItem.select(mediaOption, in: group)
+    ///   - playerItem: Optional active `AVPlayerItem`.
+    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    public func selectAudio(
+        option: VideoTrackOption,
+        in playerItem: AVPlayerItem? = nil,
+        engine: ExtendedPlayerEngine? = nil
+    ) {
+        if let extendedEngine = engine ?? loadedExtendedEngine, let trackIndex = option.vlcTrackIndex {
+            extendedEngine.currentAudioTrackIndex = trackIndex
+            selectedAudioID = option.id
+            return
+        }
+        
+        let targetItem = playerItem ?? loadedPlayerItem
+        guard let group = audibleGroup, let mediaOption = option.mediaOption, let item = targetItem else { return }
+        item.select(mediaOption, in: group)
         selectedAudioID = option.id
     }
     
@@ -180,13 +233,26 @@ public final class VideoTrackManager {
     ///
     /// - Parameters:
     ///   - option: Chosen subtitle option.
-    ///   - playerItem: Active `AVPlayerItem`.
-    public func selectSubtitle(option: VideoTrackOption, in playerItem: AVPlayerItem) {
-        guard let group = legibleGroup else { return }
+    ///   - playerItem: Optional active `AVPlayerItem`.
+    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    public func selectSubtitle(
+        option: VideoTrackOption,
+        in playerItem: AVPlayerItem? = nil,
+        engine: ExtendedPlayerEngine? = nil
+    ) {
+        if let extendedEngine = engine ?? loadedExtendedEngine {
+            let trackIndex = option.vlcTrackIndex ?? -1
+            extendedEngine.currentSubtitleTrackIndex = trackIndex
+            selectedSubtitleID = option.id
+            return
+        }
+        
+        let targetItem = playerItem ?? loadedPlayerItem
+        guard let group = legibleGroup, let item = targetItem else { return }
         if option.mediaOption == nil {
             currentSubtitleText = ""
         }
-        playerItem.select(option.mediaOption, in: group)
+        item.select(option.mediaOption, in: group)
         selectedSubtitleID = option.id
     }
     

@@ -334,6 +334,7 @@ public final class VideoPlayerController {
     private func setupExtendedEngine(with url: URL, for item: MediaItem) {
         self.engineKind = .extended
         self.player = nil
+        self.trackManager.reset()
         let extended = ExtendedPlayerEngine(
             url: url,
             onTimeUpdate: { [weak self] time in
@@ -372,6 +373,10 @@ public final class VideoPlayerController {
                 self?.handlePlaybackCompletion()
             }
         )
+        extended.onTracksChanged = { [weak self, weak extended] in
+            guard let self, let eng = extended else { return }
+            self.trackManager.loadTracks(for: eng)
+        }
         self.extendedEngine = extended
         self.engine = extended
         self.playbackState = .buffering
@@ -563,6 +568,8 @@ public final class VideoPlayerController {
     private func startExtendedPlaybackMonitoring(for engine: ExtendedPlayerEngine) {
         monitorTask?.cancel()
         monitorTask = Task { @MainActor [weak self, weak engine] in
+            var lastAudioCount = -1
+            var lastSubCount = -1
             while !Task.isCancelled {
                 guard let self, let eng = engine else { break }
                 
@@ -580,9 +587,32 @@ public final class VideoPlayerController {
                     self.playbackState = .paused
                 }
                 
+                let audioCount = eng.audioTrackOptions.count
+                let subCount = eng.subtitleTrackOptions.count
+                if audioCount != lastAudioCount || subCount != lastSubCount {
+                    lastAudioCount = audioCount
+                    lastSubCount = subCount
+                    self.trackManager.loadTracks(for: eng)
+                }
+                
                 try? await Task.sleep(for: .milliseconds(120))
             }
         }
+    }
+    
+    /// Toggles subtitle track selection between Off and the primary available track.
+    public func toggleSubtitles() {
+        trackManager.toggleSubtitles(in: player?.currentItem, engine: extendedEngine)
+    }
+    
+    /// Selects the specified subtitle track option.
+    public func selectSubtitle(option: VideoTrackOption) {
+        trackManager.selectSubtitle(option: option, in: player?.currentItem, engine: extendedEngine)
+    }
+    
+    /// Selects the specified audio track option.
+    public func selectAudio(option: VideoTrackOption) {
+        trackManager.selectAudio(option: option, in: player?.currentItem, engine: extendedEngine)
     }
     
     /// Sets normalized volume across active player engine and AVPlayer instance.

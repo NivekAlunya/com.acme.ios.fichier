@@ -40,6 +40,10 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     private var onDurationUpdate: (@MainActor @Sendable (Double) -> Void)?
     private var onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)?
     private var onPlaybackEnded: (@MainActor @Sendable () -> Void)?
+    public var onTracksChanged: (@MainActor @Sendable () -> Void)?
+    
+    private var lastKnownAudioTrackCount: Int = 0
+    private var lastKnownSubtitleTrackCount: Int = 0
     
     @MainActor
     private func emitState(_ state: VideoPlaybackState) {
@@ -108,6 +112,111 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
         }
     }
     
+    /// Discovered audio tracks in the active VLC media item.
+    public var audioTrackOptions: [VideoTrackOption] {
+        #if canImport(MobileVLCKit)
+        let rawNames = vlcPlayer.audioTrackNames
+        let rawIndexes = vlcPlayer.audioTrackIndexes
+        guard rawNames.count == rawIndexes.count else {
+            return []
+        }
+        
+        var audioOptions: [VideoTrackOption] = []
+        for index in 0..<rawNames.count {
+            guard let num = rawIndexes[index] as? NSNumber else { continue }
+            let trackIndex = num.int32Value
+            if trackIndex == -1 { continue }
+            
+            let rawName = (rawNames[index] as? String) ?? ""
+            let cleanName = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = cleanName.isEmpty
+                ? String(localized: .Strings.videoPlayerTrackFallback(Int(trackIndex)))
+                : cleanName
+            let trackID = "vlc_audio_\(trackIndex)_\(displayName)"
+            audioOptions.append(
+                VideoTrackOption(id: trackID, displayName: displayName, mediaOption: nil, vlcTrackIndex: trackIndex)
+            )
+        }
+        return audioOptions
+        #else
+        return []
+        #endif
+    }
+    
+    /// Active audio track index on LibVLC.
+    public var currentAudioTrackIndex: Int32 {
+        get {
+            #if canImport(MobileVLCKit)
+            return vlcPlayer.currentAudioTrackIndex
+            #else
+            return -1
+            #endif
+        }
+        set {
+            #if canImport(MobileVLCKit)
+            vlcPlayer.currentAudioTrackIndex = newValue
+            #endif
+        }
+    }
+    
+    /// Discovered subtitle options in the active VLC media item, prefixed with synthetic 'Off' if tracks exist.
+    public var subtitleTrackOptions: [VideoTrackOption] {
+        #if canImport(MobileVLCKit)
+        let rawNames = vlcPlayer.videoSubTitlesNames
+        let rawIndexes = vlcPlayer.videoSubTitlesIndexes
+        guard rawNames.count == rawIndexes.count else {
+            return []
+        }
+        
+        var subOptions: [VideoTrackOption] = []
+        for index in 0..<rawNames.count {
+            guard let num = rawIndexes[index] as? NSNumber else { continue }
+            let trackIndex = num.int32Value
+            if trackIndex == -1 { continue }
+            
+            let rawName = (rawNames[index] as? String) ?? ""
+            let cleanName = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let displayName = cleanName.isEmpty
+                ? String(localized: .Strings.videoPlayerSubtitleFallback(Int(trackIndex)))
+                : cleanName
+            let trackID = "vlc_sub_\(trackIndex)_\(displayName)"
+            subOptions.append(
+                VideoTrackOption(id: trackID, displayName: displayName, mediaOption: nil, vlcTrackIndex: trackIndex)
+            )
+        }
+        
+        if subOptions.isEmpty {
+            return []
+        }
+        
+        let offOption = VideoTrackOption(
+            id: "sub_off",
+            displayName: String(localized: .Strings.videoPlayerSubtitlesOff),
+            mediaOption: nil,
+            vlcTrackIndex: -1
+        )
+        return [offOption] + subOptions
+        #else
+        return []
+        #endif
+    }
+    
+    /// Active subtitle track index on LibVLC (-1 indicates disabled).
+    public var currentSubtitleTrackIndex: Int32 {
+        get {
+            #if canImport(MobileVLCKit)
+            return vlcPlayer.currentVideoSubTitleIndex
+            #else
+            return -1
+            #endif
+        }
+        set {
+            #if canImport(MobileVLCKit)
+            vlcPlayer.currentVideoSubTitleIndex = newValue
+            #endif
+        }
+    }
+    
     /// Designated initializer mounting the specified local or loopback HTTP stream URL.
     ///
     /// - Parameters:
@@ -116,17 +225,20 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     ///   - onDurationUpdate: Duration resolution callback.
     ///   - onStateUpdate: State machine transition callback.
     ///   - onPlaybackEnded: Completion callback when playback reaches the end.
+    ///   - onTracksChanged: Callback triggered when available audio or subtitle tracks change.
     public init(
         url: URL,
         onTimeUpdate: (@MainActor @Sendable (Double) -> Void)? = nil,
         onDurationUpdate: (@MainActor @Sendable (Double) -> Void)? = nil,
         onStateUpdate: (@MainActor @Sendable (VideoPlaybackState) -> Void)? = nil,
-        onPlaybackEnded: (@MainActor @Sendable () -> Void)? = nil
+        onPlaybackEnded: (@MainActor @Sendable () -> Void)? = nil,
+        onTracksChanged: (@MainActor @Sendable () -> Void)? = nil
     ) {
         self.onTimeUpdate = onTimeUpdate
         self.onDurationUpdate = onDurationUpdate
         self.onStateUpdate = onStateUpdate
         self.onPlaybackEnded = onPlaybackEnded
+        self.onTracksChanged = onTracksChanged
         
         #if canImport(MobileVLCKit)
         let player = VLCMediaPlayer()
@@ -177,6 +289,7 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     public func tearDown() {
         isPlayingInternal = false
         lastEmittedState = nil
+        onTracksChanged = nil
         #if canImport(MobileVLCKit)
         vlcPlayer.delegate = nil
         vlcPlayer.stop()
@@ -199,6 +312,13 @@ extension ExtendedPlayerEngine: VLCMediaPlayerDelegate {
             let dur = self.durationSeconds
             if dur > 0 {
                 self.onDurationUpdate?(dur)
+            }
+            let audioCount = self.vlcPlayer.audioTrackIndexes.count
+            let subCount = self.vlcPlayer.videoSubTitlesIndexes.count
+            if audioCount != self.lastKnownAudioTrackCount || subCount != self.lastKnownSubtitleTrackCount {
+                self.lastKnownAudioTrackCount = audioCount
+                self.lastKnownSubtitleTrackCount = subCount
+                self.onTracksChanged?()
             }
         }
     }

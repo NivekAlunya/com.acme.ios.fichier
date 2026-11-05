@@ -13,20 +13,22 @@ import MobileVLCKit
 ///
 /// Dispatches MobileVLCKit C-level thumbnail notifications back to `VLCMediaThumbnailerActor`
 /// across thread and actor boundaries.
-public final class VLCMediaThumbnailerSession: NSObject, @unchecked Sendable {
+@MainActor
+public final class VLCMediaThumbnailerSession: NSObject {
     private let sessionID: UUID
-    private nonisolated(unsafe) weak var owner: VLCMediaThumbnailerActor?
+    private weak var owner: VLCMediaThumbnailerActor?
     
     #if canImport(MobileVLCKit)
-    private nonisolated(unsafe) var thumbnailer: VLCMediaThumbnailer?
+    private var thumbnailer: VLCMediaThumbnailer?
     #endif
+    private var didComplete = false
     
     /// Initializes a new thumbnailing session.
     ///
     /// - Parameters:
     ///   - sessionID: Unique identifier for tracking this session.
     ///   - owner: Owning actor receiving extraction completion or failure notifications.
-    public nonisolated init(sessionID: UUID, owner: VLCMediaThumbnailerActor) {
+    public init(sessionID: UUID, owner: VLCMediaThumbnailerActor) {
         self.sessionID = sessionID
         self.owner = owner
         super.init()
@@ -39,7 +41,8 @@ public final class VLCMediaThumbnailerSession: NSObject, @unchecked Sendable {
     ///   - media: Configured `VLCMedia` instance.
     ///   - maxDimension: Maximum bounding dimension for width and height.
     ///   - snapshotPosition: Relative position within the media timeline (0.0 to 1.0).
-    public nonisolated func start(with media: VLCMedia, maxDimension: CGFloat, snapshotPosition: Float) {
+    public func start(with media: VLCMedia, maxDimension: CGFloat, snapshotPosition: Float) {
+        guard !didComplete else { return }
         let thumb = VLCMediaThumbnailer(media: media, andDelegate: self)
         thumb.thumbnailWidth = maxDimension
         thumb.thumbnailHeight = maxDimension
@@ -50,31 +53,47 @@ public final class VLCMediaThumbnailerSession: NSObject, @unchecked Sendable {
     #endif
     
     /// Cancels the in-flight extraction session and tears down references.
-    public nonisolated func cancel() {
+    public func cancel() {
+        didComplete = true
+        #if canImport(MobileVLCKit)
+        self.thumbnailer = nil
+        #endif
+        self.owner = nil
+    }
+    
+    private func notifyCompletion(image: UIImage?) {
+        guard !didComplete else { return }
+        didComplete = true
+        
+        let id = sessionID
+        let currentOwner = owner
         self.owner = nil
         #if canImport(MobileVLCKit)
         self.thumbnailer = nil
         #endif
-    }
-    
-    private nonisolated func notifyCompletion(image: UIImage?) {
-        let owner = self.owner
-        let id = self.sessionID
+        
         Task {
-            await owner?.handleSessionCompletion(id: id, image: image)
+            await currentOwner?.handleSessionCompletion(id: id, image: image)
         }
     }
 }
 
 #if canImport(MobileVLCKit)
 extension VLCMediaThumbnailerSession: VLCMediaThumbnailerDelegate {
-    public nonisolated func mediaThumbnailer(_ mediaThumbnailer: VLCMediaThumbnailer, didFinishThumbnail thumbnail: CGImage) {
+    public nonisolated func mediaThumbnailer(
+        _ mediaThumbnailer: VLCMediaThumbnailer,
+        didFinishThumbnail thumbnail: CGImage
+    ) {
         let image = UIImage(cgImage: thumbnail)
-        notifyCompletion(image: image)
+        Task { @MainActor [weak self] in
+            self?.notifyCompletion(image: image)
+        }
     }
     
     public nonisolated func mediaThumbnailerDidTimeOut(_ mediaThumbnailer: VLCMediaThumbnailer) {
-        notifyCompletion(image: nil)
+        Task { @MainActor [weak self] in
+            self?.notifyCompletion(image: nil)
+        }
     }
 }
 #endif

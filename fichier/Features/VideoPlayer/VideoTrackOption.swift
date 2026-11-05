@@ -16,8 +16,11 @@ public struct VideoTrackOption: Identifiable, Equatable {
     /// User-facing display title for this track in menus.
     public let displayName: String
     
-    /// The associated AVFoundation media option, or `nil` representing "Subtitles Off".
+    /// The associated AVFoundation media option, or `nil` representing "Subtitles Off" or extended VLC track.
     public let mediaOption: AVMediaSelectionOption?
+    
+    /// The associated MobileVLCKit track identifier index, if applicable.
+    public let vlcTrackIndex: Int32?
     
     /// Memberwise designated initializer.
     ///
@@ -25,9 +28,16 @@ public struct VideoTrackOption: Identifiable, Equatable {
     ///   - id: Unique option string identifier.
     ///   - displayName: User-facing title.
     ///   - mediaOption: AVFoundation media selection option.
-    public init(id: String, displayName: String, mediaOption: AVMediaSelectionOption?) {
+    ///   - vlcTrackIndex: Optional MobileVLCKit track integer index.
+    public init(
+        id: String,
+        displayName: String,
+        mediaOption: AVMediaSelectionOption? = nil,
+        vlcTrackIndex: Int32? = nil
+    ) {
         self.id = id
         self.displayName = displayName
         self.mediaOption = mediaOption
+        self.vlcTrackIndex = vlcTrackIndex
     }
 }

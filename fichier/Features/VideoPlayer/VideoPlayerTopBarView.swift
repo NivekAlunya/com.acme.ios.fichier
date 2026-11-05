@@ -194,9 +194,7 @@ public struct VideoPlayerTopBarView: View {
             if !controller.trackManager.availableSubtitles.isEmpty {
                 Section(.Strings.videoPlayerMenuSubtitles) {
                     Button {
-                        if let item = controller.player?.currentItem {
-                            controller.trackManager.toggleSubtitles(in: item)
-                        }
+                        controller.toggleSubtitles()
                     } label: {
                         Label(
                             controller.trackManager.isSubtitlesEnabled ? String(localized: .Strings.videoPlayerMenuSubtitlesDisable) : String(localized: .Strings.videoPlayerMenuSubtitlesEnable),
@@ -205,9 +203,7 @@ public struct VideoPlayerTopBarView: View {
                     }
                     ForEach(controller.trackManager.availableSubtitles) { option in
                         Button {
-                            if let item = controller.player?.currentItem {
-                                controller.trackManager.selectSubtitle(option: option, in: item)
-                            }
+                            controller.selectSubtitle(option: option)
                         } label: {
                             HStack {
                                 Text(option.displayName)
@@ -224,9 +220,7 @@ public struct VideoPlayerTopBarView: View {
                 Section(.Strings.videoPlayerMenuAudio) {
                     ForEach(controller.trackManager.availableAudios) { option in
                         Button {
-                            if let item = controller.player?.currentItem {
-                                controller.trackManager.selectAudio(option: option, in: item)
-                            }
+                            controller.selectAudio(option: option)
                         } label: {
                             HStack {
                                 Text(option.displayName)
