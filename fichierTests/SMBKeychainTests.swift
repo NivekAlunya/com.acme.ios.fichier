@@ -23,7 +23,22 @@ final class SMBKeychainTests: XCTestCase {
         let afterDelete = await SMBKeychain.loadPassword(for: account)
         XCTAssertNil(afterDelete)
     }
-    
+
+    func testSavingExistingAccountUpdatesPassword() async {
+        let account = "update-user-\(UUID().uuidString)@host.local"
+
+        let firstSaveSucceeded = await SMBKeychain.savePassword("initial-password", for: account)
+        XCTAssertTrue(firstSaveSucceeded)
+
+        let secondSaveSucceeded = await SMBKeychain.savePassword("updated-password", for: account)
+        XCTAssertTrue(secondSaveSucceeded)
+
+        let loadedPassword = await SMBKeychain.loadPassword(for: account)
+        XCTAssertEqual(loadedPassword, "updated-password")
+
+        await SMBKeychain.deletePassword(for: account)
+    }
+
     func testConcurrentAccessAcrossMultipleTasks() async {
         await withTaskGroup(of: Void.self) { group in
             for index in 0..<25 {
