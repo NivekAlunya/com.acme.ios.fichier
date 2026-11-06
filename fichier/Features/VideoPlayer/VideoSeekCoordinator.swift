@@ -74,8 +74,8 @@ public final class VideoSeekCoordinator {
         guard !isScrubbingTimeline else { return }
         isScrubbingTimeline = true
         lastSeekTargetSeconds = currentPlaybackSeconds
-        let isPlayerActive = (player?.timeControlStatus != .paused && player != nil)
-        let isEngineActive = (engine?.isPlaying == true)
+        let isPlayerActive = player != nil && player?.timeControlStatus != .paused
+        let isEngineActive = engine?.isPlaying == true
         wasPlayingBeforeScrub = isPlayerActive || isEngineActive || isPlaying
         if wasPlayingBeforeScrub {
             engine?.pause()
@@ -105,7 +105,7 @@ public final class VideoSeekCoordinator {
         guard !isScrubbingWithGesture else { return }
         isScrubbingWithGesture = true
         lastSeekTargetSeconds = currentPlaybackSeconds
-        wasPlayingBeforeScrub = (player?.timeControlStatus != .paused) || isPlaying
+        wasPlayingBeforeScrub = (player != nil && player?.timeControlStatus != .paused) || isPlaying
         if wasPlayingBeforeScrub {
             player?.pause()
         }

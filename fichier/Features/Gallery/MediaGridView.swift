@@ -215,38 +215,82 @@ struct MediaGridView: View {
         
         ZStack(alignment: .bottom) {
             Group {
-                if manager.isLoading && manager.pictures.isEmpty && manager.currentFolders.isEmpty {
-                    ProgressView(.Strings.galleryLoadingFolderContents)
-                } else if let error = manager.errorMessage, manager.pictures.isEmpty {
-                    ContentUnavailableView {
-                        Label(.Strings.galleryErrorUnableToLoadFolder, systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(error)
-                    } actions: {
-                        if let folder = manager.selectedFolder {
-                            Button(.Strings.commonRetry) {
+                if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
+                    MediaGridEmptyStateView(
+                        isLoading: manager.isLoading,
+                        errorMessage: manager.errorMessage,
+                        searchText: searchText,
+                        selectedFolderName: manager.selectedFolder?.name,
+                        hasSelectedFolder: manager.selectedFolder != nil,
+                        onRetry: {
+                            if let folder = manager.selectedFolder {
                                 Task { await manager.selectAndLoadFolder(folder) }
                             }
-                            .buttonStyle(.borderedProminent)
                         }
-                    }
+                    )
                 } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
                     ContentUnavailableView.search(text: searchText)
-                } else if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
-                    ContentUnavailableView(
-                        String(localized: .Strings.galleryEmptyFolderTitle),
-                        systemImage: "photo.on.rectangle.angled",
-                        description: Text(.Strings.galleryEmptyFolderDescription(manager.selectedFolder?.name ?? String(localized: .Strings.galleryEmptyFolderDefaultName)))
-                    )
                 } else {
                     Group {
                         switch viewMode {
                         case .grid:
-                            gridContent(folders: displayFolders, pictures: displayPictures)
-                                .transition(.opacity)
+                            MediaGridModeView(
+                                manager: manager,
+                                folders: displayFolders,
+                                pictures: displayPictures,
+                                gridColumns: gridColumns,
+                                gridSize: gridSize,
+                                sortOption: sortOption,
+                                isSelectionMode: isSelectionMode,
+                                selectedItems: selectedItems,
+                                currentDirectoryID: currentDirectoryID,
+                                onNavigateToFolder: { navigateToFolder($0) },
+                                onSelectPicture: { onSelectPicture($0, $1) },
+                                onToggleSelection: { toggleSelection(for: $0) },
+                                onEnterSelectionMode: { item in
+                                    withAnimation {
+                                        isSelectionMode = true
+                                        selectedItems.insert(item)
+                                    }
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                },
+                                onRefresh: {
+                                    if let folder = manager.selectedFolder {
+                                        await manager.selectAndLoadFolder(folder)
+                                    } else {
+                                        await manager.refreshSharesAndFolders()
+                                    }
+                                }
+                            )
+                            .simultaneousGesture(pinchGesture)
+                            .transition(.opacity)
                         case .list:
-                            listContent(folders: displayFolders, pictures: displayPictures)
-                                .transition(.opacity)
+                            MediaListModeView(
+                                manager: manager,
+                                folders: displayFolders,
+                                pictures: displayPictures,
+                                isSelectionMode: isSelectionMode,
+                                selectedItems: selectedItems,
+                                currentDirectoryID: currentDirectoryID,
+                                onNavigateToFolder: { navigateToFolder($0) },
+                                onSelectPicture: { onSelectPicture($0, $1) },
+                                onToggleSelection: { toggleSelection(for: $0) },
+                                onEnterSelectionMode: { item in
+                                    withAnimation {
+                                        isSelectionMode = true
+                                        selectedItems.insert(item)
+                                    }
+                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                },
+                                onRefresh: {
+                                    if let folder = manager.selectedFolder {
+                                        await manager.selectAndLoadFolder(folder)
+                                    } else {
+                                        await manager.refreshSharesAndFolders()
+                                    }
+                                }
+                            )
+                            .transition(.opacity)
                         }
                     }
                     .id(thumbnailReloadToken)
@@ -569,141 +613,6 @@ struct MediaGridView: View {
         }
     }
     
-    // MARK: - Grid Mode View Builder
-    
-    /// Constructs the adaptive grid presentation featuring an optional subfolder shelf and a thumbnail matrix.
-    ///
-    /// - Parameters:
-    ///   - folders: Filtered and sorted subfolders contained within the active directory.
-    ///   - pictures: Filtered and sorted media files to render as thumbnails.
-    /// - Returns: A scrollable view configured with adaptive grid geometry and pinch gesture handling.
-    @ViewBuilder
-    private func gridContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                Color.clear
-                    .frame(height: 0)
-                    .id("topOfGrid")
-                
-                VStack(alignment: .leading, spacing: 16) {
-                    if !folders.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                            
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
-                                ForEach(folders) { subfolder in
-                                    Button {
-                                        navigateToFolder(subfolder)
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "folder.fill")
-                                                .foregroundColor(.blue)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(subfolder.name)
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.primary)
-                                                    .lineLimit(1)
-                                                if let d = subfolder.formattedDate {
-                                                    Text(d)
-                                                        .font(.caption2)
-                                                        .foregroundColor(.secondary)
-                                                }
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .padding(10)
-                                        .background(Color(.secondarySystemBackground))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                        }
-                    }
-                    
-                    if !pictures.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(mediaSectionHeader(for: pictures.count))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
-                                
-                                Text(sortOption.localizedTitle)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            
-                            LazyVGrid(columns: gridColumns, spacing: 10) {
-                                ForEach(pictures) { pic in
-                                    MediaThumbnailCell(
-                                        manager: manager,
-                                        item: pic,
-                                        maxDimension: gridSize.thumbnailPixels,
-                                        isSelected: selectedItems.contains(pic),
-                                        isSelectionMode: isSelectionMode
-                                    )
-                                    .onTapGesture {
-                                        if isSelectionMode {
-                                            toggleSelection(for: pic)
-                                        } else {
-                                            onSelectPicture(pic, pictures)
-                                        }
-                                    }
-                                    .onLongPressGesture {
-                                        if !isSelectionMode {
-                                            withAnimation {
-                                                isSelectionMode = true
-                                                selectedItems.insert(pic)
-                                            }
-                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
-                        }
-                    } else if !folders.isEmpty {
-                        ContentUnavailableView(
-                            String(localized: .Strings.galleryNoPicturesTitle),
-                            systemImage: "photo",
-                            description: Text(.Strings.galleryNoPicturesDescription)
-                        )
-                        .padding(.top, 24)
-                    }
-                }
-                .padding(.vertical, 12)
-            }
-            .id(currentDirectoryID)
-            .onChange(of: currentDirectoryID) { _, _ in
-                proxy.scrollTo("topOfGrid", anchor: .top)
-            }
-            .onChange(of: manager.isLoading) { wasLoading, isLoading in
-                if wasLoading && !isLoading {
-                    proxy.scrollTo("topOfGrid", anchor: .top)
-                }
-            }
-            .refreshable {
-                if let folder = manager.selectedFolder {
-                    await manager.selectAndLoadFolder(folder)
-                } else {
-                    await manager.refreshSharesAndFolders()
-                }
-            }
-            .simultaneousGesture(pinchGesture)
-        }
-    }
-    
     // MARK: - Pinch Gesture & Zoom Mechanics
     
     /// Simultaneous magnification gesture enabling fluid scaling between thumbnail sizes and list view.
@@ -784,102 +693,6 @@ struct MediaGridView: View {
                 viewMode = .list
             }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        }
-    }
-    
-    // MARK: - List Mode View Builder
-    
-    /// Constructs the vertical list presentation featuring subfolders and detailed media metadata rows.
-    ///
-    /// - Parameters:
-    ///   - folders: Filtered and sorted subfolders contained within the active directory.
-    ///   - pictures: Filtered and sorted media files to render as list rows.
-    /// - Returns: A standard SwiftUI `List` view supporting selection mode, pull-to-refresh, and gestures.
-    @ViewBuilder
-    private func listContent(folders: [MediaItem], pictures: [MediaItem]) -> some View {
-        ScrollViewReader { proxy in
-            List {
-                if !folders.isEmpty {
-                    Section(String(localized: .Strings.gallerySectionSubfoldersCount(folders.count))) {
-                        ForEach(folders) { subfolder in
-                            Button {
-                                navigateToFolder(subfolder)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "folder.fill")
-                                        .font(.title3)
-                                        .foregroundColor(.blue)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(subfolder.name)
-                                            .foregroundColor(.primary)
-                                        if let d = subfolder.formattedDate {
-                                            Text(d)
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
-                    .id("topOfList")
-                }
-                
-                if !pictures.isEmpty {
-                    Section(String(localized: mediaSectionHeader(for: pictures.count))) {
-                        ForEach(pictures) { pic in
-                            Button {
-                                if isSelectionMode {
-                                    toggleSelection(for: pic)
-                                } else {
-                                    onSelectPicture(pic, pictures)
-                                }
-                            } label: {
-                                MediaListRowCell(
-                                    manager: manager,
-                                    item: pic,
-                                    isSelected: selectedItems.contains(pic),
-                                    isSelectionMode: isSelectionMode
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .simultaneousGesture(
-                                LongPressGesture().onEnded { _ in
-                                    if !isSelectionMode {
-                                        withAnimation {
-                                            isSelectionMode = true
-                                            selectedItems.insert(pic)
-                                        }
-                                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .id(folders.isEmpty ? "topOfList" : "picturesSection")
-                }
-            }
-            .id(currentDirectoryID)
-            .onChange(of: currentDirectoryID) { _, _ in
-                proxy.scrollTo("topOfList", anchor: .top)
-            }
-            .onChange(of: manager.isLoading) { wasLoading, isLoading in
-                if wasLoading && !isLoading {
-                    proxy.scrollTo("topOfList", anchor: .top)
-                }
-            }
-            .refreshable {
-                if let folder = manager.selectedFolder {
-                    await manager.selectAndLoadFolder(folder)
-                } else {
-                    await manager.refreshSharesAndFolders()
-                }
-            }
-            .simultaneousGesture(pinchGesture)
         }
     }
     

@@ -645,7 +645,8 @@ public final class VideoPlayerController {
             return
         }
         
-        let currentlyPlaying = engine?.isPlaying ?? (player?.timeControlStatus != .paused)
+        let isPlayerPlaying = player != nil && player?.timeControlStatus != .paused
+        let currentlyPlaying = engine?.isPlaying ?? (isPlayerPlaying || (player == nil && playbackState.isPlaying))
         if currentlyPlaying {
             pause()
             withAnimation(.easeInOut(duration: 0.35)) {
@@ -691,7 +692,8 @@ public final class VideoPlayerController {
         let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
         let maxLimit = dur > 0 ? dur : max(current + deltaSeconds, 0)
         let newTarget = min(max(0, current + deltaSeconds), maxLimit)
-        let resume = (engine?.isPlaying ?? (player?.timeControlStatus != .paused)) || playbackState.isPlaying
+        let isPlayerPlaying = player != nil && player?.timeControlStatus != .paused
+        let resume = (engine?.isPlaying ?? isPlayerPlaying) || playbackState.isPlaying
         seekTo(newTarget, resumePlaying: resume)
         withAnimation {
             showControls = true

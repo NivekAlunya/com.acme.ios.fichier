@@ -5,6 +5,7 @@
 
 import Foundation
 import AVFoundation
+import UniformTypeIdentifiers
 
 /// Resource loader delegate enabling progressive on-demand streaming of remote SMB video files into `AVPlayer`.
 ///
@@ -46,15 +47,23 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
         _ resourceLoader: AVAssetResourceLoader,
         shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
     ) -> Bool {
+        // Fail early if remote media size is invalid or unknown
+        guard item.size > 0 else {
+            loadingRequest.finishLoading(with: SMBStreamError.unknownContentLength)
+            return true
+        }
+
         // 1. Content Information Request
         if let info = loadingRequest.contentInformationRequest {
             let ext = (item.name as NSString).pathExtension.lowercased()
-            if ext == "mov" {
+            if let utType = UTType(filenameExtension: ext) {
+                info.contentType = utType.identifier
+            } else if ext == "mov" {
                 info.contentType = "com.apple.quicktime-movie"
             } else {
                 info.contentType = "public.mpeg-4"
             }
-            info.contentLength = max(1, item.size)
+            info.contentLength = item.size
             info.isByteRangeAccessSupported = true
         }
         
@@ -92,6 +101,7 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
             await tracker.runTask(for: requestID, isCancelled: loadingRequest.isCancelled) {
                 do {
                     var currentOffset = startOffset
+                    var reachedPrematureEOF = false
                     
                     while currentOffset < targetEnd {
                         if Task.isCancelled || loadingRequest.isCancelled {
@@ -111,14 +121,31 @@ nonisolated final class SMBResourceLoaderDelegate: NSObject, AVAssetResourceLoad
                         if Task.isCancelled || loadingRequest.isCancelled {
                             return
                         }
-                        if chunk.isEmpty { break }
+                        if chunk.isEmpty {
+                            reachedPrematureEOF = true
+                            break
+                        }
                         
                         dataRequest.respond(with: chunk)
                         currentOffset += Int64(chunk.count)
                     }
                     
                     if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
-                        loadingRequest.finishLoading()
+                        if currentOffset >= targetEnd {
+                            loadingRequest.finishLoading()
+                        } else if reachedPrematureEOF {
+                            let error = SMBStreamError.unexpectedEndOfFile(
+                                expectedOffset: targetEnd,
+                                actualOffset: currentOffset
+                            )
+                            loadingRequest.finishLoading(with: error)
+                        } else {
+                            let error = SMBStreamError.incompleteData(
+                                expectedOffset: targetEnd,
+                                actualOffset: currentOffset
+                            )
+                            loadingRequest.finishLoading(with: error)
+                        }
                     }
                 } catch {
                     if !Task.isCancelled && !loadingRequest.isCancelled && !loadingRequest.isFinished {
