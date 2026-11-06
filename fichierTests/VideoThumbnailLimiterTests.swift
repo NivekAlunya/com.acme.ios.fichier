@@ -61,6 +61,7 @@ final class VideoThumbnailLimiterTests: XCTestCase {
     func testPreCancelledTaskThrowsCancellationError() async {
         let limiter = VideoThumbnailLimiter(maxConcurrent: 1)
         let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
             try await limiter.withPermit {
                 XCTFail("Should not execute")
             }

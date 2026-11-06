@@ -68,3 +68,8 @@ script/
 .DS_Store
 
 resources/
+
+# Local developer configuration
+Configuration/Local.xcconfig
+Local.xcconfig
+

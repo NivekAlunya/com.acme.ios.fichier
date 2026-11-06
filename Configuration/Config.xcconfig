@@ -1,0 +1,12 @@
+//
+// Config.xcconfig
+// fichier
+//
+
+// Local developer overrides (ignored by git).
+// Copy Local.xcconfig.template to Local.xcconfig and set your personal Apple Development Team ID.
+#include? "Local.xcconfig"
+
+// Apple Development Team identifier.
+// Inherits from Local.xcconfig if present, or an environment variable if set.
+DEVELOPMENT_TEAM = $(DEVELOPMENT_TEAM)

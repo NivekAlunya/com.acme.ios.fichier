@@ -41,6 +41,7 @@ public actor PDFThumbnailLimiter {
     /// - Returns: The result of the operation.
     /// - Throws: `CancellationError` if the task is cancelled before acquiring or during execution.
     public func withPermit<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
+        try Task.checkCancellation()
         let waiterID = UUID()
         let acquired = await withTaskCancellationHandler {
             await acquire(id: waiterID)
