@@ -12,6 +12,16 @@
 		D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B11130910E5200518819 /* MobileVLCKit */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		D10000000000000160000020 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000100000000;
+			remoteInfo = fichier;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		D1F1B10130910E5200518819 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -25,7 +35,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		000000000000000000000120 /* com.acme.ios.fichier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = com.acme.ios.fichier.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000120 /* fichier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fichier.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D10000000000000000000130 /* fichierTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = fichierTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1F1B0F030910CFF00518819 /* fichier-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "fichier-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -33,6 +44,11 @@
 		000000000000000000000010 /* fichier */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = fichier;
+			sourceTree = "<group>";
+		};
+		D10000000000000000000020 /* fichierTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = fichierTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +61,11 @@
 				D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */,
 			);
 		};
+		D10000000000000130000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -53,6 +74,7 @@
 			children = (
 				D1F1B0F030910CFF00518819 /* fichier-Info.plist */,
 				000000000000000000000010 /* fichier */,
+				D10000000000000000000020 /* fichierTests */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,7 +82,8 @@
 		000000000000000000000020 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				000000000000000000000120 /* com.acme.ios.fichier.app */,
+				000000000000000000000120 /* fichier.app */,
+				D10000000000000000000130 /* fichierTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,9 +91,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		000000000000000100000000 /* com.acme.ios.fichier */ = {
+		000000000000000100000000 /* fichier */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 000000000000000110000000 /* Build configuration list for PBXNativeTarget "com.acme.ios.fichier" */;
+			buildConfigurationList = 000000000000000110000000 /* Build configuration list for PBXNativeTarget "fichier" */;
 			buildPhases = (
 				000000000000000120000000 /* Sources */,
 				000000000000000130000000 /* Frameworks */,
@@ -83,14 +106,35 @@
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* fichier */,
 			);
-			name = com.acme.ios.fichier;
+			name = fichier;
 			packageProductDependencies = (
 				D1F1B0FE30910E5200518819 /* AMSMB2 */,
 				D1F1B11130910E5200518819 /* MobileVLCKit */,
 			);
-			productName = MyApp;
-			productReference = 000000000000000000000120 /* com.acme.ios.fichier.app */;
+			productName = fichier;
+			productReference = 000000000000000000000120 /* fichier.app */;
 			productType = "com.apple.product-type.application";
+		};
+		D10000000000000100000010 /* fichierTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D10000000000000110000020 /* Build configuration list for PBXNativeTarget "fichierTests" */;
+			buildPhases = (
+				D10000000000000120000020 /* Sources */,
+				D10000000000000130000020 /* Frameworks */,
+				D10000000000000140000020 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D10000000000000150000020 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D10000000000000000000020 /* fichierTests */,
+			);
+			name = fichierTests;
+			productName = fichierTests;
+			productReference = D10000000000000000000130 /* fichierTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -104,6 +148,10 @@
 				TargetAttributes = {
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
+					};
+					D10000000000000100000010 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 000000000000000100000000;
 					};
 				};
 			};
@@ -135,13 +183,19 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				000000000000000100000000 /* com.acme.ios.fichier */,
+				000000000000000100000000 /* fichier */,
+				D10000000000000100000010 /* fichierTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		000000000000000140000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		D10000000000000140000020 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -178,7 +232,20 @@
 			files = (
 			);
 		};
+		D10000000000000120000020 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D10000000000000150000020 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000100000000 /* fichier */;
+			targetProxy = D10000000000000160000020 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		000000000000000011000000 /* Debug configuration for PBXProject "fichier" */ = {
@@ -319,12 +386,14 @@
 			};
 			name = Release;
 		};
-		000000000000000111000000 /* Debug configuration for PBXNativeTarget "com.acme.ios.fichier" */ = {
+		000000000000000111000000 /* Debug configuration for PBXNativeTarget "fichier" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = fichier;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZNX5M2PWBX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -362,27 +431,31 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.acme.ios.fichier;
+				PRODUCT_MODULE_NAME = fichier;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Debug;
 		};
-		000000000000000112000000 /* Release configuration for PBXNativeTarget "com.acme.ios.fichier" */ = {
+		000000000000000112000000 /* Release configuration for PBXNativeTarget "fichier" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = fichier;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZNX5M2PWBX;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -420,17 +493,75 @@
 				MACOSX_DEPLOYMENT_TARGET = 26.6;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.acme.ios.fichier;
+				PRODUCT_MODULE_NAME = fichier;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				XROS_DEPLOYMENT_TARGET = 26.6;
+			};
+			name = Release;
+		};
+		D10000000000000111000020 /* Debug configuration for PBXNativeTarget "fichierTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = ZNX5M2PWBX;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.6;
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.acme.ios.fichierTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fichier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fichier";
+				XROS_DEPLOYMENT_TARGET = 26.6;
+			};
+			name = Debug;
+		};
+		D10000000000000112000020 /* Release configuration for PBXNativeTarget "fichierTests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = ZNX5M2PWBX;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.6;
+				MACOSX_DEPLOYMENT_TARGET = 26.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.acme.ios.fichierTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fichier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fichier";
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Release;
@@ -446,11 +577,19 @@
 			);
 			defaultConfigurationName = Release;
 		};
-		000000000000000110000000 /* Build configuration list for PBXNativeTarget "com.acme.ios.fichier" */ = {
+		000000000000000110000000 /* Build configuration list for PBXNativeTarget "fichier" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				000000000000000111000000 /* Debug configuration for PBXNativeTarget "com.acme.ios.fichier" */,
-				000000000000000112000000 /* Release configuration for PBXNativeTarget "com.acme.ios.fichier" */,
+				000000000000000111000000 /* Debug configuration for PBXNativeTarget "fichier" */,
+				000000000000000112000000 /* Release configuration for PBXNativeTarget "fichier" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		D10000000000000110000020 /* Build configuration list for PBXNativeTarget "fichierTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D10000000000000111000020 /* Debug configuration for PBXNativeTarget "fichierTests" */,
+				D10000000000000112000020 /* Release configuration for PBXNativeTarget "fichierTests" */,
 			);
 			defaultConfigurationName = Release;
 		};
