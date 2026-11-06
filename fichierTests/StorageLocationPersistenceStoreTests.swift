@@ -35,9 +35,9 @@ final class StorageLocationPersistenceStoreTests: XCTestCase {
         XCTAssertTrue(connections.isEmpty)
     }
     
-    func testSaveAndRetrieveSMBConnection() {
+    func testSaveAndRetrieveSMBConnection() async {
         let initialConnections: [SavedSMBConnection] = []
-        let updated = store.saveValidatedConnection(
+        let updated = await store.saveValidatedConnection(
             host: "192.168.1.100",
             user: "kevin",
             pass: "secret123",
@@ -54,11 +54,11 @@ final class StorageLocationPersistenceStoreTests: XCTestCase {
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].id, "kevin@192.168.1.100")
         
-        let pass = store.password(for: loaded[0])
+        let pass = await store.password(for: loaded[0])
         XCTAssertEqual(pass, "secret123")
         
         // Remove connection
-        let cleaned = store.removeSavedConnection(loaded[0], from: loaded)
+        let cleaned = await store.removeSavedConnection(loaded[0], from: loaded)
         XCTAssertTrue(cleaned.isEmpty)
         XCTAssertTrue(store.loadSavedConnections().isEmpty)
     }

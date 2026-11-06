@@ -51,8 +51,8 @@ public final class StorageLocationPersistenceStore {
     ///
     /// - Parameter connection: The saved connection metadata.
     /// - Returns: The decrypted password, or an empty string if missing.
-    public func password(for connection: SavedSMBConnection) -> String {
-        SMBKeychain.loadPassword(for: connection.id) ?? ""
+    public func password(for connection: SavedSMBConnection) async -> String {
+        await SMBKeychain.loadPassword(for: connection.id) ?? ""
     }
     
     /// Stores or updates a validated SMB connection record and saves its password to the Keychain.
@@ -70,7 +70,7 @@ public final class StorageLocationPersistenceStore {
         pass: String,
         hostname: String? = nil,
         existingConnections: [SavedSMBConnection]
-    ) -> [SavedSMBConnection] {
+    ) async -> [SavedSMBConnection] {
         let existingHostname = existingConnections.first(where: { $0.id == "\(user)@\(host)" })?.hostname
         let finalHostname = hostname ?? existingHostname
         
@@ -80,7 +80,7 @@ public final class StorageLocationPersistenceStore {
             lastConnected: Date(),
             hostname: finalHostname
         )
-        SMBKeychain.savePassword(pass, for: newEntry.id)
+        await SMBKeychain.savePassword(pass, for: newEntry.id)
         
         var updated = existingConnections.filter { $0.id != newEntry.id }
         updated.insert(newEntry, at: 0)
@@ -98,8 +98,8 @@ public final class StorageLocationPersistenceStore {
     public func removeSavedConnection(
         _ connection: SavedSMBConnection,
         from existingConnections: [SavedSMBConnection]
-    ) -> [SavedSMBConnection] {
-        SMBKeychain.deletePassword(for: connection.id)
+    ) async -> [SavedSMBConnection] {
+        await SMBKeychain.deletePassword(for: connection.id)
         var updated = existingConnections
         updated.removeAll { $0.id == connection.id }
         persistConnections(updated)

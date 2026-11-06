@@ -156,7 +156,9 @@ public struct LocationsSidebarView: View {
                             }
                             if location.kind != .photos {
                                 Button(role: .destructive) {
-                                    manager.removeLocation(location)
+                                    Task {
+                                        await manager.removeLocation(location)
+                                    }
                                 } label: {
                                     Label(String(localized: "Remove Location"), systemImage: "trash")
                                 }
@@ -166,7 +168,9 @@ public struct LocationsSidebarView: View {
                     .onDelete { indexSet in
                         let locationsToRemove = indexSet.map { manager.allLocations[$0] }
                         for loc in locationsToRemove where loc.kind != .photos {
-                            manager.removeLocation(loc)
+                            Task {
+                                await manager.removeLocation(loc)
+                            }
                         }
                     }
                 }

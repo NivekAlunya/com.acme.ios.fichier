@@ -165,8 +165,8 @@ public final class StorageLocationManager {
     ///
     /// - Parameter connection: The saved connection metadata.
     /// - Returns: The decrypted password, or an empty string if missing.
-    public func password(for connection: SavedSMBConnection) -> String {
-        persistenceStore.password(for: connection)
+    public func password(for connection: SavedSMBConnection) async -> String {
+        await persistenceStore.password(for: connection)
     }
     
     /// Stores or updates a validated SMB connection record in `UserDefaults` and saves its password to the Keychain.
@@ -176,8 +176,8 @@ public final class StorageLocationManager {
     ///   - user: Authentication username.
     ///   - pass: Plaintext password to store in Keychain.
     ///   - hostname: Optional Bonjour or NetBIOS display hostname.
-    private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) {
-        savedConnections = persistenceStore.saveValidatedConnection(
+    private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) async {
+        savedConnections = await persistenceStore.saveValidatedConnection(
             host: host,
             user: user,
             pass: pass,
@@ -189,8 +189,8 @@ public final class StorageLocationManager {
     /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
     ///
     /// - Parameter connection: The connection to remove.
-    public func removeSavedConnection(_ connection: SavedSMBConnection) {
-        savedConnections = persistenceStore.removeSavedConnection(connection, from: savedConnections)
+    public func removeSavedConnection(_ connection: SavedSMBConnection) async {
+        savedConnections = await persistenceStore.removeSavedConnection(connection, from: savedConnections)
         if currentLocation?.smbConnection?.id == connection.id {
             Task {
                 await disconnect()
@@ -252,11 +252,11 @@ public final class StorageLocationManager {
     /// Dispatches location deletion to the appropriate backend store.
     ///
     /// - Parameter location: The storage location to remove.
-    public func removeLocation(_ location: StorageLocation) {
+    public func removeLocation(_ location: StorageLocation) async {
         switch location.kind {
         case .smb:
             if let smb = location.smbConnection {
-                removeSavedConnection(smb)
+                await removeSavedConnection(smb)
             }
         case .localFolder, .iCloudFolder:
             if let folder = location.folderLocation {
@@ -281,7 +281,7 @@ public final class StorageLocationManager {
             guard let conn = location.smbConnection else { return }
             await disconnect()
             currentLocation = location
-            let pass = password(for: conn)
+            let pass = await password(for: conn)
             await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
             
         case .localFolder, .iCloudFolder:
@@ -390,7 +390,7 @@ public final class StorageLocationManager {
             }
             
             // Connection verified! Save server credentials for future use
-            saveValidatedConnection(host: cleanHost, user: user, pass: pass, hostname: hostname)
+            await saveValidatedConnection(host: cleanHost, user: user, pass: pass, hostname: hostname)
             if let saved = savedConnections.first(where: { $0.id == "\(user)@\(cleanHost)" }) {
                 self.currentLocation = StorageLocation(smb: saved)
             }
