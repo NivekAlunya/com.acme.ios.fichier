@@ -75,14 +75,14 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 
 ```mermaid
 flowchart LR
-    Request[Thumbnail Request] --> Tier1{Tier 1: RAM Cache<br/>ThreadSafeMemoryCache}
-    Tier1 -- Hit (0ms) --> Render[Render UI]
-    Tier1 -- Miss --> Tier2{Tier 2: Disk Cache<br/>MediaCacheManager}
-    Tier2 -- Hit (2-5ms) --> Promote[Promote to Tier 1] --> Render
-    Tier2 -- Miss --> Remote[Fetch via SMBClientActor / LocalActor]
-    Remote --> Downsample[Downsample to 420px Standard]
-    Downsample --> SaveDisk[Save to Tier 2 Disk]
-    Downsample --> SaveRAM[Save to Tier 1 RAM]
+    Request["Thumbnail Request"] --> Tier1{"Tier 1: RAM Cache<br/>ThreadSafeMemoryCache"}
+    Tier1 -->|"Hit (0ms)"| Render["Render UI"]
+    Tier1 -->|Miss| Tier2{"Tier 2: Disk Cache<br/>MediaCacheManager"}
+    Tier2 -->|"Hit (2-5ms)"| Promote["Promote to Tier 1"] --> Render
+    Tier2 -->|Miss| Remote["Fetch via SMBClientActor / LocalActor"]
+    Remote --> Downsample["Downsample to 420px Standard"]
+    Downsample --> SaveDisk["Save to Tier 2 Disk"]
+    Downsample --> SaveRAM["Save to Tier 1 RAM"]
     Downsample --> Render
 ```
 
@@ -237,25 +237,25 @@ fichier/
 ```mermaid
 flowchart TD
     subgraph MainActorContext["@MainActor UI & State Layer"]
-        V[SwiftUI Views<br/>VideoDetailView, MediaGridView, etc.]
-        M[StorageLocationManager<br/>@Observable UI Coordinator]
-        S[VideoPlaybackStore<br/>@Observable Playback Store]
-        F[FavoritesManager<br/>@Observable Favorites Store]
+        V["SwiftUI Views<br/>VideoDetailView, MediaGridView, etc."]
+        M["StorageLocationManager<br/>@Observable UI Coordinator"]
+        S["VideoPlaybackStore<br/>@Observable Playback Store"]
+        F["FavoritesManager<br/>@Observable Favorites Store"]
     end
 
     subgraph ActorBoundaries["Actor-Isolated Workers"]
-        A_SMB[SMBClientActor<br/>libsmb2 C engine wrapper]
-        A_LOC[LocalStorageActor<br/>Security-scoped bookmark worker]
-        A_PH[PhotoLibraryActor<br/>PHPhotoLibrary worker]
-        A_LIM[VideoThumbnailLimiter<br/>Concurrency throttle (Max: 2)]
-        A_TRK[ResourceLoadingTaskTracker<br/>Streaming task registry]
+        A_SMB["SMBClientActor<br/>libsmb2 C engine wrapper"]
+        A_LOC["LocalStorageActor<br/>Security-scoped bookmark worker"]
+        A_PH["PhotoLibraryActor<br/>PHPhotoLibrary worker"]
+        A_LIM["VideoThumbnailLimiter<br/>Concurrency throttle (Max: 2)"]
+        A_TRK["ResourceLoadingTaskTracker<br/>Streaming task registry"]
     end
 
     subgraph NativeFrameworks["OS & Protocol Layer"]
-        C_LIB[libsmb2 / TCP 445]
-        C_AV[AVPlayer / AVAssetResourceLoader]
-        C_FS[Local Filesystem / iCloud Drive]
-        C_PH[PhotoKit API]
+        C_LIB["libsmb2 / TCP 445"]
+        C_AV["AVPlayer / AVAssetResourceLoader"]
+        C_FS["Local Filesystem / iCloud Drive"]
+        C_PH["PhotoKit API"]
     end
 
     V <--> M

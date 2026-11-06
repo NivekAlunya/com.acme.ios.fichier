@@ -29,6 +29,9 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Underlying system `FileManager` reference.
     private var fileManager: FileManager { .default }
     
+    /// Isolated actor serializing all background disk mutations, file migrations, and evictions.
+    public let diskActor: MediaDiskCacheActor
+    
     /// Local directory storing JPEG downsampled thumbnails.
     private let thumbnailsDirectory: URL
     
@@ -53,6 +56,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         self.thumbnailsDirectory = thumbs
         self.videosDirectory = vids
         self.documentsDirectory = docs
+        self.diskActor = MediaDiskCacheActor.shared
         
         let attributes: [FileAttributeKey: Any] = [
             .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
@@ -61,8 +65,8 @@ nonisolated public final class MediaCacheManager: Sendable {
         try? fm.createDirectory(at: vids, withIntermediateDirectories: true, attributes: attributes)
         try? fm.createDirectory(at: docs, withIntermediateDirectories: true, attributes: attributes)
         
-        Task.detached(priority: .background) { [self] in
-            self.performMaintenanceSweep()
+        Task(priority: .background) { [self] in
+            await self.performMaintenanceSweepAsync()
         }
     }
     
@@ -178,12 +182,19 @@ nonisolated public final class MediaCacheManager: Sendable {
         return nil
     }
     
-    /// Asynchronously retrieves a cached thumbnail from disk on a detached worker queue.
+    /// Checks whether a cached thumbnail file exists on local disk for the given key.
+    ///
+    /// - Parameter key: The SHA-256 cache key.
+    /// - Returns: `true` if the thumbnail file is present; `false` otherwise.
+    public func hasThumbnail(for key: String) -> Bool {
+        let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
+        return fileManager.fileExists(atPath: fileURL.path)
+    }
+    
+    /// Asynchronously retrieves a cached thumbnail from disk on a background worker queue.
     public func getThumbnailAsync(for key: String, fallbackKey: String? = nil, legacyKey: String? = nil) async -> UIImage? {
-        await Task.detached(priority: .userInitiated) { [self] in
-            guard !Task.isCancelled else { return nil }
-            return self.getThumbnail(for: key, fallbackKey: fallbackKey, legacyKey: legacyKey)
-        }.value
+        guard !Task.isCancelled else { return nil }
+        return self.getThumbnail(for: key, fallbackKey: fallbackKey, legacyKey: legacyKey)
     }
     
     /// Writes an image thumbnail to disk as an atomic JPEG file (82% compression quality).
@@ -194,20 +205,46 @@ nonisolated public final class MediaCacheManager: Sendable {
     public func saveThumbnail(_ image: UIImage, for key: String) {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
         guard let data = image.jpegData(compressionQuality: 0.82) else { return }
-        try? data.write(to: fileURL, options: .atomic)
-    }
-    
-    /// Asynchronously saves an image thumbnail to disk on background utility QoS.
-    public func saveThumbnailAsync(_ image: UIImage, for key: String) {
-        Task.detached(priority: .utility) { [self] in
-            self.saveThumbnail(image, for: key)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            AppLog.storage.error("Failed to write thumbnail to disk: \(error.localizedDescription)")
         }
     }
     
-    /// Invalidates disk thumbnail and cached document copies for the provided media items.
+    /// Asynchronously saves an image thumbnail to disk isolated on `MediaDiskCacheActor`.
+    public func saveThumbnailAsync(_ image: UIImage, for key: String) {
+        let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
+        Task(priority: .utility) { [diskActor] in
+            guard let data = image.jpegData(compressionQuality: 0.82) else { return }
+            do {
+                try await diskActor.writeData(data, to: fileURL)
+            } catch {
+                AppLog.storage.error("Failed to write thumbnail asynchronously: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Asynchronously invalidates disk thumbnail and cached document copies on `MediaDiskCacheActor`.
+    ///
+    /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.
+    public func invalidateThumbnailCache(for items: [MediaItem]) async {
+        let targets = collectThumbnailURLsToRemove(for: items)
+        await diskActor.removeFiles(at: targets)
+    }
+    
+    /// Dispatches invalidation of disk thumbnail and cached document copies to `MediaDiskCacheActor`.
     ///
     /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.
     public func invalidateThumbnailCache(for items: [MediaItem]) {
+        let targets = collectThumbnailURLsToRemove(for: items)
+        Task(priority: .utility) { [diskActor] in
+            await diskActor.removeFiles(at: targets)
+        }
+    }
+    
+    private func collectThumbnailURLsToRemove(for items: [MediaItem]) -> [URL] {
+        var urlsToRemove: [URL] = []
         for item in items {
             let (photoDiskKey, photoFallbackKey, photoLegacyKey) = thumbnailKeys(
                 for: item.shareName,
@@ -218,7 +255,7 @@ nonisolated public final class MediaCacheManager: Sendable {
             let allKeys = [photoDiskKey, photoFallbackKey, photoLegacyKey].compactMap { $0 }
             for key in allKeys {
                 let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
-                try? fileManager.removeItem(at: fileURL)
+                urlsToRemove.append(fileURL)
             }
             if item.isVideo {
                 let (vidKey, vidFallback, vidLegacy) = thumbnailKeys(
@@ -230,19 +267,22 @@ nonisolated public final class MediaCacheManager: Sendable {
                 let vidKeys = [vidKey, vidFallback, vidLegacy].compactMap { $0 }
                 for key in vidKeys {
                     let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
-                    try? fileManager.removeItem(at: fileURL)
+                    urlsToRemove.append(fileURL)
                 }
             }
             if item.isPDF {
                 let docURL = localDocumentURL(for: item)
-                try? fileManager.removeItem(at: docURL)
+                urlsToRemove.append(docURL)
             }
         }
+        return urlsToRemove
     }
     
     // MARK: - Video Disk Cache
     
-    /// Resolves the canonical on-disk cached video URL for a media item, performing automatic legacy migrations.
+    /// Resolves the canonical on-disk cached video URL for a media item.
+    ///
+    /// Pure, side-effect-free path resolution without in-line file mutation.
     ///
     /// - Parameter item: The video `MediaItem`.
     /// - Returns: A file URL within `SMBVideos`.
@@ -250,18 +290,19 @@ nonisolated public final class MediaCacheManager: Sendable {
         let key = videoKey(for: item.shareName, path: item.path, connectionID: item.connectionID)
         let ext = (item.name as NSString).pathExtension.lowercased()
         let safeExt = ext.isEmpty ? "mp4" : ext
-        let url = videosDirectory.appendingPathComponent("\(key).\(safeExt)")
-        
-        // Migrate legacy video cache if present
-        if !item.connectionID.isEmpty && !fileManager.fileExists(atPath: url.path) {
-            let legacyKey = videoKey(for: item.shareName, path: item.path, connectionID: "")
-            let legacyURL = videosDirectory.appendingPathComponent("\(legacyKey).\(safeExt)")
-            if fileManager.fileExists(atPath: legacyURL.path) {
-                try? fileManager.moveItem(at: legacyURL, to: url)
-            }
-        }
-        
-        return url
+        return videosDirectory.appendingPathComponent("\(key).\(safeExt)")
+    }
+    
+    /// Asynchronously migrates legacy unscoped video caches to the scoped canonical path.
+    public func migrateLegacyVideoIfNeeded(for item: MediaItem) async {
+        guard !item.connectionID.isEmpty else { return }
+        let canonicalURL = localVideoURL(for: item)
+        guard !fileManager.fileExists(atPath: canonicalURL.path) else { return }
+        let ext = (item.name as NSString).pathExtension.lowercased()
+        let safeExt = ext.isEmpty ? "mp4" : ext
+        let legacyKey = videoKey(for: item.shareName, path: item.path, connectionID: "")
+        let legacyURL = videosDirectory.appendingPathComponent("\(legacyKey).\(safeExt)")
+        await diskActor.migrateFile(from: legacyURL, to: canonicalURL)
     }
     
     /// Checks whether a full video file is currently cached and complete on local disk.
@@ -485,11 +526,19 @@ nonisolated public final class MediaCacheManager: Sendable {
         evictThumbnailsIfNeeded(limitBytes: thumbLimit)
     }
     
-    /// Asynchronously runs `performMaintenanceSweep` on background utility QoS.
+    /// Asynchronously runs `performMaintenanceSweep` isolated on `MediaDiskCacheActor`.
     public func performMaintenanceSweepAsync(protecting: Set<URL> = []) async {
-        await Task.detached(priority: .utility) { [self] in
-            self.performMaintenanceSweep(protecting: protecting)
-        }.value
+        let freeSpace = systemAvailableFreeSpace()
+        let isLowDiskSpace = freeSpace < 1_500_000_000
+        
+        let videoLimit: Int64 = isLowDiskSpace ? 400_000_000 : 2_000_000_000
+        let docLimit: Int64 = isLowDiskSpace ? 200_000_000 : 1_000_000_000
+        let thumbLimit: Int64 = isLowDiskSpace ? 100_000_000 : 300_000_000
+        
+        await diskActor.cleanOrphanedPartFiles(in: [videosDirectory, documentsDirectory])
+        await diskActor.evictFilesIfNeeded(in: videosDirectory, limitBytes: videoLimit, keeping: protecting)
+        await diskActor.evictFilesIfNeeded(in: documentsDirectory, limitBytes: docLimit, keeping: protecting)
+        await diskActor.evictFilesIfNeeded(in: thumbnailsDirectory, limitBytes: thumbLimit)
     }
     
     /// Evicts oldest cached video files (FIFO) if total video cache size exceeds `limitBytes` (default 2 GB).
@@ -617,11 +666,9 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    /// Computes aggregate cache size in bytes asynchronously on background utility QoS.
+    /// Computes aggregate cache size in bytes asynchronously isolated on `MediaDiskCacheActor`.
     public func calculateTotalCacheSize() async -> Int64 {
-        await Task.detached(priority: .utility) { [self] in
-            self.calculateTotalCacheSizeInternal()
-        }.value
+        await diskActor.calculateTotalSize(in: [thumbnailsDirectory, videosDirectory, documentsDirectory])
     }
     
     /// Internal synchronous summation of file sizes across thumbnail and video cache directories.
@@ -676,10 +723,9 @@ nonisolated public final class MediaCacheManager: Sendable {
         try? fileManager.createDirectory(at: documentsDirectory, withIntermediateDirectories: true, attributes: attributes)
     }
     
-    /// Asynchronous wrapper for `clearAllCache` executed on background utility QoS.
+    /// Asynchronous wrapper for `clearAllCache` executed safely on `MediaDiskCacheActor`.
     public func clearAllCacheAsync(protecting: Set<URL> = []) async {
-        await Task.detached(priority: .utility) { [self] in
-            self.clearAllCache(protecting: protecting)
-        }.value
+        await diskActor.clearDirectories([thumbnailsDirectory, documentsDirectory], protectedURLs: [])
+        await diskActor.clearDirectories([videosDirectory], protectedURLs: protecting)
     }
 }

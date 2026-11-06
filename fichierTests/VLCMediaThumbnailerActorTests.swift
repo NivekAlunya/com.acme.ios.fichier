@@ -4,6 +4,7 @@
 //
 
 #if DEBUG && canImport(XCTest)
+import CoreMedia
 import XCTest
 @testable import fichier
 

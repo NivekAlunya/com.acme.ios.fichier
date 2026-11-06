@@ -23,7 +23,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "com.acme.ios.fichier"
+            "value" : "fichier"
           }
         }
       },
@@ -48,7 +48,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "We need access to your local network to discover your Mac mini and Samba shares."
+            "value" : "We need access to your local network to discover and connect to your Mac and Samba shares."
           }
         },
         "es" : {

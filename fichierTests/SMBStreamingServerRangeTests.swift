@@ -5,7 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
-@testable import com_acme_ios_fichier
+@testable import fichier
 
 final class SMBStreamingServerRangeTests: XCTestCase {
     func testValidBoundedRange() {

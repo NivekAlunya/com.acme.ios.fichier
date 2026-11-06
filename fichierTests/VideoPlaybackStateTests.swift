@@ -5,7 +5,9 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+@testable import fichier
 
+@MainActor
 final class VideoPlaybackStateTests: XCTestCase {
     func testPlaybackStateEquality() {
         let testItem = MediaItem(

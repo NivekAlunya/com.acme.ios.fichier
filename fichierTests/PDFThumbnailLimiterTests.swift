@@ -1,5 +1,5 @@
 //
-//  VideoThumbnailLimiterTests.swift
+//  PDFThumbnailLimiterTests.swift
 //  fichier
 //
 
@@ -7,17 +7,17 @@
 import XCTest
 @testable import fichier
 
-final class VideoThumbnailLimiterTests: XCTestCase {
+final class PDFThumbnailLimiterTests: XCTestCase {
     func testPermitAcquisitionAndRelease() async throws {
-        let limiter = VideoThumbnailLimiter(maxConcurrent: 1)
+        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
         let result = try await limiter.withPermit {
-            100
+            42
         }
-        XCTAssertEqual(result, 100)
+        XCTAssertEqual(result, 42)
     }
     
     func testReleasesPermitOnTaskCancellationWhileQueued() async {
-        let limiter = VideoThumbnailLimiter(maxConcurrent: 1)
+        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
         
         let acquired = expectation(description: "Task 1 acquired permit")
         let task1 = Task {
@@ -59,8 +59,9 @@ final class VideoThumbnailLimiterTests: XCTestCase {
     }
     
     func testPreCancelledTaskThrowsCancellationError() async {
-        let limiter = VideoThumbnailLimiter(maxConcurrent: 1)
+        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
         let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
             try await limiter.withPermit {
                 XCTFail("Should not execute")
             }

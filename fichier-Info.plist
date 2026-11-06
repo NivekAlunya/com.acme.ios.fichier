@@ -6,6 +6,8 @@
 	<array>
 		<string>_smb._tcp</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>We need access to your local network to discover and connect to your Mac and Samba shares.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Browse and view photos and videos from your Photos library.</string>
 	<key>UIBackgroundModes</key>

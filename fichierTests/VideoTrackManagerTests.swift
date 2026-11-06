@@ -5,6 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+@testable import fichier
 
 @MainActor
 final class VideoTrackManagerTests: XCTestCase {

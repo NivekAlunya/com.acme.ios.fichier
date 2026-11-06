@@ -7,6 +7,7 @@
 import XCTest
 import PDFKit
 import UIKit
+@testable import fichier
 
 @MainActor
 final class PDFKitCoordinatorTests: XCTestCase {
