@@ -25,6 +25,11 @@ All implementations adhere strictly to:
 | **9. Local Network Privacy** | **Resolved** | Added `NSLocalNetworkUsageDescription` directly to `fichier-Info.plist`. |
 | **10. Background Audio Mode** | **Resolved** | Validated as necessary and legitimate for Picture-in-Picture (`AVPictureInPictureController`). |
 | **11. Latent Bug Rectifications** | **Resolved** | Fixed 5 bugs uncovered during unit testing in `VideoSeekCoordinator`, `VideoPlayerController`, `StorageLocationManager`, and test suites. |
+| **12. Team ID Portability** | **Resolved** | Parameterized `DEVELOPMENT_TEAM` across target configurations in `project.pbxproj`. |
+| **13. Actor-Isolated Cache Invalidation** | **Resolved** | Routed `MediaCacheManager.invalidateThumbnailCache` through `MediaDiskCacheActor.removeFiles(at:)`. |
+| **14. Root Folder Fallback Logic** | **Resolved** | Handled empty path components in `FolderNavigationCoordinator.deriveParentFolder` to prevent root self-loops. |
+| **15. Off-Main-Thread JPEG Encoding** | **Resolved** | Moved `image.jpegData` compression inside utility Task in `MediaCacheManager.saveThumbnailAsync`. |
+| **16. List View Pinch-Out** | **Resolved** | Re-attached `.simultaneousGesture(pinchGesture)` to `MediaListModeView` to restore transition to compact grid. |
 
 ---
 
@@ -260,9 +265,31 @@ During test runs on the iOS 17 simulator, 5 bugs were uncovered and rectified:
 
 ---
 
+### 12. Post-Audit Review Feedback Remediation
+
+Four additional findings raised during code review were validated and resolved:
+
+1. **Parameterize Developer Team ID in [`project.pbxproj`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier.xcodeproj/project.pbxproj)**:
+   - *Finding*: Hardcoded `DEVELOPMENT_TEAM = ZNX5M2PWBX` was duplicated across Debug and Release configurations for both targets.
+   - *Remediation*: Parameterized to `DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";` to support multi-developer workflows and automated CI/CD signing.
+2. **Actor-Isolated Thumbnail Cache Invalidation in [`MediaCacheManager.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/MediaCacheManager.swift)**:
+   - *Finding*: `invalidateThumbnailCache` bypassed `MediaDiskCacheActor`, executing raw `fileManager.removeItem(at:)` synchronously on the caller thread.
+   - *Remediation*: Delegated all file deletions to [`MediaDiskCacheActor.removeFiles(at:)`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/MediaDiskCacheActor.swift#L67-L76), adding both async `invalidateThumbnailCache(for:) async` and a utility Task dispatch for sync callers. Updated [`StorageLocationManager.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/StorageLocationManager.swift) to await invalidation before refreshing cache size.
+3. **Empty / Root Path Handling in [`FolderNavigationCoordinator.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/FolderNavigationCoordinator.swift)**:
+   - *Finding*: When path components were empty or root (e.g. `""`, `"/"`, `"/../"`), `safeComponents.count <= 1` evaluated to `true`, returning a synthesized root item instead of `nil`.
+   - *Remediation*: Added `guard !safeComponents.isEmpty else { return nil }` and checked `safeComponents.count == 1` for single-depth folders. Added unit test `testDeriveParentFolderForEmptyOrRootPathReturnsNil` in [`FolderNavigationCoordinatorTests.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichierTests/FolderNavigationCoordinatorTests.swift).
+4. **Off-Main-Thread JPEG Encoding in [`MediaCacheManager.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Core/Storage/MediaCacheManager.swift)**:
+   - *Finding*: Synchronous `image.jpegData(compressionQuality: 0.82)` ran on the caller thread before entering the background Task, risking UI stutter.
+   - *Remediation*: Moved JPEG compression inside `Task(priority: .utility) { [diskActor] in ... }`.
+5. **Restore Pinch-to-Zoom Expansion on List View in [`MediaGridView.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/Gallery/MediaGridView.swift)**:
+   - *Finding*: Following decomposition of `MediaGridView`, `.simultaneousGesture(pinchGesture)` was attached to `MediaGridModeView` but inadvertently omitted from `MediaListModeView`, disabling the pinch-out transition from list mode into compact grid.
+   - *Remediation*: Re-attached `.simultaneousGesture(pinchGesture)` to `MediaListModeView` in [`MediaGridView.swift`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/fichier/Features/Gallery/MediaGridView.swift#L293).
+
+---
+
 ## Verification Summary
 
 - **`swiftlint lint`**: **0 violations, 0 serious in 95 files**.
 - **`xcodebuild build`**: **BUILD SUCCEEDED** for both app target `fichier` and test bundle `fichierTests`.
-- **`xcodebuild test-without-building`**: **100% passed across all 16 test suites** (**TEST EXECUTE SUCCEEDED**).
+- **`xcodebuild test`**: **100% passed across all 16 test suites** (**TEST SUCCEEDED**).
 - **Git State**: Clean working tree with all modifications left uncommitted for your review.

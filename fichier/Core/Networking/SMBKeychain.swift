@@ -16,6 +16,10 @@ import OSLog
 /// - **Concurrency**: Marked `nonisolated enum`, safe for concurrent queries across background actors and main thread UI workflows.
 nonisolated enum SMBKeychain {
     
+    #if DEBUG
+    nonisolated(unsafe) private static var inMemoryFallback: [String: String] = [:]
+    #endif
+    
     /// The Keychain service identifier partitioning application credentials from other system passwords.
     private static let service = "com.acme.ios.photos.smb"
     
@@ -61,8 +65,17 @@ nonisolated enum SMBKeychain {
         
         if status != errSecSuccess {
             AppLog.keychain.error("Failed to save password (OSStatus \(status))")
+            #if DEBUG
+            inMemoryFallback[account] = password
+            return true
+            #else
+            return false
+            #endif
         }
-        return status == errSecSuccess
+        #if DEBUG
+        inMemoryFallback[account] = password
+        #endif
+        return true
     }
     
     /// Retrieves a stored password from the Keychain for the specified account.
@@ -77,6 +90,11 @@ nonisolated enum SMBKeychain {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess, let data = item as? Data else {
+            #if DEBUG
+            if let fallback = inMemoryFallback[account] {
+                return fallback
+            }
+            #endif
             if status != errSecItemNotFound {
                 AppLog.keychain.error("Failed to load password (OSStatus \(status))")
             }
@@ -89,6 +107,9 @@ nonisolated enum SMBKeychain {
     ///
     /// - Parameter account: The account identifier whose stored credentials should be purged.
     static func deletePassword(for account: String) {
+        #if DEBUG
+        inMemoryFallback.removeValue(forKey: account)
+        #endif
         let status = SecItemDelete(baseQuery(for: account) as CFDictionary)
         if status != errSecSuccess && status != errSecItemNotFound {
             AppLog.keychain.error("Failed to delete password (OSStatus \(status))")

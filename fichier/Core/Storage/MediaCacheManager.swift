@@ -215,8 +215,8 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Asynchronously saves an image thumbnail to disk isolated on `MediaDiskCacheActor`.
     public func saveThumbnailAsync(_ image: UIImage, for key: String) {
         let fileURL = thumbnailsDirectory.appendingPathComponent("\(key).jpg")
-        guard let data = image.jpegData(compressionQuality: 0.82) else { return }
         Task(priority: .utility) { [diskActor] in
+            guard let data = image.jpegData(compressionQuality: 0.82) else { return }
             do {
                 try await diskActor.writeData(data, to: fileURL)
             } catch {
@@ -225,10 +225,25 @@ nonisolated public final class MediaCacheManager: Sendable {
         }
     }
     
-    /// Invalidates disk thumbnail and cached document copies for the provided media items.
+    /// Asynchronously invalidates disk thumbnail and cached document copies on `MediaDiskCacheActor`.
+    ///
+    /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.
+    public func invalidateThumbnailCache(for items: [MediaItem]) async {
+        let targets = collectThumbnailURLsToRemove(for: items)
+        await diskActor.removeFiles(at: targets)
+    }
+    
+    /// Dispatches invalidation of disk thumbnail and cached document copies to `MediaDiskCacheActor`.
     ///
     /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.
     public func invalidateThumbnailCache(for items: [MediaItem]) {
+        let targets = collectThumbnailURLsToRemove(for: items)
+        Task(priority: .utility) { [diskActor] in
+            await diskActor.removeFiles(at: targets)
+        }
+    }
+    
+    private func collectThumbnailURLsToRemove(for items: [MediaItem]) -> [URL] {
         var urlsToRemove: [URL] = []
         for item in items {
             let (photoDiskKey, photoFallbackKey, photoLegacyKey) = thumbnailKeys(
@@ -260,9 +275,7 @@ nonisolated public final class MediaCacheManager: Sendable {
                 urlsToRemove.append(docURL)
             }
         }
-        for url in urlsToRemove {
-            try? fileManager.removeItem(at: url)
-        }
+        return urlsToRemove
     }
     
     // MARK: - Video Disk Cache

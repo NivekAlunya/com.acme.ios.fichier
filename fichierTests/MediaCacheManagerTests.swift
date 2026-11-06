@@ -99,7 +99,7 @@ final class MediaCacheManagerTests: XCTestCase {
         XCTAssertNil(thumb, "Corrupted data must safely return nil without crashing")
     }
     
-    func testPDFThumbnailCacheInvalidationPurgesFiles() {
+    func testPDFThumbnailCacheInvalidationPurgesFiles() async {
         let manager = MediaCacheManager.shared
         let item = MediaItem(
             locationID: "test_loc",
@@ -122,7 +122,7 @@ final class MediaCacheManagerTests: XCTestCase {
         manager.saveThumbnail(sampleImage, for: diskKey)
         XCTAssertTrue(manager.hasThumbnail(for: diskKey))
         
-        manager.invalidateThumbnailCache(for: [item])
+        await manager.invalidateThumbnailCache(for: [item])
         XCTAssertFalse(manager.hasThumbnail(for: diskKey), "Thumbnail file must be deleted after cache invalidation")
     }
     

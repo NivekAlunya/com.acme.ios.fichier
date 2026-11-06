@@ -1180,7 +1180,7 @@ public final class StorageLocationManager {
         let items = pictures
         guard !items.isEmpty else { return }
         
-        MediaCacheManager.shared.invalidateThumbnailCache(for: items)
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
         
         let ids = items.map(\.id)
         await worker.removeThumbnailsFromMemory(for: ids)

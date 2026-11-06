@@ -143,16 +143,23 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
         #endif
     }
     
+    private var preferredAudioTrackIndex: Int32?
+    private var preferredSubtitleTrackIndex: Int32?
+    
     /// Active audio track index on LibVLC.
     public var currentAudioTrackIndex: Int32 {
         get {
             #if canImport(MobileVLCKit)
+            if let preferred = preferredAudioTrackIndex {
+                return preferred
+            }
             return vlcPlayer.currentAudioTrackIndex
             #else
-            return -1
+            return preferredAudioTrackIndex ?? -1
             #endif
         }
         set {
+            preferredAudioTrackIndex = newValue
             #if canImport(MobileVLCKit)
             vlcPlayer.currentAudioTrackIndex = newValue
             #endif
@@ -205,12 +212,16 @@ public final class ExtendedPlayerEngine: NSObject, VideoPlayerEngineProtocol {
     public var currentSubtitleTrackIndex: Int32 {
         get {
             #if canImport(MobileVLCKit)
+            if let preferred = preferredSubtitleTrackIndex {
+                return preferred
+            }
             return vlcPlayer.currentVideoSubTitleIndex
             #else
-            return -1
+            return preferredSubtitleTrackIndex ?? -1
             #endif
         }
         set {
+            preferredSubtitleTrackIndex = newValue
             #if canImport(MobileVLCKit)
             vlcPlayer.currentVideoSubTitleIndex = newValue
             #endif

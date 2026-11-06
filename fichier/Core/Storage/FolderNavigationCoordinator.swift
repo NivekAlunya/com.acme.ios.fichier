@@ -112,7 +112,9 @@ public final class FolderNavigationCoordinator {
         let rawComponents = normalizedPath.split(separator: "/").map(String.init)
         let safeComponents = rawComponents.filter { $0 != "." && $0 != ".." && !$0.isEmpty }
         
-        if safeComponents.count <= 1 {
+        guard !safeComponents.isEmpty else { return nil }
+        
+        if safeComponents.count == 1 {
             return MediaItem(
                 locationID: item.locationID,
                 name: item.rootName,

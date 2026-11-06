@@ -83,5 +83,16 @@ final class FolderNavigationCoordinatorTests: XCTestCase {
         let safeParent = coordinator.deriveParentFolder(for: traversalItem)
         XCTAssertEqual(safeParent?.path, "/Folder/Folder")
     }
+    
+    func testDeriveParentFolderForEmptyOrRootPathReturnsNil() {
+        let rootItem = MediaItem(locationID: "smb_1", name: "Share", rootName: "Share", path: "/", isDirectory: true)
+        XCTAssertNil(coordinator.deriveParentFolder(for: rootItem))
+        
+        let emptyItem = MediaItem(locationID: "smb_1", name: "Share", rootName: "Share", path: "", isDirectory: true)
+        XCTAssertNil(coordinator.deriveParentFolder(for: emptyItem))
+        
+        let traversalOnly = MediaItem(locationID: "smb_1", name: "Share", rootName: "Share", path: "/../../.", isDirectory: true)
+        XCTAssertNil(coordinator.deriveParentFolder(for: traversalOnly))
+    }
 }
 #endif

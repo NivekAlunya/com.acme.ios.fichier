@@ -290,6 +290,7 @@ struct MediaGridView: View {
                                     }
                                 }
                             )
+                            .simultaneousGesture(pinchGesture)
                             .transition(.opacity)
                         }
                     }
