@@ -106,11 +106,11 @@ public final class StorageLocationManager {
     /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
     private let pdfThumbnailLimiter = PDFThumbnailLimiter()
     
-    /// UserDefaults key for persisted SMB connection records.
-    private let savedConnectionsKey = "SavedSMBServerConnections_v2"
+    /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
+    private let persistenceStore = StorageLocationPersistenceStore()
     
-    /// UserDefaults key for persisted local folder bookmarks.
-    private let savedFolderLocationsKey = "SavedFolderLocations_v1"
+    /// Navigation coordinator handling root boundary checks and tree hierarchy derivation.
+    private let navigationCoordinator = FolderNavigationCoordinator()
     
     /// Initializes the manager, restoring saved connections and registering lifecycle observers.
     public init() {
@@ -158,12 +158,7 @@ public final class StorageLocationManager {
     
     /// Loads and decodes persisted SMB connections from `UserDefaults`.
     private func loadSavedConnections() {
-        guard let data = UserDefaults.standard.data(forKey: savedConnectionsKey),
-              let decoded = try? JSONDecoder().decode([SavedSMBConnection].self, from: data) else {
-            savedConnections = []
-            return
-        }
-        savedConnections = decoded.sorted { $0.lastConnected > $1.lastConnected }
+        savedConnections = persistenceStore.loadSavedConnections()
     }
     
     /// Retrieves the stored password from the secure Keychain for a given SMB connection.
@@ -171,7 +166,7 @@ public final class StorageLocationManager {
     /// - Parameter connection: The saved connection metadata.
     /// - Returns: The decrypted password, or an empty string if missing.
     public func password(for connection: SavedSMBConnection) -> String {
-        SMBKeychain.loadPassword(for: connection.id) ?? ""
+        persistenceStore.password(for: connection)
     }
     
     /// Stores or updates a validated SMB connection record in `UserDefaults` and saves its password to the Keychain.
@@ -182,39 +177,24 @@ public final class StorageLocationManager {
     ///   - pass: Plaintext password to store in Keychain.
     ///   - hostname: Optional Bonjour or NetBIOS display hostname.
     private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) {
-        let existingHostname = savedConnections.first(where: { $0.id == "\(user)@\(host)" })?.hostname
-        let finalHostname = hostname ?? existingHostname
-        
-        let newEntry = SavedSMBConnection(
+        savedConnections = persistenceStore.saveValidatedConnection(
             host: host,
-            username: user,
-            lastConnected: Date(),
-            hostname: finalHostname
+            user: user,
+            pass: pass,
+            hostname: hostname,
+            existingConnections: savedConnections
         )
-        SMBKeychain.savePassword(pass, for: newEntry.id)
-        
-        var updated = savedConnections.filter { $0.id != newEntry.id }
-        updated.insert(newEntry, at: 0)
-        savedConnections = updated
-        
-        if let encoded = try? JSONEncoder().encode(updated) {
-            UserDefaults.standard.set(encoded, forKey: savedConnectionsKey)
-        }
     }
     
     /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
     ///
     /// - Parameter connection: The connection to remove.
     public func removeSavedConnection(_ connection: SavedSMBConnection) {
-        SMBKeychain.deletePassword(for: connection.id)
-        savedConnections.removeAll { $0.id == connection.id }
+        savedConnections = persistenceStore.removeSavedConnection(connection, from: savedConnections)
         if currentLocation?.smbConnection?.id == connection.id {
             Task {
                 await disconnect()
             }
-        }
-        if let encoded = try? JSONEncoder().encode(savedConnections) {
-            UserDefaults.standard.set(encoded, forKey: savedConnectionsKey)
         }
     }
     
@@ -234,38 +214,25 @@ public final class StorageLocationManager {
     
     /// Loads and decodes local folder bookmarks from `UserDefaults`.
     private func loadSavedFolderLocations() {
-        guard let data = UserDefaults.standard.data(forKey: savedFolderLocationsKey),
-              let decoded = try? JSONDecoder().decode([SavedFolderLocation].self, from: data) else {
-            savedFolderLocations = []
-            return
-        }
-        savedFolderLocations = decoded.sorted { $0.dateAdded > $1.dateAdded }
+        savedFolderLocations = persistenceStore.loadSavedFolderLocations()
     }
     
     /// Appends or updates a saved local folder location and persists it to `UserDefaults`.
     ///
     /// - Parameter location: The folder location record containing security-scoped bookmark data.
     public func addSavedFolderLocation(_ location: SavedFolderLocation) {
-        var updated = savedFolderLocations.filter { $0.id != location.id }
-        updated.insert(location, at: 0)
-        savedFolderLocations = updated
-        if let encoded = try? JSONEncoder().encode(updated) {
-            UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
-        }
+        savedFolderLocations = persistenceStore.addSavedFolderLocation(location, into: savedFolderLocations)
     }
     
     /// Removes a saved local folder location from `UserDefaults` and disconnects if it is active.
     ///
     /// - Parameter location: The folder location to remove.
     public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
-        savedFolderLocations.removeAll { $0.id == location.id }
+        savedFolderLocations = persistenceStore.removeSavedFolderLocation(location, from: savedFolderLocations)
         if currentLocation?.folderLocation?.id == location.id {
             Task {
                 await disconnect()
             }
-        }
-        if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
-            UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
         }
     }
     
@@ -275,19 +242,11 @@ public final class StorageLocationManager {
     ///   - bookmarkData: The updated binary bookmark data.
     ///   - folderLocation: The target location record.
     private func updateBookmarkData(_ bookmarkData: Data, for folderLocation: SavedFolderLocation) {
-        if let index = savedFolderLocations.firstIndex(where: { $0.id == folderLocation.id }) {
-            let updated = SavedFolderLocation(
-                id: folderLocation.id,
-                name: folderLocation.name,
-                bookmarkData: bookmarkData,
-                isICloud: folderLocation.isICloud,
-                dateAdded: folderLocation.dateAdded
-            )
-            savedFolderLocations[index] = updated
-            if let encoded = try? JSONEncoder().encode(savedFolderLocations) {
-                UserDefaults.standard.set(encoded, forKey: savedFolderLocationsKey)
-            }
-        }
+        savedFolderLocations = persistenceStore.updateBookmarkData(
+            bookmarkData,
+            for: folderLocation,
+            in: savedFolderLocations
+        )
     }
     
     /// Dispatches location deletion to the appropriate backend store.
@@ -652,37 +611,12 @@ public final class StorageLocationManager {
     /// - Parameter item: The media item folder to inspect.
     /// - Returns: `true` if the folder cannot be navigated above; `false` otherwise.
     public func isRootFolder(_ item: MediaItem) -> Bool {
-        if item.locationID == StorageLocation.photosLocationID {
-            return item.path.isEmpty
-        }
-        if item.localURL != nil {
-            return item.path.isEmpty
-        }
-        // SMB root share is "/" or empty
-        return item.path == "/" || item.path.isEmpty
+        navigationCoordinator.isRootFolder(item)
     }
     
     /// Recomputes and caches the parent folder of the currently selected folder.
-    ///
-    /// Employs a fast-path lookup in the existing `folderTree`, falling back to path-string decomposition
-    /// (`deriveParentFolder`) when the parent node has not been lazily expanded in the tree.
     public func updateParentFolder() {
-        guard let current = selectedFolder else {
-            parentFolder = nil
-            return
-        }
-        
-        if isRootFolder(current) {
-            parentFolder = nil
-            return
-        }
-        
-        if let treeParent = findParentInTree(for: current, in: folderTree) {
-            parentFolder = treeParent
-            return
-        }
-        
-        parentFolder = deriveParentFolder(for: current)
+        parentFolder = navigationCoordinator.resolveParentFolder(for: selectedFolder, in: folderTree)
     }
     
     /// Recursively searches the expanded tree hierarchy to locate the immediate parent of a target node.
@@ -691,76 +625,16 @@ public final class StorageLocationManager {
     ///   - target: The child item whose parent is sought.
     ///   - nodes: The tree nodes to search.
     /// - Returns: The parent `MediaItem` if discovered in the tree, or `nil`.
-    private func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
-        for node in nodes {
-            guard let children = node.children else { continue }
-            if children.contains(where: { $0.id == target.id }) {
-                return node
-            }
-            if let found = findParentInTree(for: target, in: children) {
-                return found
-            }
-        }
-        return nil
+    public func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
+        navigationCoordinator.findParentInTree(for: target, in: nodes)
     }
     
     /// Synthesizes a parent `MediaItem` using path-based string surgery when tree metadata is unavailable.
     ///
-    /// Sanitizes path components against traversal tokens (`.` and `..`), normalizes path delimiters,
-    /// and formats root or directory representations suitable for navigation.
-    ///
     /// - Parameter item: The child folder item.
     /// - Returns: The derived parent `MediaItem`, or `nil` if already at root.
     public func deriveParentFolder(for item: MediaItem) -> MediaItem? {
-        if item.locationID == StorageLocation.photosLocationID {
-            return folderTree.first ?? MediaItem(
-                locationID: StorageLocation.photosLocationID,
-                name: String(localized: .Strings.sidebarLocationPhotos),
-                rootName: "Photos",
-                path: "",
-                isDirectory: true
-            )
-        }
-        
-        if let localURL = item.localURL {
-            let parentURL = localURL.deletingLastPathComponent()
-            let parentPath = (item.path as NSString).deletingLastPathComponent
-            let parentName = parentPath.isEmpty ? item.rootName : parentURL.lastPathComponent
-            return MediaItem(
-                locationID: item.locationID,
-                name: parentName,
-                rootName: item.rootName,
-                path: parentPath,
-                isDirectory: true,
-                localURL: parentURL
-            )
-        }
-        
-        // SMB: Normalize Windows backslashes and filter traversal tokens
-        let normalizedPath = item.path.replacingOccurrences(of: "\\", with: "/")
-        let rawComponents = normalizedPath.split(separator: "/").map(String.init)
-        let safeComponents = rawComponents.filter { $0 != "." && $0 != ".." && !$0.isEmpty }
-        
-        if safeComponents.count <= 1 {
-            return MediaItem(
-                locationID: item.locationID,
-                name: item.rootName,
-                rootName: item.rootName,
-                path: "/",
-                isDirectory: true
-            )
-        } else {
-            let parentComponents = safeComponents.dropLast()
-            let parentPath = "/" + parentComponents.joined(separator: "/")
-            let parentName = parentComponents.last ?? item.rootName
-            return MediaItem(
-                locationID: item.locationID,
-                name: parentName,
-                rootName: item.rootName,
-                path: parentPath,
-                isDirectory: true
-            )
-        }
+        navigationCoordinator.deriveParentFolder(for: item, in: folderTree)
     }
     
     // MARK: - Download Picture / Thumbnail
@@ -1310,6 +1184,9 @@ public final class StorageLocationManager {
         
         let ids = items.map(\.id)
         await worker.removeThumbnailsFromMemory(for: ids)
+        for id in ids {
+            thumbnailVersions[id, default: 0] += 1
+        }
         
         await refreshMediaCacheSize()
     }

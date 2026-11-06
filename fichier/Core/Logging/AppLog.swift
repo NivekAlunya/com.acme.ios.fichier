@@ -29,6 +29,9 @@ nonisolated enum AppLog {
     /// Unified logger dedicated to PhotoKit authorization, asset creation, and library export tasks.
     static let photos = Logger(subsystem: subsystem, category: "photos")
     
+    /// Unified logger dedicated to on-disk caching, file migrations, directory sweeps, and eviction operations.
+    static let storage = Logger(subsystem: subsystem, category: "storage")
+    
     /// Unified logger dedicated to Keychain credential storage, password lookups, and security query execution.
     static let keychain = Logger(subsystem: subsystem, category: "keychain")
 }
