@@ -5,6 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+@testable import fichier
 
 final class SupportedMediaTypesTests: XCTestCase {
     func testPDFTypeSupport() {

@@ -116,7 +116,9 @@ final class MediaCacheManagerTests: XCTestCase {
             connectionID: item.connectionID
         )
         
-        let sampleImage = UIImage()
+        let sampleImage = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { ctx in
+            ctx.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
         manager.saveThumbnail(sampleImage, for: diskKey)
         XCTAssertTrue(manager.hasThumbnail(for: diskKey))
         

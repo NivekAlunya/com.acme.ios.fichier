@@ -127,8 +127,8 @@ final class StorageLocationManagerTests: XCTestCase {
         )
         let parent = manager.deriveParentFolder(for: windowsItem)
         XCTAssertNotNil(parent)
-        XCTAssertEqual(parent?.name, "Share")
-        XCTAssertEqual(parent?.path, "/")
+        XCTAssertEqual(parent?.name, "Folder")
+        XCTAssertEqual(parent?.path, "/Folder")
         
         // Path with traversal components ignored
         let traversalItem = MediaItem(
