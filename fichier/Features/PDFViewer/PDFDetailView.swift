@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import SwiftUI
 import PDFKit
 
@@ -559,3 +560,5 @@ struct PDFDetailView: View {
         }
     }
 }
+
+#endif // !os(tvOS)

@@ -72,6 +72,7 @@ public struct VideoVolumeBar: View {
                 }
                 .frame(height: geo.size.height)
                 .contentShape(Rectangle())
+                #if !os(tvOS)
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
@@ -82,6 +83,7 @@ public struct VideoVolumeBar: View {
                             volume = fraction
                         }
                 )
+                #endif
             }
             .frame(width: 60, height: 20)
             .accessibilityElement(children: .ignore)

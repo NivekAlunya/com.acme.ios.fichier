@@ -295,6 +295,7 @@ public struct VideoPlayerTopBarView: View {
                 .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save video to Photos"))
             }
             
+            #if !os(tvOS)
             if let shareableVideoURL = controller.shareableVideoURL {
                 ShareLink(
                     item: shareableVideoURL,
@@ -309,6 +310,7 @@ public struct VideoPlayerTopBarView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "Share Video", comment: "Accessibility label to share video"))
             }
+            #endif
             
             AirPlayButtonView()
                 .frame(width: 30, height: 30)

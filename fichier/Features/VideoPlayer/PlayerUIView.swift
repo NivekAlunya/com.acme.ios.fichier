@@ -46,18 +46,22 @@ public final class PlayerUIView: UIView, UIGestureRecognizerDelegate {
         isUserInteractionEnabled = true
         
         let singleTap = UITapGestureRecognizer(target: self, action: #selector(handleSingleTap(_:)))
+        #if !os(tvOS)
         singleTap.numberOfTouchesRequired = 1
+        #endif
         singleTap.numberOfTapsRequired = 1
         singleTap.cancelsTouchesInView = false
         singleTap.delegate = self
         addGestureRecognizer(singleTap)
         
+        #if !os(tvOS)
         let twoFingerTap = UITapGestureRecognizer(target: self, action: #selector(handleTwoFingerTap(_:)))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.numberOfTapsRequired = 1
         twoFingerTap.cancelsTouchesInView = false
         twoFingerTap.delegate = self
         addGestureRecognizer(twoFingerTap)
+        #endif
     }
     
     @objc private func handleSingleTap(_ recognizer: UITapGestureRecognizer) {

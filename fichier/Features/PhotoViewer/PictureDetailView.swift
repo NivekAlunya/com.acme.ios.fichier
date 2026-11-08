@@ -114,6 +114,7 @@ public struct PictureDetailView: View {
                     .transition(activeTransition)
                 }
                 .contentShape(Rectangle())
+                #if !os(tvOS)
                 .gesture(
                     DragGesture(minimumDistance: 25)
                         .onEnded { value in
@@ -130,6 +131,7 @@ public struct PictureDetailView: View {
                             }
                         }
                 )
+                #endif
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
                 TabView(selection: $currentItem) {
@@ -223,7 +225,9 @@ public struct PictureDetailView: View {
                 PictureInfoSheet(metadata: meta, item: currentItem)
             } else {
                 ProgressView(.Strings.photoViewerReadingMetadata)
+                    #if !os(tvOS)
                     .presentationDetents([.medium])
+                    #endif
             }
         }
         // Automatic Slideshow loop (Resets timer cleanly whenever user swipes or changes picture)
@@ -272,6 +276,7 @@ public struct PictureDetailView: View {
                 }
             }
         }
+        #if !os(tvOS)
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac
             Group {
@@ -302,6 +307,7 @@ public struct PictureDetailView: View {
             .opacity(0)
             .allowsHitTesting(false)
         }
+        #endif
     }
     
     /// Dynamically constructs the transition animation based on user preference and trajectory direction.

@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import SwiftUI
 import PDFKit
 
@@ -33,3 +34,5 @@ public struct PDFPageCanvasRepresentable: UIViewRepresentable {
         }
     }
 }
+
+#endif // !os(tvOS)

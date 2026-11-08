@@ -30,7 +30,11 @@ struct SidebarFolderTreeView: View {
                 }
             }
         }
+        #if os(tvOS)
+        .listStyle(.plain)
+        #else
         .listStyle(.sidebar)
+        #endif
         .refreshable {
             await manager.refreshSharesAndFolders()
         }

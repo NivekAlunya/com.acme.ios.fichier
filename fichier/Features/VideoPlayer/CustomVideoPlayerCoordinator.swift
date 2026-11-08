@@ -37,7 +37,9 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureCon
         }
         
         let pip = AVPictureInPictureController(playerLayer: playerLayer)
+        #if !os(tvOS)
         pip?.canStartPictureInPictureAutomaticallyFromInline = true
+        #endif
         pip?.delegate = self
         self.pipController = pip
     }

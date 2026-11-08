@@ -69,13 +69,17 @@ struct PictureInfoSheet: View {
                 }
             }
             .navigationTitle(.Strings.photoInfoTitle)
+            #if !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(.Strings.commonDone) { dismiss() }
                 }
             }
         }
+        #if !os(tvOS)
         .presentationDetents([.medium, .large])
+        #endif
     }
 }

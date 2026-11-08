@@ -7,7 +7,9 @@ import Foundation
 import UIKit
 import AVFoundation
 import CryptoKit
+#if canImport(PDFKit) && !os(tvOS)
 import PDFKit
+#endif
 
 /// Centralized on-disk caching engine managing thumbnail persistence, video stream buffering, and document staging.
 ///
@@ -329,6 +331,7 @@ nonisolated public final class MediaCacheManager: Sendable {
     
     // MARK: - PDF Thumbnail Generation
     
+    #if canImport(PDFKit) && !os(tvOS)
     /// Renders the first page of a PDF document at the given URL into a thumbnail.
     ///
     /// - Parameters:
@@ -379,6 +382,14 @@ nonisolated public final class MediaCacheManager: Sendable {
         let size = CGSize(width: maxDimension, height: maxDimension)
         return page.thumbnail(of: size, for: .mediaBox)
     }
+    #else
+    public func generatePDFThumbnail(from url: URL, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        nil
+    }
+    public func generatePDFThumbnail(from data: Data, maxDimension: CGFloat = standardThumbnailDimension) -> UIImage? {
+        nil
+    }
+    #endif
     
     // MARK: - Video Thumbnail Timing Constants
     
@@ -477,10 +488,12 @@ nonisolated public final class MediaCacheManager: Sendable {
     /// Queries the filesystem to determine free available volume space in bytes.
     public func systemAvailableFreeSpace() -> Int64 {
         let cachesURL = thumbnailsDirectory
+        #if !os(tvOS)
         if let values = try? cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
            let capacity = values.volumeAvailableCapacityForImportantUsage {
             return capacity
         }
+        #endif
         if let values = try? cachesURL.resourceValues(forKeys: [.volumeAvailableCapacityKey]),
            let capacity = values.volumeAvailableCapacity {
             return Int64(capacity)

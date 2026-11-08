@@ -37,9 +37,13 @@ nonisolated public enum SupportedMediaTypes: Sendable {
     public static let videoExtensions: Set<String> = nativeVideoExtensions.union(extendedVideoExtensions)
     
     /// Set of recognized document extensions rendered via PDFKit.
-    public static let documentExtensions: Set<String> = [
-        "pdf"
-    ]
+    public static let documentExtensions: Set<String> = {
+        #if os(tvOS)
+        return []
+        #else
+        return ["pdf"]
+        #endif
+    }()
     
     /// Unified union set of all supported media file extensions.
     public static let allExtensions: Set<String> = imageExtensions.union(videoExtensions).union(documentExtensions)
@@ -79,7 +83,11 @@ nonisolated public enum SupportedMediaTypes: Sendable {
     
     /// Checks if the extension strictly represents a PDF document.
     public static func isPDF(extension ext: String) -> Bool {
-        ext.lowercased() == "pdf"
+        #if os(tvOS)
+        return false
+        #else
+        return ext.lowercased() == "pdf"
+        #endif
     }
     
     /// Checks if the extension strictly represents an animated or static GIF.

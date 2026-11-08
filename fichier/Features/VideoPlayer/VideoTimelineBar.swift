@@ -101,6 +101,7 @@ public struct VideoTimelineBar: View {
                 }
                 .frame(height: geo.size.height)
                 .contentShape(Rectangle())
+                #if !os(tvOS)
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
@@ -129,6 +130,7 @@ public struct VideoTimelineBar: View {
                             onSeek(finalTime)
                         }
                 )
+                #endif
             }
             .frame(height: 36)
             .accessibilityElement(children: .ignore)

@@ -7,7 +7,9 @@ import Foundation
 import Observation
 import UIKit
 import AVFoundation
+#if canImport(PDFKit) && !os(tvOS)
 import PDFKit
+#endif
 import OSLog
 
 /// Centralized state manager and coordinator for all media storage backends in the application.
@@ -103,8 +105,10 @@ public final class StorageLocationManager {
     /// Concurrency limiter preventing socket saturation during parallel video keyframe extraction.
     private let videoThumbnailLimiter = VideoThumbnailLimiter()
     
+    #if !os(tvOS)
     /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
     private let pdfThumbnailLimiter = PDFThumbnailLimiter()
+    #endif
     
     /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
     private let persistenceStore = StorageLocationPersistenceStore()
@@ -950,6 +954,7 @@ public final class StorageLocationManager {
     ///   - expectedFolderID: Active directory token to verify folder consistency.
     ///   - maxDimension: Maximum thumbnail bounding dimension.
     /// - Returns: A rendered cover `UIImage`, or `nil` if cancelled.
+    #if !os(tvOS)
     private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
         
@@ -1071,6 +1076,11 @@ public final class StorageLocationManager {
         // Trigger SwiftUI observation update for this item
         thumbnailVersions[item.id, default: 0] += 1
     }
+    #else
+    private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
+        nil
+    }
+    #endif
     
     /// Downloads the full-resolution image for a media item from the active backend.
     ///

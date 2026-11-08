@@ -60,7 +60,9 @@ public struct VideoDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
+        #if !os(tvOS)
         .statusBarHidden(true)
+        #endif
         .onAppear {
             if controller == nil {
                 controller = VideoPlayerController(
@@ -125,13 +127,16 @@ public struct VideoDetailView: View {
             guard !controller.isPiPActive else { return }
             controller.tearDownPlayer(deactivateAudioSession: true)
         }
+        #if !os(tvOS)
         .background {
             keyboardShortcuts(controller: controller)
         }
+        #endif
     }
     
     // MARK: - Hardware Keyboard Shortcuts
     
+    #if !os(tvOS)
     /// Registers hardware keyboard shortcuts for iPad and macOS environments.
     private func keyboardShortcuts(controller: VideoPlayerController) -> some View {
         Group {
@@ -180,4 +185,5 @@ public struct VideoDetailView: View {
         .opacity(0)
         .allowsHitTesting(false)
     }
+    #endif
 }

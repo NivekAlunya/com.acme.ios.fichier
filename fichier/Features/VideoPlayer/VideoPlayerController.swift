@@ -992,7 +992,7 @@ public final class VideoPlayerController {
     
     /// Action handler for two-finger tap gestures, toggling play and pause with haptic feedback.
     public func handleTwoFingerTap() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        AppHapticFeedback.medium()
         togglePlayPause()
     }
     

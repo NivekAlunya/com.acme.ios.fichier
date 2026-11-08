@@ -27,7 +27,9 @@ struct AppSettingsView: View {
     @AppStorage("gallery_grid_size") private var gridSize: GridSize = .medium
     
     // PDF Reader Settings
+    #if !os(tvOS)
     @AppStorage("pdf_reading_mode") private var readingMode: PDFReadingMode = .continuous
+    #endif
     
     // Cache State
     @State private var cacheSizeString: String = "…"
@@ -38,6 +40,7 @@ struct AppSettingsView: View {
         NavigationStack {
             Form {
                 // 1. iOS System Settings (Local Network, Permissions, Language)
+                #if !os(tvOS)
                 Section {
                     Button {
                         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -58,6 +61,7 @@ struct AppSettingsView: View {
                 } footer: {
                     Text(.Strings.settingsSystemFooter)
                 }
+                #endif
                 
                 // 2. Storage & Cache Management
                 Section {
@@ -132,6 +136,7 @@ struct AppSettingsView: View {
                 }
                 
                 // 5. PDF Reader Defaults
+                #if !os(tvOS)
                 Section(String(localized: "PDF Reader", comment: "PDF Reader settings section")) {
                     Picker(String(localized: "Default Reading Mode", comment: "Default PDF reading mode"), selection: $readingMode) {
                         ForEach(PDFReadingMode.allCases) { mode in
@@ -139,6 +144,7 @@ struct AppSettingsView: View {
                         }
                     }
                 }
+                #endif
                 
                 // 6. About & Version Information
                 Section(.Strings.settingsSectionAbout) {
@@ -148,7 +154,9 @@ struct AppSettingsView: View {
                 }
             }
             .navigationTitle(.Strings.settingsTitle)
+            #if !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(.Strings.commonDone) {
@@ -175,7 +183,7 @@ struct AppSettingsView: View {
         isClearingCache = true
         Task {
             await MediaCacheManager.shared.clearAllCacheAsync()
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
             let newSize = await MediaCacheManager.shared.formattedCacheSize()
             cacheSizeString = newSize
             isClearingCache = false

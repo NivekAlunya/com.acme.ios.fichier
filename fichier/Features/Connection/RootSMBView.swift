@@ -26,8 +26,10 @@ public struct RootSMBView: View {
     /// Target video media item for presenting the full-screen video player.
     @State private var activeVideoForViewer: MediaItem?
     
+    #if !os(tvOS)
     /// Target PDF media item for presenting the full-screen document viewer.
     @State private var activePDFForViewer: MediaItem?
+    #endif
     
     /// Filtered or sorted snapshot of media items from the active gallery, passed as paging context.
     @State private var activeContextMedia: [MediaItem] = []
@@ -105,6 +107,7 @@ public struct RootSMBView: View {
                         },
                         onSelectPicture: { item, currentDisplayPictures in
                             activeContextMedia = currentDisplayPictures
+                            #if !os(tvOS)
                             if item.isPDF {
                                 activePDFForViewer = item
                             } else if item.isVideo {
@@ -113,6 +116,14 @@ public struct RootSMBView: View {
                                 activePictureForViewer = item
                                 shouldAutoStartSlideshow = false
                             }
+                            #else
+                            if item.isVideo {
+                                activeVideoForViewer = item
+                            } else {
+                                activePictureForViewer = item
+                                shouldAutoStartSlideshow = false
+                            }
+                            #endif
                         }
                     )
                     .navigationTitle(selectedFolder.name)
@@ -150,12 +161,14 @@ public struct RootSMBView: View {
                 initialItem: vid
             )
         }
+        #if !os(tvOS)
         .fullScreenCover(item: $activePDFForViewer) { pdf in
             PDFDetailView(
                 manager: smbManager,
                 item: pdf
             )
         }
+        #endif
         .sheet(isPresented: $showingSettings) {
             AppSettingsView()
         }
@@ -175,7 +188,7 @@ public struct RootSMBView: View {
         
         connectionTask?.cancel()
         connectingLocationID = location.id
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        AppHapticFeedback.light()
         
         connectionTask = Task {
             await smbManager.selectLocation(location)

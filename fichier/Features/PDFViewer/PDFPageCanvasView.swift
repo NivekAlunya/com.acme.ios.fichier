@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import UIKit
 import PDFKit
 
@@ -61,3 +62,5 @@ public final class PDFPageCanvasView: UIView {
         context.restoreGState()
     }
 }
+
+#endif // !os(tvOS)

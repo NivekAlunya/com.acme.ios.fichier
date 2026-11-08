@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import UIKit
 import PDFKit
 
@@ -280,3 +281,5 @@ final class PDFKitCoordinator: NSObject, PDFViewDelegate, UIGestureRecognizerDel
         detachObservers()
     }
 }
+
+#endif // !os(tvOS)

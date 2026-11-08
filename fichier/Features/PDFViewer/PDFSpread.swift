@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import Foundation
 
 /// Value model representing a discrete page spread displayed together in horizontal book mode.
@@ -86,3 +87,5 @@ public struct PDFSpread: Identifiable, Hashable, Sendable {
         return result
     }
 }
+
+#endif // !os(tvOS)

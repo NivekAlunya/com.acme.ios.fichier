@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		D1F1B0FF30910E5200518819 /* AMSMB2 in Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B0FE30910E5200518819 /* AMSMB2 */; };
 		D1F1B10030910E5200518819 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B0FE30910E5200518819 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
-		D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = D1F1B11130910E5200518819 /* MobileVLCKit */; };
+		D1F1B11230910E5200518819 /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; platformFilters = (ios, maccatalyst, ); productRef = D1F1B11130910E5200518819 /* MobileVLCKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -429,11 +429,15 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "We need access to your local network to discover your Mac mini and Samba shares.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need access to save pictures from your Mac mini to your Photos library.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=appletvos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=appletvsimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UIBackgroundModes = audio;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=appletvos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=appletvsimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -451,14 +455,15 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 26.6;
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Debug;
@@ -492,11 +497,15 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "We need access to your local network to discover your Mac mini and Samba shares.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "We need access to save pictures from your Mac mini to your Photos library.";
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=appletvos*]" = YES;
+				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=appletvsimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UIBackgroundModes = audio;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=appletvos*]" = YES;
+				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=appletvsimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -514,14 +523,15 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
+				TVOS_DEPLOYMENT_TARGET = 26.6;
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Release;
@@ -543,14 +553,15 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fichier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fichier";
+				TVOS_DEPLOYMENT_TARGET = 26.6;
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Debug;
@@ -572,14 +583,15 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "appletvos appletvsimulator iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,3";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/fichier.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fichier";
+				TVOS_DEPLOYMENT_TARGET = 26.6;
 				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Release;

@@ -63,12 +63,15 @@ public struct VideoPlayerCanvasView: View {
             }
         }
         .contentShape(Rectangle())
+        #if !os(tvOS)
         .simultaneousGesture(videoSeekGesture)
+        #endif
         .onTapGesture {
             controller.toggleControls()
         }
     }
     
+    #if !os(tvOS)
     /// Full-screen horizontal drag gesture for gesture-driven timeline scrubbing.
     private var videoSeekGesture: some Gesture {
         DragGesture(minimumDistance: 15)
@@ -116,4 +119,5 @@ public struct VideoPlayerCanvasView: View {
                 controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
             }
     }
+    #endif
 }
