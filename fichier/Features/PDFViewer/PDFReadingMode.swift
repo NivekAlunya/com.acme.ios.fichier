@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import Foundation
 
 /// Reading layout configurations available when displaying documents in `PDFDetailView`.
@@ -58,3 +59,5 @@ public enum PDFReadingMode: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+#endif // !os(tvOS)

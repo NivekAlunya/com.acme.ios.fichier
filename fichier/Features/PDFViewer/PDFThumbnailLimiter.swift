@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import Foundation
 
 /// Actor-based concurrency limiter for remote PDF document thumbnail generation and staging.
@@ -98,3 +99,5 @@ public actor PDFThumbnailLimiter {
         }
     }
 }
+
+#endif // !os(tvOS)

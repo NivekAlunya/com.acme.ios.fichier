@@ -9,7 +9,7 @@ import AVKit
 /// Video playback canvas combining hardware video rendering with full-screen gesture scrubbing.
 ///
 /// Features:
-/// - Supports both native `AVPlayerLayer` (`CustomVideoPlayerView`) and extended MobileVLCKit (`VLCPlayerCanvasRepresentable`).
+/// - Supports both native `AVPlayerLayer` (`CustomVideoPlayerView`) and extended VLCKit (`VLCPlayerCanvasRepresentable`).
 /// - Single tap gesture toggles HUD overlay visibility (`controller.toggleControls()`).
 /// - Horizontal drag gesture (`videoSeekGesture`) enables scrubbing anywhere on the video canvas.
 ///   Calculates dynamic scrubbing sensitivity scaled to document length:
@@ -63,12 +63,15 @@ public struct VideoPlayerCanvasView: View {
             }
         }
         .contentShape(Rectangle())
+        #if !os(tvOS)
         .simultaneousGesture(videoSeekGesture)
+        #endif
         .onTapGesture {
             controller.toggleControls()
         }
     }
     
+    #if !os(tvOS)
     /// Full-screen horizontal drag gesture for gesture-driven timeline scrubbing.
     private var videoSeekGesture: some Gesture {
         DragGesture(minimumDistance: 15)
@@ -116,4 +119,5 @@ public struct VideoPlayerCanvasView: View {
                 controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
             }
     }
+    #endif
 }

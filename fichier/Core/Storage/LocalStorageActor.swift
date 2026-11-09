@@ -12,7 +12,7 @@ import OSLog
 ///
 /// ### Architecture & Security Sandbox Deep-Dive
 /// - **Security-Scoped Bookmarks**: iOS and iPadOS sandboxes restrict filesystem access outside the app container.
-///   When the user picks an external folder via `UIDocumentPickerViewController`, the system yields a security-scoped URL.
+///   When the user picks an external folder via `UIDocuDocumentPmentPickerViewController`, the system yields a security-scoped URL.
 ///   To retain access across app terminations, this actor converts picked URLs into persistent security-scoped bookmark data (`options: .minimalBookmark`).
 /// - **Resource Access Lifecycle**: Calls `startAccessingSecurityScopedResource()` during activation and guarantees
 ///   balanced `stopAccessingSecurityScopedResource()` calls during deactivation or `deinit`.

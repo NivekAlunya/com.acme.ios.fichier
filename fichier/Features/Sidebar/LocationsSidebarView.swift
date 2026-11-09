@@ -189,7 +189,11 @@ public struct LocationsSidebarView: View {
                 }
             }
         }
+        #if os(tvOS)
+        .listStyle(.plain)
+        #else
         .listStyle(.sidebar)
+        #endif
         .navigationTitle(.Strings.sidebarTitleBrowse)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -201,6 +205,7 @@ public struct LocationsSidebarView: View {
                 .accessibilityLabel(.Strings.settingsTitle)
             }
         }
+        #if !os(tvOS)
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -223,6 +228,7 @@ public struct LocationsSidebarView: View {
                 showingFolderErrorAlert = true
             }
         }
+        #endif
         .alert(
             Text(.Strings.galleryErrorUnableToLoadFolder),
             isPresented: $showingFolderErrorAlert,

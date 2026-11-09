@@ -150,8 +150,10 @@ struct MediaGridView: View {
             listPictures = listPictures.filter(\.isImage)
         case .videos:
             listPictures = listPictures.filter { $0.isVideo }
+        #if !os(tvOS)
         case .documents:
             listPictures = listPictures.filter { $0.isPDF }
+        #endif
         }
         let sortedPictures = sortItems(listPictures)
         return (sortedFolders, sortedPictures)
@@ -166,7 +168,9 @@ struct MediaGridView: View {
         case .all: return .Strings.gallerySectionMediaCount(count)
         case .photos: return .Strings.gallerySectionPhotosCount(count)
         case .videos: return .Strings.gallerySectionVideosCount(count)
+        #if !os(tvOS)
         case .documents: return LocalizedStringResource("gallery_section_documents_count", defaultValue: "\(count) Documents")
+        #endif
         }
     }
     
@@ -252,7 +256,7 @@ struct MediaGridView: View {
                                         isSelectionMode = true
                                         selectedItems.insert(item)
                                     }
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
                                     if let folder = manager.selectedFolder {
@@ -262,7 +266,9 @@ struct MediaGridView: View {
                                     }
                                 }
                             )
+                            #if !os(tvOS)
                             .simultaneousGesture(pinchGesture)
+                            #endif
                             .transition(.opacity)
                         case .list:
                             MediaListModeView(
@@ -280,7 +286,7 @@ struct MediaGridView: View {
                                         isSelectionMode = true
                                         selectedItems.insert(item)
                                     }
-                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                    AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
                                     if let folder = manager.selectedFolder {
@@ -290,7 +296,9 @@ struct MediaGridView: View {
                                     }
                                 }
                             )
+                            #if !os(tvOS)
                             .simultaneousGesture(pinchGesture)
+                            #endif
                             .transition(.opacity)
                         }
                     }
@@ -545,6 +553,7 @@ struct MediaGridView: View {
             batchTask?.cancel()
             batchTask = nil
         }
+        #if !os(tvOS)
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac
             Group {
@@ -596,6 +605,7 @@ struct MediaGridView: View {
             .opacity(0)
             .allowsHitTesting(false)
         }
+        #endif
     }
     
     // MARK: - Navigation Helpers
@@ -624,6 +634,7 @@ struct MediaGridView: View {
     /// - **Debounce Cooldown**: Enforces `pinchCooldownSeconds (300ms)` threshold to prevent rapid flickering between
     ///   intermediate grid steps during a continuous gesture stroke.
     /// - **Discrete Stage Progression**: Transitions through `List <-> Compact Grid <-> Medium Grid <-> Large Grid`.
+    #if !os(tvOS)
     private var pinchGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
@@ -650,6 +661,7 @@ struct MediaGridView: View {
                 lastPinchScale = 1.0
             }
     }
+    #endif
     
     /// Steps up the zoom level: if currently in List mode, switches to Compact Grid;
     /// if in Grid mode, cycles from Compact -> Medium -> Large with haptic feedback.
@@ -659,17 +671,17 @@ struct MediaGridView: View {
                 viewMode = .grid
                 gridSize = .compact
             }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
             return
         }
         
         switch gridSize {
         case .compact:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         case .medium:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .large
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         case .large:
             break
         }
@@ -685,15 +697,15 @@ struct MediaGridView: View {
         switch gridSize {
         case .large:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .medium
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         case .medium:
             $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8)).wrappedValue = .compact
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         case .compact:
             withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
                 viewMode = .list
             }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         }
     }
     
@@ -708,7 +720,7 @@ struct MediaGridView: View {
         } else {
             selectedItems.insert(item)
         }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        AppHapticFeedback.light()
     }
     
     /// Selects all visible media items if not already all selected; otherwise, clears the selection set.
@@ -720,7 +732,7 @@ struct MediaGridView: View {
         } else {
             selectedItems = Set(pictures)
         }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        AppHapticFeedback.medium()
     }
     
     /// Toggles the favorite status across all selected items.
@@ -740,7 +752,7 @@ struct MediaGridView: View {
                 }
             }
         }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        AppHapticFeedback.medium()
     }
     
     /// Cancels any currently active batch save or batch share operation and resets progress flags.

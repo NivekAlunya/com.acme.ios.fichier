@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import SwiftUI
 import PDFKit
 
@@ -97,3 +98,5 @@ public struct PDFThumbnailItemCell: View {
         }
     }
 }
+
+#endif // !os(tvOS)

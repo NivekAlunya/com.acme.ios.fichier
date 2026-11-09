@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import SwiftUI
 import PDFKit
 
@@ -111,3 +112,5 @@ struct PDFKitRepresentedView: UIViewRepresentable {
         coordinator.detach()
     }
 }
+
+#endif // !os(tvOS)

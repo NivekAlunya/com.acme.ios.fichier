@@ -6,7 +6,7 @@
 import SwiftUI
 import UIKit
 
-/// SwiftUI wrapper embedding MobileVLCKit's rendering view within the unified video player canvas.
+/// SwiftUI wrapper embedding VLCKit's rendering view within the unified video player canvas.
 ///
 /// Handles view lifecycle and two-finger gesture forwarding to preserve identical interactions
 /// across both native and extended video backends.
@@ -52,18 +52,22 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
         ])
         
         let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(VLCPlayerCanvasCoordinator.handleSingleTap))
+        #if !os(tvOS)
         singleTap.numberOfTouchesRequired = 1
+        #endif
         singleTap.numberOfTapsRequired = 1
         singleTap.cancelsTouchesInView = false
         singleTap.delegate = context.coordinator
         container.addGestureRecognizer(singleTap)
         
+        #if !os(tvOS)
         let twoFingerTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(VLCPlayerCanvasCoordinator.handleTwoFingerTap))
         twoFingerTap.numberOfTouchesRequired = 2
         twoFingerTap.numberOfTapsRequired = 1
         twoFingerTap.cancelsTouchesInView = false
         twoFingerTap.delegate = context.coordinator
         container.addGestureRecognizer(twoFingerTap)
+        #endif
         
         return container
     }

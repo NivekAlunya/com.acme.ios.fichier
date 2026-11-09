@@ -3,6 +3,7 @@
 //  fichier
 //
 
+#if !os(tvOS)
 import SwiftUI
 import PDFKit
 
@@ -31,3 +32,5 @@ struct PDFThumbnailScrubberView: UIViewRepresentable {
         }
     }
 }
+
+#endif // !os(tvOS)

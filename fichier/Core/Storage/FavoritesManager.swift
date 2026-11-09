@@ -47,10 +47,10 @@ public final class FavoritesManager {
     public func toggleFavorite(_ item: MediaItem) {
         if favoriteIDs.contains(item.id) {
             favoriteIDs.remove(item.id)
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            AppHapticFeedback.light()
         } else {
             favoriteIDs.insert(item.id)
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            AppHapticFeedback.medium()
         }
         save()
     }

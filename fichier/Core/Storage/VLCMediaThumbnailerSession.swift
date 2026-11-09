@@ -5,20 +5,20 @@
 
 import Foundation
 import UIKit
-#if canImport(MobileVLCKit)
-import MobileVLCKit
+#if canImport(VLCKit)
+import VLCKit
 #endif
 
 /// Objective-C delegate bridge executing frame extraction callbacks from `VLCMediaThumbnailer`.
 ///
-/// Dispatches MobileVLCKit C-level thumbnail notifications back to `VLCMediaThumbnailerActor`
+/// Dispatches VLCKit C-level thumbnail notifications back to `VLCMediaThumbnailerActor`
 /// across thread and actor boundaries.
 @MainActor
 public final class VLCMediaThumbnailerSession: NSObject {
     private let sessionID: UUID
     private weak var owner: VLCMediaThumbnailerActor?
     
-    #if canImport(MobileVLCKit)
+    #if canImport(VLCKit)
     private var thumbnailer: VLCMediaThumbnailer?
     #endif
     private var didComplete = false
@@ -34,8 +34,8 @@ public final class VLCMediaThumbnailerSession: NSObject {
         super.init()
     }
     
-    #if canImport(MobileVLCKit)
-    /// Starts asynchronous thumbnail generation with MobileVLCKit.
+    #if canImport(VLCKit)
+    /// Starts asynchronous thumbnail generation with VLCKit.
     ///
     /// - Parameters:
     ///   - media: Configured `VLCMedia` instance.
@@ -55,7 +55,8 @@ public final class VLCMediaThumbnailerSession: NSObject {
     /// Cancels the in-flight extraction session and tears down references.
     public func cancel() {
         didComplete = true
-        #if canImport(MobileVLCKit)
+        #if canImport(VLCKit)
+        self.thumbnailer?.cancel()
         self.thumbnailer = nil
         #endif
         self.owner = nil
@@ -68,7 +69,7 @@ public final class VLCMediaThumbnailerSession: NSObject {
         let id = sessionID
         let currentOwner = owner
         self.owner = nil
-        #if canImport(MobileVLCKit)
+        #if canImport(VLCKit)
         self.thumbnailer = nil
         #endif
         
@@ -78,7 +79,7 @@ public final class VLCMediaThumbnailerSession: NSObject {
     }
 }
 
-#if canImport(MobileVLCKit)
+#if canImport(VLCKit)
 extension VLCMediaThumbnailerSession: VLCMediaThumbnailerDelegate {
     public nonisolated func mediaThumbnailer(
         _ mediaThumbnailer: VLCMediaThumbnailer,

@@ -208,6 +208,7 @@ public struct PictureViewerBottomBarView: View {
                     .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save photo to Photos"))
                 }
                 
+                #if !os(tvOS)
                 // 6. ShareLink (Directly disabled when image is not yet loaded)
                 ShareLink(
                     item: Image(uiImage: currentImage ?? UIImage()),
@@ -221,6 +222,7 @@ public struct PictureViewerBottomBarView: View {
                 .buttonStyle(.plain)
                 .disabled(currentImage == nil)
                 .accessibilityLabel(String(localized: "Share Photo", comment: "Accessibility label to share photo"))
+                #endif
             }
             .padding(.horizontal, 4)
             
