@@ -60,6 +60,7 @@
 		000000000000000000000120 /* fichier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = fichier.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D10000000000000000000130 /* fichierTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = fichierTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D1C0304030A2549700B663D3 /* PLAN_FICHIERKIT_IOS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = PLAN_FICHIERKIT_IOS.md; sourceTree = "<group>"; };
+		D1C0322230A283A600B663D3 /* Fichier_APP_PR_REVIEW_RESOLUTION_PLAN.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Fichier_APP_PR_REVIEW_RESOLUTION_PLAN.md; sourceTree = "<group>"; };
 		D1F1B0F030910CFF00518819 /* fichier-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "fichier-Info.plist"; sourceTree = "<group>"; };
 		D1F1B12030910E5200518820 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 		D1F1B12230910E5200518820 /* Local.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.xcconfig; sourceTree = "<group>"; };
@@ -133,6 +134,7 @@
 				D20000000000000000000001 /* FichierTV */,
 				D20000000000000000000101 /* FichierTVTests */,
 				D1C0304030A2549700B663D3 /* PLAN_FICHIERKIT_IOS.md */,
+				D1C0322230A283A600B663D3 /* Fichier_APP_PR_REVIEW_RESOLUTION_PLAN.md */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";

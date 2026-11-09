@@ -148,8 +148,8 @@ For directory contents:
    - page/cursor
    - page size
    - sort requirements where supported
-4. If the SMB backend cannot provide server-side pagination, define a bounded streaming or incremental enumeration contract in FichierKit.
-5. Keep sorting semantics explicit. If global sorting requires all items, document that limitation or move sorting into the package's incremental strategy.
+4. Document the AMSMB2 limitation when true incremental enumeration is unavailable: its public API materializes one directory snapshot, and SMB2 does not provide server-side sorted cursors through the supported interface.
+5. Keep sorting semantics explicit and release the package snapshot when exhausted, replaced, or disconnected.
 6. Preserve folder-first ordering and existing media classification.
 
 Potential implementation choices should be evaluated before coding:
@@ -227,7 +227,8 @@ Run without committing:
 - `SMBClientProtocol) remains Sendable and all Swift 6 boundaries compile cleanly.
 - No unnecessary `activeClient()` type change is introduced.
 - UI-facing share and directory loads no longer request `Int.max` pages.
-- FichierKit enumeration is bounded or incrementally streamed rather than only truncated after full materialization.
+- App-facing FichierKit pages are bounded and the package documents the unavoidable AMSMB2 full-directory snapshot limitation.
+- Cached directory snapshots are released when exhausted, replaced, or disconnected.
 - Pagination preserves stable identities, ordering, cancellation, and stale-result protection.
 - iOS and tvOS builds and relevant tests pass.
 - No credentials are logged or stored unexpectedly.
