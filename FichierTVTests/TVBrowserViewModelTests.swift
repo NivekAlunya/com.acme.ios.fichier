@@ -243,4 +243,238 @@ struct TVBrowserViewModelTests {
         #expect(viewModel.selectedSortKey == .date)
         #expect(viewModel.items.map(\.id) == ["zebra", "alpha"])
     }
+
+    @Test("Discards stale pagination response after forced reload and resets isPaginating")
+    @MainActor
+    func testStaleNextPageIgnoredAfterForcedReload() async {
+        let items = (0..<60).map { index in
+            MediaSourceItem(
+                id: "item_\(index)",
+                name: String(format: "Item_%02d.jpg", index),
+                path: "item_\(index)",
+                type: .image,
+                modifiedDate: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        let source = GatedStubMediaSource(id: "photos", items: items)
+        let viewModel = TVBrowserViewModel(
+            source: source,
+            folder: nil,
+            preferenceStore: StubSortPreferenceStore(),
+            layoutPreferenceStore: StubLayoutPreferenceStore()
+        )
+
+        await viewModel.loadInitial()
+        #expect(viewModel.items.count == 40)
+        #expect(!viewModel.isPaginating)
+
+        await source.armGate(forPage: 1)
+        let stalePageTask = Task {
+            await viewModel.loadNextPage()
+        }
+        await source.waitUntilGatedFetchStarts()
+        #expect(viewModel.isPaginating)
+
+        await viewModel.loadInitial(force: true)
+        #expect(!viewModel.isLoading)
+        #expect(!viewModel.isPaginating)
+
+        await source.releaseGate()
+        await stalePageTask.value
+
+        #expect(viewModel.items.count == 40)
+        #expect(viewModel.paginationContext.nextPage == 1)
+        #expect(viewModel.canLoadMore)
+        #expect(!viewModel.isPaginating)
+    }
+
+    @Test("Discards stale pagination response after sort change and keeps new sort items")
+    @MainActor
+    func testStaleNextPageIgnoredAfterSortChange() async throws {
+        let primaryItems = (0..<40).map { index in
+            MediaSourceItem(
+                id: "b_\(index)",
+                name: String(format: "B_%02d.jpg", index),
+                path: "b_\(index)",
+                type: .image,
+                modifiedDate: Date(timeIntervalSince1970: TimeInterval(1000 + index))
+            )
+        }
+        let trailingItems = (0..<10).map { index in
+            MediaSourceItem(
+                id: "z_\(index)",
+                name: String(format: "Z_%02d.jpg", index),
+                path: "z_\(index)",
+                type: .image,
+                modifiedDate: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+        let source = GatedStubMediaSource(
+            id: "smb://sort.local",
+            preferredLayout: .list,
+            supportedSortKeys: [.date, .name],
+            items: primaryItems + trailingItems
+        )
+        let viewModel = TVBrowserViewModel(
+            source: source,
+            folder: nil,
+            preferenceStore: StubSortPreferenceStore(),
+            layoutPreferenceStore: StubLayoutPreferenceStore()
+        )
+
+        await viewModel.loadInitial()
+        #expect(viewModel.items.count == 40)
+        #expect(viewModel.items.first?.id == "b_0")
+
+        await source.armGate(forPage: 1, sortKey: .name)
+        let stalePageTask = Task {
+            await viewModel.loadNextPage()
+        }
+        await source.waitUntilGatedFetchStarts()
+        #expect(viewModel.isPaginating)
+
+        viewModel.applySort(key: .date)
+        for _ in 0..<80 {
+            if !viewModel.isLoading, viewModel.items.first?.id == "z_0" {
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(!viewModel.isLoading)
+        #expect(viewModel.items.first?.id == "z_0")
+
+        await source.releaseGate()
+        await stalePageTask.value
+
+        #expect(viewModel.selectedSortKey == .date)
+        #expect(viewModel.items.count == 40)
+        #expect(Set(viewModel.items.map(\.id)).count == 40)
+        #expect(viewModel.items.prefix(10).map(\.id) == (0..<10).map { "z_\($0)" })
+        #expect(viewModel.paginationContext.nextPage == 1)
+        #expect(!viewModel.isPaginating)
+        #expect(viewModel.canLoadMore)
+    }
+
+    @Test("Resets isPaginating when pagination fails or throws after becoming stale")
+    @MainActor
+    func testNextPageErrorAndStaleErrorResetIsPaginating() async {
+        let items = (0..<60).map { index in
+            MediaSourceItem(
+                id: "item_\(index)",
+                name: String(format: "Item_%02d.jpg", index),
+                path: "item_\(index)",
+                type: .image
+            )
+        }
+        let source = GatedStubMediaSource(id: "photos", items: items)
+        let viewModel = TVBrowserViewModel(
+            source: source,
+            folder: nil,
+            preferenceStore: StubSortPreferenceStore(),
+            layoutPreferenceStore: StubLayoutPreferenceStore()
+        )
+
+        await viewModel.loadInitial()
+        #expect(viewModel.items.count == 40)
+
+        let pageError = NSError(domain: "TestError", code: 500, userInfo: [NSLocalizedDescriptionKey: "Page error"])
+        await source.armGate(forPage: 1, errorAfterGate: pageError)
+        let failingPageTask = Task {
+            await viewModel.loadNextPage()
+        }
+        await source.waitUntilGatedFetchStarts()
+        #expect(viewModel.isPaginating)
+        await source.releaseGate()
+        await failingPageTask.value
+
+        #expect(!viewModel.isPaginating)
+        #expect(viewModel.items.count == 40)
+        #expect(viewModel.canLoadMore)
+
+        await source.armGate(forPage: 1, errorAfterGate: pageError)
+        let staleFailingPageTask = Task {
+            await viewModel.loadNextPage()
+        }
+        await source.waitUntilGatedFetchStarts()
+        await viewModel.loadInitial(force: true)
+        await source.releaseGate()
+        await staleFailingPageTask.value
+
+        #expect(!viewModel.isPaginating)
+        #expect(viewModel.errorMessage == nil)
+        #expect(viewModel.items.count == 40)
+    }
+
+    @Test("Cancelled initial load clears isLoading without surfacing CancellationError")
+    @MainActor
+    func testCancelledLoadInitialResetsIsLoadingWithoutError() async {
+        let items = [
+            MediaSourceItem(id: "item_0", name: "Item_00.jpg", path: "item_0", type: .image)
+        ]
+        let source = GatedStubMediaSource(id: "photos", items: items)
+        let viewModel = TVBrowserViewModel(
+            source: source,
+            folder: nil,
+            preferenceStore: StubSortPreferenceStore(),
+            layoutPreferenceStore: StubLayoutPreferenceStore()
+        )
+
+        await source.armGate(forPage: 0)
+        let loadTask = Task {
+            await viewModel.loadInitial()
+        }
+        await source.waitUntilGatedFetchStarts()
+        #expect(viewModel.isLoading)
+
+        loadTask.cancel()
+        await source.releaseGate()
+        await loadTask.value
+
+        #expect(!viewModel.isLoading)
+        #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test("Triggers pagination only when appearing item index reaches trailing 8-item threshold")
+    @MainActor
+    func testOnItemAppearIndexThresholdTriggersPagination() async throws {
+        let items = (0..<55).map { index in
+            MediaSourceItem(
+                id: "item_\(index)",
+                name: String(format: "Item_%02d.jpg", index),
+                path: "item_\(index)",
+                type: .image
+            )
+        }
+        let source = GatedStubMediaSource(id: "photos", items: items)
+        let viewModel = TVBrowserViewModel(
+            source: source,
+            folder: nil,
+            preferenceStore: StubSortPreferenceStore(),
+            layoutPreferenceStore: StubLayoutPreferenceStore()
+        )
+
+        await viewModel.loadInitial()
+        #expect(viewModel.items.count == 40)
+
+        viewModel.onItemAppear(at: -1)
+        viewModel.onItemAppear(at: 40)
+        viewModel.onItemAppear(at: 31)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        #expect(viewModel.items.count == 40)
+        #expect(await source.requestedPages == [0])
+
+        viewModel.onItemAppear(at: 32)
+        for _ in 0..<80 {
+            if viewModel.items.count == 55, !viewModel.isPaginating {
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        #expect(viewModel.items.count == 55)
+        #expect(!viewModel.canLoadMore)
+        #expect(!viewModel.isPaginating)
+        #expect(await source.requestedPages == [0, 1])
+    }
 }

@@ -14,7 +14,7 @@ public struct TVMediaBrowserView: View {
     public let source: any MediaSource
     public let folder: MediaSourceItem?
 
-    @State private var viewModel: TVBrowserViewModel
+    @State private var viewModel: TVBrowserViewModel?
     @State private var showingSortDialog: Bool = false
     @FocusState private var focusedItemID: String?
     @State private var hasAppliedInitialFocus: Bool = false
@@ -24,10 +24,75 @@ public struct TVMediaBrowserView: View {
     public init(source: any MediaSource, folder: MediaSourceItem?) {
         self.source = source
         self.folder = folder
-        _viewModel = State(wrappedValue: TVBrowserViewModel(source: source, folder: folder))
+        _viewModel = State(initialValue: nil)
+    }
+
+    init(viewModel: TVBrowserViewModel) {
+        self.source = viewModel.source
+        self.folder = viewModel.folder
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
+        Group {
+            if let viewModel {
+                browserStateContent(viewModel: viewModel)
+            } else {
+                loadingView
+            }
+        }
+        .navigationTitle(folder?.name ?? source.displayName)
+        .defaultFocus($focusedItemID, viewModel?.firstItemID)
+        .onChange(of: viewModel?.firstItemID) { _, newFirstID in
+            if !hasAppliedInitialFocus, let newFirstID {
+                hasAppliedInitialFocus = true
+                if focusedItemID == nil {
+                    focusedItemID = newFirstID
+                }
+            }
+        }
+        .task(id: browserIdentity) {
+            let activeViewModel = resolveViewModel()
+            if activeViewModel.items.isEmpty {
+                await activeViewModel.loadInitial()
+            } else {
+                await activeViewModel.refreshSavedLayout()
+                await activeViewModel.refreshSavedSortPreference()
+            }
+            if !hasAppliedInitialFocus, let firstID = activeViewModel.firstItemID {
+                hasAppliedInitialFocus = true
+                if focusedItemID == nil {
+                    focusedItemID = firstID
+                }
+            }
+        }
+    }
+
+    // MARK: - View Model Lifecycle
+
+    private var browserIdentity: String {
+        "\(source.id)|\(folder?.id ?? "")|\(folder?.path ?? "")"
+    }
+
+    private func resolveViewModel() -> TVBrowserViewModel {
+        if let existing = viewModel,
+           existing.source.id == source.id,
+           existing.folder?.id == folder?.id,
+           existing.folder?.path == folder?.path {
+            return existing
+        }
+        hasAppliedInitialFocus = false
+        focusedItemID = nil
+        showingSortDialog = false
+        let created = TVBrowserViewModel(source: source, folder: folder)
+        viewModel = created
+        return created
+    }
+
+    // MARK: - Content States
+
+    @ViewBuilder
+    private func browserStateContent(viewModel: TVBrowserViewModel) -> some View {
         Group {
             if viewModel.isLoading && viewModel.items.isEmpty {
                 loadingView
@@ -45,15 +110,14 @@ public struct TVMediaBrowserView: View {
                 )
             } else {
                 VStack(spacing: 0) {
-                    browserControlsBar
+                    browserControlsBar(viewModel: viewModel)
                         .focusSection()
 
-                    contentLayout
+                    contentLayout(viewModel: viewModel)
                         .focusSection()
                 }
             }
         }
-        .navigationTitle(folder?.name ?? source.displayName)
         .confirmationDialog("Sort By", isPresented: $showingSortDialog, titleVisibility: .visible) {
             ForEach(orderedSortKeys, id: \.self) { key in
                 Button {
@@ -79,61 +143,38 @@ public struct TVMediaBrowserView: View {
 
             Button("Cancel", role: .cancel) {}
         }
-        .defaultFocus($focusedItemID, viewModel.firstItemID)
-        .onChange(of: viewModel.firstItemID) { _, newFirstID in
-            if !hasAppliedInitialFocus, let newFirstID {
-                hasAppliedInitialFocus = true
-                if focusedItemID == nil {
-                    focusedItemID = newFirstID
-                }
-            }
-        }
-        .task {
-            if viewModel.items.isEmpty {
-                await viewModel.loadInitial()
-            } else {
-                await viewModel.refreshSavedLayout()
-                await viewModel.refreshSavedSortPreference()
-            }
-            if !hasAppliedInitialFocus, let firstID = viewModel.firstItemID {
-                hasAppliedInitialFocus = true
-                if focusedItemID == nil {
-                    focusedItemID = firstID
-                }
-            }
-        }
     }
 
     // MARK: - Layouts
 
     @ViewBuilder
-    private var contentLayout: some View {
+    private func contentLayout(viewModel: TVBrowserViewModel) -> some View {
         Group {
             switch viewModel.selectedLayout {
             case .grid:
-                gridLayout
+                gridLayout(viewModel: viewModel)
             case .list:
-                listLayout
+                listLayout(viewModel: viewModel)
             }
         }
         .animation(reduceMotion ? nil : .snappy, value: viewModel.selectedLayout)
     }
 
     @ViewBuilder
-    private var gridLayout: some View {
+    private func gridLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVGrid(
                 columns: Array(repeating: GridItem(.flexible(), spacing: 40), count: 4),
                 spacing: 40
             ) {
-                ForEach(viewModel.items) { item in
-                    NavigationLink(value: destination(for: item)) {
+                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                    NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaGridItemView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(item)
+                        viewModel.onItemAppear(at: index)
                     }
                 }
             }
@@ -144,17 +185,17 @@ public struct TVMediaBrowserView: View {
     }
 
     @ViewBuilder
-    private var listLayout: some View {
+    private func listLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(viewModel.items) { item in
-                    NavigationLink(value: destination(for: item)) {
+                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                    NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaListRowView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(item)
+                        viewModel.onItemAppear(at: index)
                     }
                 }
             }
@@ -174,11 +215,11 @@ public struct TVMediaBrowserView: View {
     // MARK: - Focusable Browser Controls Bar
 
     @ViewBuilder
-    private var browserControlsBar: some View {
+    private func browserControlsBar(viewModel: TVBrowserViewModel) -> some View {
         HStack(spacing: 20) {
-            gridLayoutButton
-            listLayoutButton
-            sortOptionsButton
+            gridLayoutButton(viewModel: viewModel)
+            listLayoutButton(viewModel: viewModel)
+            sortOptionsButton(viewModel: viewModel)
 
             Spacer()
 
@@ -198,7 +239,7 @@ public struct TVMediaBrowserView: View {
     }
 
     @ViewBuilder
-    private var gridLayoutButton: some View {
+    private func gridLayoutButton(viewModel: TVBrowserViewModel) -> some View {
         Button {
             viewModel.setLayout(.grid)
         } label: {
@@ -211,7 +252,7 @@ public struct TVMediaBrowserView: View {
     }
 
     @ViewBuilder
-    private var listLayoutButton: some View {
+    private func listLayoutButton(viewModel: TVBrowserViewModel) -> some View {
         Button {
             viewModel.setLayout(.list)
         } label: {
@@ -224,7 +265,7 @@ public struct TVMediaBrowserView: View {
     }
 
     @ViewBuilder
-    private var sortOptionsButton: some View {
+    private func sortOptionsButton(viewModel: TVBrowserViewModel) -> some View {
         Button {
             showingSortDialog = true
         } label: {
@@ -247,7 +288,7 @@ public struct TVMediaBrowserView: View {
 
     // MARK: - Destination Routing
 
-    private func destination(for item: MediaSourceItem) -> TVNavigationDestination {
+    private func destination(for item: MediaSourceItem, in viewModel: TVBrowserViewModel) -> TVNavigationDestination {
         switch item.type {
         case .folder:
             return .browser(sourceID: source.id, folder: item)

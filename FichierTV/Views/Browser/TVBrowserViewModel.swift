@@ -76,9 +76,12 @@ public final class TVBrowserViewModel {
     /// Fetches the initial page of items, loading persisted sort and layout preferences first.
     public func loadInitial(force: Bool = false) async {
         guard force || !isLoading else { return }
-        loadGeneration += 1
-        let activeGeneration = loadGeneration
-        isLoading = true
+        let activeGeneration = advanceGenerationForReload()
+        defer {
+            if activeGeneration == self.loadGeneration {
+                self.isLoading = false
+            }
+        }
         errorMessage = nil
         currentPage = 0
         canLoadMore = true
@@ -93,7 +96,7 @@ public final class TVBrowserViewModel {
                 self.selectedSortOrder = saved.order
             }
         }
-        guard activeGeneration == self.loadGeneration else { return }
+        guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
 
         if !hasLoadedSavedLayout {
             hasLoadedSavedLayout = true
@@ -103,7 +106,7 @@ public final class TVBrowserViewModel {
                 self.selectedLayout = savedLayout
             }
         }
-        guard activeGeneration == self.loadGeneration else { return }
+        guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
 
         do {
             let fetched = try await source.fetchItems(
@@ -113,21 +116,27 @@ public final class TVBrowserViewModel {
                 page: 0,
                 pageSize: pageSize
             )
-            guard activeGeneration == self.loadGeneration else { return }
+            guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
             self.items = fetched
             self.canLoadMore = fetched.count >= pageSize
-            self.isLoading = false
+        } catch is CancellationError {
+            return
         } catch {
-            guard activeGeneration == self.loadGeneration else { return }
+            guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
             self.errorMessage = error.localizedDescription
-            self.isLoading = false
         }
     }
 
     /// Loads the subsequent page of media items if more exist.
     public func loadNextPage() async {
         guard !isLoading, !isPaginating, canLoadMore else { return }
+        let activeGeneration = loadGeneration
         isPaginating = true
+        defer {
+            if activeGeneration == self.loadGeneration {
+                self.isPaginating = false
+            }
+        }
         let nextPage = currentPage + 1
 
         do {
@@ -138,6 +147,7 @@ public final class TVBrowserViewModel {
                 page: nextPage,
                 pageSize: pageSize
             )
+            guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
 
             if fetched.isEmpty {
                 self.canLoadMore = false
@@ -146,19 +156,21 @@ public final class TVBrowserViewModel {
                 self.currentPage = nextPage
                 self.canLoadMore = fetched.count >= pageSize
             }
-            self.isPaginating = false
         } catch {
-            self.isPaginating = false
+            // Leave existing items intact on stale, cancelled, or failed pagination;
+            // defer clears `isPaginating` when this generation is still active.
         }
     }
 
     /// Triggers pagination when approaching the trailing items in the collection.
-    public func onItemAppear(_ item: MediaSourceItem) {
-        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
-        if index >= items.count - 8 {
-            Task {
-                await loadNextPage()
-            }
+    public func onItemAppear(at index: Int) {
+        guard !isLoading, !isPaginating, canLoadMore,
+              index >= 0, index < items.count,
+              index >= items.count - 8 else {
+            return
+        }
+        Task {
+            await loadNextPage()
         }
     }
 
@@ -168,9 +180,11 @@ public final class TVBrowserViewModel {
         hasLoadedSavedPreference = true
         guard key != selectedSortKey else { return }
         selectedSortKey = key
+        let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
             await preferenceStore.savePreference(preference, for: source.id)
+            guard expectedGeneration == self.loadGeneration else { return }
             await loadInitial(force: true)
         }
     }
@@ -180,9 +194,11 @@ public final class TVBrowserViewModel {
         hasUserChangedSort = true
         hasLoadedSavedPreference = true
         selectedSortOrder = (selectedSortOrder == .ascending) ? .descending : .ascending
+        let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
             await preferenceStore.savePreference(preference, for: source.id)
+            guard expectedGeneration == self.loadGeneration else { return }
             await loadInitial(force: true)
         }
     }
@@ -212,12 +228,21 @@ public final class TVBrowserViewModel {
 
     /// Refreshes sort preferences from the persisted per-source store and reloads if changed in a child folder.
     public func refreshSavedSortPreference() async {
+        let generationBeforeFetch = loadGeneration
         if let saved = await preferenceStore.preference(for: source.id),
+           generationBeforeFetch == self.loadGeneration,
            source.supportedSortKeys.contains(saved.key),
            saved.key != selectedSortKey || saved.order != selectedSortOrder {
             self.selectedSortKey = saved.key
             self.selectedSortOrder = saved.order
             await loadInitial(force: true)
         }
+    }
+
+    private func advanceGenerationForReload() -> Int {
+        loadGeneration += 1
+        isLoading = true
+        isPaginating = false
+        return loadGeneration
     }
 }
