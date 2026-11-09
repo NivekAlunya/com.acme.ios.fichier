@@ -25,6 +25,20 @@ import FichierKit
 ///   multi-megabyte full-file downloads.
 actor SMBClientActor {
 
+    // MARK: - Pagination Constants
+
+    /// Default bounded page size when enumerating top-level SMB shares.
+    static let defaultSharePageSize: Int = 50
+
+    /// Maximum number of share pages fetched in one pass to prevent infinite cursor loops.
+    static let maxSharePages: Int = 20
+
+    /// Default bounded page size for SMB folder contents.
+    static let defaultFolderPageSize: Int = 100
+
+    /// Maximum number of subfolder pages scanned during sidebar tree expansion.
+    static let maxSubfolderPages: Int = 50
+
     // MARK: - State Properties
 
     /// Factory constructing an `SMBClientProtocol` session (defaults to `FichierKit.AMSMB2Client`).
@@ -41,6 +55,9 @@ actor SMBClientActor {
 
     /// Active directory identifier used to cancel or drop out-of-date thumbnail requests when the user rapidly switches folders.
     private var activeFolderID: String?
+
+    /// Monotonic session counter guarding against actor reentrancy races across connect, replace, and disconnect.
+    private var sessionGeneration: UInt64 = 0
 
     /// High-performance thread-safe in-memory cache for downsampled thumbnails.
     /// Marked `nonisolated` to allow instant, non-blocking synchronous cache hits on the main thread.
@@ -111,27 +128,47 @@ actor SMBClientActor {
     ///   - server: Server connection configuration.
     ///   - password: SMB plaintext password.
     ///   - connectionID: Stable identifier scoping cache keys and `MediaItem.id`.
+    ///   - sharePageSize: Bounded page size used while enumerating server shares.
     /// - Returns: A sorted list of root directory `MediaItem` instances.
     func connectAndListShares(
         server: SavedSMBConnection,
         password: String,
-        connectionID: String = ""
+        connectionID: String = "",
+        sharePageSize: Int = SMBClientActor.defaultSharePageSize
     ) async throws -> [MediaItem] {
+        sessionGeneration &+= 1
+        let expectedGeneration = sessionGeneration
+
+        let previousClient = client
+        clearSessionState()
+        await Self.disconnectClient(previousClient)
+
+        try Task.checkCancellation()
+        guard sessionGeneration == expectedGeneration else {
+            throw CancellationError()
+        }
+
         let resolvedConnectionID = connectionID.isEmpty ? server.id : connectionID
         let newClient = clientFactory(server, password)
         let sharesSource = SharesMediaSource(server: server, client: newClient)
 
         do {
-            let sourceItems = try await sharesSource.fetchItems(
-                in: nil,
-                sortBy: .name,
-                order: .ascending,
-                page: 0,
-                pageSize: Int.max
-            )
+            let sourceItems = try await fetchAllBoundedShares(from: sharesSource, pageSize: sharePageSize)
 
-            if let previousClient = client as? AMSMB2Client {
-                await previousClient.disconnect()
+            guard !Task.isCancelled, sessionGeneration == expectedGeneration else {
+                await Self.disconnectClient(newClient)
+                if sessionGeneration == expectedGeneration {
+                    clearSessionState()
+                }
+                throw CancellationError()
+            }
+
+            guard !sourceItems.isEmpty else {
+                await Self.disconnectClient(newClient)
+                if sessionGeneration == expectedGeneration {
+                    clearSessionState()
+                }
+                return []
             }
 
             self.client = newClient
@@ -146,8 +183,9 @@ actor SMBClientActor {
                 )
             }
         } catch {
-            if let failedClient = newClient as? AMSMB2Client {
-                await failedClient.disconnect()
+            await Self.disconnectClient(newClient)
+            if sessionGeneration == expectedGeneration {
+                clearSessionState()
             }
             throw error
         }
@@ -155,21 +193,22 @@ actor SMBClientActor {
 
     /// Refreshes the list of available shares on the currently active connection.
     ///
+    /// - Parameter pageSize: Bounded page size used while enumerating server shares.
     /// - Returns: An updated list of root shares.
     /// - Throws: `URLError(.notConnectedToInternet)` if no client session is currently active.
-    func refreshShares() async throws -> [MediaItem] {
+    func refreshShares(pageSize: Int = SMBClientActor.defaultSharePageSize) async throws -> [MediaItem] {
+        try Task.checkCancellation()
+        let expectedGeneration = sessionGeneration
         guard let client, let activeServer else {
             throw URLError(.notConnectedToInternet)
         }
-        let sharesSource = SharesMediaSource(server: activeServer, client: client)
-        let sourceItems = try await sharesSource.fetchItems(
-            in: nil,
-            sortBy: .name,
-            order: .ascending,
-            page: 0,
-            pageSize: Int.max
-        )
         let connID = self.currentConnectionID
+        let sharesSource = SharesMediaSource(server: activeServer, client: client)
+        let sourceItems = try await fetchAllBoundedShares(from: sharesSource, pageSize: pageSize)
+        try Task.checkCancellation()
+        guard sessionGeneration == expectedGeneration else {
+            throw CancellationError()
+        }
         return sourceItems.map { sourceItem in
             MediaItem(
                 sourceItem: sourceItem,
@@ -181,59 +220,127 @@ actor SMBClientActor {
 
     /// Disconnects from the current SMB session and purges all in-memory image and metadata caches.
     func disconnect() async {
-        if let amsmbClient = client as? AMSMB2Client {
-            await amsmbClient.disconnect()
-        }
+        sessionGeneration &+= 1
+        let activeClient = client
+        clearSessionState()
+        await Self.disconnectClient(activeClient)
+    }
+
+    /// Resets session metadata and volatile memory caches synchronously on the actor executor.
+    private func clearSessionState() {
         client = nil
         activeServer = nil
         currentConnectionID = ""
-        thumbnailCache.removeAllObjects()
-        fullImageCache.removeAllObjects()
-        metadataCache.removeAllObjects()
+        activeFolderID = nil
+        clearMemoryCache()
+    }
+
+    /// Disconnects a `SMBClientProtocol` instance in an uncancelled task so teardown runs even under task cancellation.
+    private nonisolated static func disconnectClient(_ targetClient: (any SMBClientProtocol)?) async {
+        guard let targetClient else { return }
+        await Task {
+            await targetClient.disconnect()
+        }.value
+    }
+
+    /// Fetches all shares using bounded pages via `SharesMediaSource.fetchDirectoryPage` instead of `Int.max`.
+    private func fetchAllBoundedShares(
+        from sharesSource: SharesMediaSource,
+        pageSize: Int
+    ) async throws -> [MediaSourceItem] {
+        let boundedPageSize = max(1, pageSize)
+        var collected: [MediaSourceItem] = []
+        var seenIDs: Set<String> = []
+        var cursor: String?
+
+        for _ in 0..<Self.maxSharePages {
+            try Task.checkCancellation()
+            let page = try await sharesSource.fetchDirectoryPage(
+                in: nil,
+                sortBy: .name,
+                order: .ascending,
+                cursor: cursor,
+                pageSize: boundedPageSize
+            )
+            try Task.checkCancellation()
+
+            for item in page.items where seenIDs.insert(item.id).inserted {
+                collected.append(item)
+            }
+
+            guard let nextCursor = page.nextCursor,
+                  nextCursor != cursor,
+                  !page.items.isEmpty else {
+                break
+            }
+            cursor = nextCursor
+        }
+
+        return collected
     }
 
     // MARK: - Directory Enumeration
 
-    /// Scans a directory within a specific share via `FichierKit` and segregates entries into subfolders and supported media files.
+    /// Scans a single bounded page of directory entries within a share via `FichierKit`.
     ///
     /// - Parameters:
     ///   - shareName: The name of the share volume.
     ///   - path: The directory path relative to the share root.
-    /// - Returns: A tuple containing sorted subfolders and media items.
-    /// - Throws: `CancellationError` if cancelled, or `SMBError` / `URLError` on network failure.
-    func scanFolder(shareName: String, at path: String) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
+    ///   - cursor: Opaque continuation cursor from a previous `SMBFolderPage`, or `nil` for the first page.
+    ///   - pageSize: Maximum number of items requested for this page.
+    ///   - sortKey: Global sort key forwarded to `FichierKit`.
+    ///   - sortOrder: Global sort direction forwarded to `FichierKit`.
+    /// - Returns: A bounded `SMBFolderPage` containing folder-first items and continuation metadata.
+    ///
+    /// FichierKit bounds the results exposed to the app, but AMSMB2's public API
+    /// materializes one complete directory snapshot before paging. This is required
+    /// for deterministic global sorting because SMB2 does not provide server-side
+    /// sorted cursors or incremental enumeration through the supported API.
+    func scanFolderPage(
+        shareName: String,
+        at path: String,
+        cursor: String? = nil,
+        pageSize: Int = SMBClientActor.defaultFolderPageSize,
+        sortBy sortKey: MediaSortKey = .name,
+        order sortOrder: MediaSortOrder = .ascending
+    ) async throws -> SMBFolderPage {
         try Task.checkCancellation()
+        let expectedGeneration = sessionGeneration
         guard let client, let activeServer else {
             throw URLError(.notConnectedToInternet)
         }
 
         let cleanRelativePath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let connID = self.currentConnectionID
         let folderSourceItem = MediaSourceItem(
-            id: "\(currentConnectionID)|\(shareName)::/\(cleanRelativePath)",
+            id: "\(connID)|\(shareName)::/\(cleanRelativePath)",
             name: (cleanRelativePath as NSString).lastPathComponent,
             path: cleanRelativePath.isEmpty ? shareName : "\(shareName)/\(cleanRelativePath)",
             type: .folder,
-            sourceID: currentConnectionID,
+            sourceID: connID,
             smbShare: shareName,
             smbPath: cleanRelativePath
         )
 
+        let boundedPageSize = max(1, pageSize)
         let sharesSource = SharesMediaSource(server: activeServer, client: client)
-        let sourceItems = try await sharesSource.fetchItems(
+        let directoryPage = try await sharesSource.fetchDirectoryPage(
             in: folderSourceItem,
-            sortBy: .name,
-            order: .ascending,
-            page: 0,
-            pageSize: Int.max
+            sortBy: sortKey,
+            order: sortOrder,
+            cursor: cursor,
+            pageSize: boundedPageSize
         )
 
         try Task.checkCancellation()
+        guard sessionGeneration == expectedGeneration else {
+            throw CancellationError()
+        }
 
         var folders: [MediaItem] = []
         var pictures: [MediaItem] = []
-        let connID = self.currentConnectionID
 
-        for sourceItem in sourceItems {
+        for sourceItem in directoryPage.items {
             if Task.isCancelled { throw CancellationError() }
             let mapped = MediaItem(
                 sourceItem: sourceItem,
@@ -247,10 +354,59 @@ actor SMBClientActor {
             }
         }
 
-        folders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        pictures.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return SMBFolderPage(
+            folders: folders,
+            pictures: pictures,
+            nextCursor: directoryPage.nextCursor,
+            totalCount: directoryPage.totalCount
+        )
+    }
 
-        return (folders, pictures)
+    /// Scans immediate subfolders within a directory for sidebar tree expansion without loading trailing media pages.
+    ///
+    /// - Parameters:
+    ///   - shareName: The name of the share volume.
+    ///   - path: The directory path relative to the share root.
+    ///   - pageSize: Bounded page size per request.
+    /// - Returns: Subfolder `MediaItem` entries sorted alphabetically.
+    func scanSubfolders(
+        shareName: String,
+        at path: String,
+        pageSize: Int = SMBClientActor.defaultFolderPageSize
+    ) async throws -> [MediaItem] {
+        let boundedPageSize = max(1, pageSize)
+        var collectedFolders: [MediaItem] = []
+        var seenIDs: Set<String> = []
+        var cursor: String?
+
+        for _ in 0..<Self.maxSubfolderPages {
+            try Task.checkCancellation()
+            let page = try await scanFolderPage(
+                shareName: shareName,
+                at: path,
+                cursor: cursor,
+                pageSize: boundedPageSize,
+                sortBy: .name,
+                order: .ascending
+            )
+            try Task.checkCancellation()
+
+            for folder in page.folders where seenIDs.insert(folder.id).inserted {
+                collectedFolders.append(folder)
+            }
+
+            if !page.pictures.isEmpty {
+                break
+            }
+            guard let nextCursor = page.nextCursor,
+                  nextCursor != cursor,
+                  !page.folders.isEmpty else {
+                break
+            }
+            cursor = nextCursor
+        }
+
+        return collectedFolders
     }
 
     // MARK: - Thumbnail Retrieval & Downsampling

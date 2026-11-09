@@ -81,12 +81,43 @@ public final class StorageLocationManager {
     
     /// Identifier representing the current connection session, used for cache partitioning.
     public private(set) var currentConnectionID: String = ""
+
+    /// Indicates whether an incremental folder page fetch (`loadNextFolderPage`) is currently in flight.
+    public private(set) var isLoadingMore = false
+
+    /// Indicates whether additional folder pages can be fetched for the currently selected folder.
+    public private(set) var canLoadMorePages = false
+
+    /// Retryable error message for incremental folder pagination failures, keeping loaded pages intact.
+    public private(set) var paginationErrorMessage: String?
+
+    /// Global sort key currently applied to backend-paginated folder enumeration.
+    public private(set) var currentSortKey: MediaSortKey = .name
+
+    /// Global sort direction currently applied to backend-paginated folder enumeration.
+    public private(set) var currentSortOrder: MediaSortOrder = .ascending
     
     /// Tracks dynamic thumbnail generation tokens per media item, allowing observing SwiftUI views to react to on-the-fly upgrades.
     public private(set) var thumbnailVersions: [String: Int] = [:]
     
     /// In-flight asynchronous folder scanning task, cancelled when switching folders rapidly.
     private var loadFolderTask: Task<Void, Never>?
+
+    /// In-flight incremental pagination task, cancelled when changing folders, sorting, or disconnecting.
+    private var loadMoreTask: Task<Void, Never>?
+
+    /// Monotonic generation counter rejecting stale folder initial-load or trailing-page commits.
+    private var folderGeneration: UInt64 = 0
+
+    /// Cursor/page progression state for the currently active folder.
+    private var paginationState: FolderPaginationState?
+
+    /// Deduplication sets ensuring retried or overlapping pages never duplicate `MediaItem.id` values.
+    private var loadedFolderIDs: Set<String> = []
+    private var loadedPictureIDs: Set<String> = []
+
+    /// Bounded page size used for SMB and Photos directory pagination.
+    private let folderPageSize: Int
     
     /// In-memory memory map preserving the last viewed folder per location ID for seamless split-view restoration.
     private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
@@ -134,13 +165,15 @@ public final class StorageLocationManager {
         localWorker: LocalStorageActor = LocalStorageActor(),
         photosWorker: PhotoLibraryActor = PhotoLibraryActor(),
         persistenceStore: StorageLocationPersistenceStore = StorageLocationPersistenceStore(),
-        navigationCoordinator: FolderNavigationCoordinator = FolderNavigationCoordinator()
+        navigationCoordinator: FolderNavigationCoordinator = FolderNavigationCoordinator(),
+        folderPageSize: Int = SMBClientActor.defaultFolderPageSize
     ) {
         self.worker = worker
         self.localWorker = localWorker
         self.photosWorker = photosWorker
         self.persistenceStore = persistenceStore
         self.navigationCoordinator = navigationCoordinator
+        self.folderPageSize = max(1, folderPageSize)
         loadSavedConnections()
         loadSavedFolderLocations()
         setupLifecycleObservers()
@@ -383,8 +416,20 @@ public final class StorageLocationManager {
     ///   - pass: Plaintext password.
     ///   - hostname: Optional NetBIOS/Bonjour name for display.
     public func connect(host: String, user: String, pass: String, hostname: String? = nil) async {
+        folderGeneration &+= 1
+        loadFolderTask?.cancel()
+        loadFolderTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+
         isLoading = true
+        isLoadingMore = false
+        canLoadMorePages = false
         errorMessage = nil
+        paginationErrorMessage = nil
+        paginationState = nil
+        loadedFolderIDs.removeAll()
+        loadedPictureIDs.removeAll()
         
         let cleanHost = host
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -410,8 +455,11 @@ public final class StorageLocationManager {
         do {
             let discoveredShares = try await worker.connectAndListShares(server: server, password: pass, connectionID: connID)
             guard !discoveredShares.isEmpty else {
+                await worker.disconnect()
                 errorMessage = String(localized: .Strings.networkingErrorNoSharedFolders)
                 isConnected = false
+                currentConnectionID = ""
+                folderTree = []
                 isLoading = false
                 return
             }
@@ -437,9 +485,18 @@ public final class StorageLocationManager {
             } else if discoveredShares.count == 1, let singleShare = discoveredShares.first {
                 await selectAndLoadFolder(singleShare)
             }
+        } catch is CancellationError {
+            await worker.disconnect()
+            self.errorMessage = nil
+            self.isConnected = false
+            self.currentConnectionID = ""
+            self.folderTree = []
         } catch {
+            await worker.disconnect()
             self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
             self.isConnected = false
+            self.currentConnectionID = ""
+            self.folderTree = []
         }
         
         isLoading = false
@@ -504,103 +561,412 @@ public final class StorageLocationManager {
         }
     }
     
-    // MARK: - Select Folder & Load Both Subfolders + Pictures
+    // MARK: - Select Folder & Bounded Folder Pagination
     
-    /// Selects a folder item and asynchronously enumerates its child subfolders and media files.
+    /// Selects a folder item and asynchronously enumerates its first bounded page of child subfolders and media files.
     ///
     /// ### Concurrency and Invalidation Strategy
-    /// 1. Immediately cancels any ongoing `loadFolderTask` to prioritize the new user action.
+    /// 1. Advances `folderGeneration` and cancels any ongoing initial-load or trailing-page tasks.
     /// 2. Clears the existing `pictures` and `currentFolders` collections to cause obsolete UI
     ///    cells to unmount and drop their active thumbnail generation tasks.
     /// 3. Signals the `worker` actor with the new `activeFolderID` to discard queued thumbnail requests.
-    /// 4. Checks cooperative task cancellation (`Task.checkCancellation()`) before committing state.
+    /// 4. Checks cooperative task cancellation and `folderGeneration` before committing state.
     ///
     /// - Parameter folder: The folder item to browse.
     public func selectAndLoadFolder(_ folder: MediaItem) async {
+        await loadFolderContents(folder, sortKey: currentSortKey, order: currentSortOrder)
+    }
+
+    /// Updates the active sort configuration and reloads paginated SMB/Photos folders from page 0.
+    public func applySort(key: MediaSortKey, order: MediaSortOrder) async {
+        let sortChanged = key != currentSortKey || order != currentSortOrder
+        currentSortKey = key
+        currentSortOrder = order
+
+        guard let folder = selectedFolder else { return }
+        guard folder.localURL == nil else { return }
+
+        let loadedWithDifferentSort: Bool
+        if let paginationState {
+            loadedWithDifferentSort = paginationState.sortKey != key || paginationState.sortOrder != order
+        } else {
+            loadedWithDifferentSort = sortChanged
+        }
+        guard sortChanged || loadedWithDifferentSort else { return }
+
+        await loadFolderContents(folder, sortKey: key, order: order)
+    }
+
+    /// Loads the next bounded page of items for the currently active folder without disturbing scroll position (`isLoading`).
+    public func loadNextFolderPage() async {
+        guard !Task.isCancelled,
+              !isLoading,
+              !isLoadingMore,
+              canLoadMorePages,
+              let state = paginationState,
+              state.hasMore,
+              let targetFolder = selectedFolder,
+              state.folderID == activeFolderID,
+              state.folderID == targetFolder.id else {
+            return
+        }
+
+        let expectedGeneration = folderGeneration
+        let targetID = targetFolder.id
+        let pageSize = folderPageSize
+
+        isLoadingMore = true
+        paginationErrorMessage = nil
+
+        let task = Task { [weak self, worker, photosWorker, state] in
+            guard let self else { return }
+            var updatedState = state
+
+            do {
+                try Task.checkCancellation()
+
+                switch updatedState.backend {
+                case .smb:
+                    guard let cursor = updatedState.smbCursor else {
+                        guard !Task.isCancelled,
+                              self.folderGeneration == expectedGeneration,
+                              self.activeFolderID == targetID else { return }
+                        updatedState.hasMore = false
+                        self.paginationState = updatedState
+                        self.canLoadMorePages = false
+                        self.isLoadingMore = false
+                        return
+                    }
+
+                    let page = try await worker.scanFolderPage(
+                        shareName: targetFolder.shareName,
+                        at: targetFolder.path,
+                        cursor: cursor,
+                        pageSize: pageSize,
+                        sortBy: updatedState.sortKey,
+                        order: updatedState.sortOrder
+                    )
+                    try Task.checkCancellation()
+
+                    guard !Task.isCancelled,
+                          self.folderGeneration == expectedGeneration,
+                          self.activeFolderID == targetID else {
+                        return
+                    }
+
+                    let newFolders = self.appendUnique(page.folders, into: &self.loadedFolderIDs)
+                    let newPictures = self.appendUnique(page.pictures, into: &self.loadedPictureIDs)
+
+                    if !newFolders.isEmpty {
+                        self.currentFolders.append(contentsOf: newFolders)
+                        self.folderTree = self.updateTreeNodes(
+                            in: self.folderTree,
+                            targetID: targetID,
+                            children: self.currentFolders
+                        )
+                    }
+                    if !newPictures.isEmpty {
+                        self.pictures.append(contentsOf: newPictures)
+                    }
+
+                    if newFolders.isEmpty && newPictures.isEmpty {
+                        updatedState.consecutiveEmptyPages += 1
+                    } else {
+                        updatedState.consecutiveEmptyPages = 0
+                    }
+
+                    let hasMore = page.nextCursor != nil
+                        && page.nextCursor != cursor
+                        && updatedState.consecutiveEmptyPages < 3
+
+                    updatedState.smbCursor = hasMore ? page.nextCursor : nil
+                    updatedState.hasMore = hasMore
+                    self.paginationState = updatedState
+                    self.canLoadMorePages = hasMore
+                    self.isLoadingMore = false
+
+                case .photos:
+                    guard let nextPage = updatedState.nextPhotoPage else {
+                        guard !Task.isCancelled,
+                              self.folderGeneration == expectedGeneration,
+                              self.activeFolderID == targetID else { return }
+                        updatedState.hasMore = false
+                        self.paginationState = updatedState
+                        self.canLoadMorePages = false
+                        self.isLoadingMore = false
+                        return
+                    }
+
+                    let page = try await photosWorker.listContentsPage(
+                        at: targetFolder,
+                        sortBy: updatedState.sortKey,
+                        order: updatedState.sortOrder,
+                        page: nextPage,
+                        pageSize: pageSize
+                    )
+                    try Task.checkCancellation()
+
+                    guard !Task.isCancelled,
+                          self.folderGeneration == expectedGeneration,
+                          self.activeFolderID == targetID else {
+                        return
+                    }
+
+                    let newPictures = self.appendUnique(page.media, into: &self.loadedPictureIDs)
+                    if !newPictures.isEmpty {
+                        self.pictures.append(contentsOf: newPictures)
+                    }
+
+                    if newPictures.isEmpty {
+                        updatedState.consecutiveEmptyPages += 1
+                    } else {
+                        updatedState.consecutiveEmptyPages = 0
+                    }
+
+                    let hasMore = page.nextPage != nil
+                        && page.nextPage != nextPage
+                        && !page.media.isEmpty
+                        && updatedState.consecutiveEmptyPages < 3
+
+                    updatedState.nextPhotoPage = hasMore ? page.nextPage : nil
+                    updatedState.hasMore = hasMore
+                    self.paginationState = updatedState
+                    self.canLoadMorePages = hasMore
+                    self.isLoadingMore = false
+
+                case .local:
+                    guard self.folderGeneration == expectedGeneration,
+                          self.activeFolderID == targetID else { return }
+                    updatedState.hasMore = false
+                    self.paginationState = updatedState
+                    self.canLoadMorePages = false
+                    self.isLoadingMore = false
+                }
+            } catch is CancellationError {
+                if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
+                    self.isLoadingMore = false
+                }
+            } catch {
+                guard !Task.isCancelled,
+                      self.folderGeneration == expectedGeneration,
+                      self.activeFolderID == targetID else {
+                    return
+                }
+                self.paginationErrorMessage = error.localizedDescription
+                self.isLoadingMore = false
+                AppLog.smb.error("Error loading next page for \(targetFolder.shareName, privacy: .private)/\(targetFolder.path, privacy: .private): \(error.localizedDescription)")
+            }
+        }
+
+        loadMoreTask = task
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if self.folderGeneration == expectedGeneration {
+            self.loadMoreTask = nil
+        }
+    }
+
+    /// Triggers incremental pagination when a trailing gallery or subfolder item appears on screen.
+    public func loadNextFolderPageIfNeeded(currentItem: MediaItem, thresholdOffset: Int = 8) {
+        guard !isLoading,
+              !isLoadingMore,
+              canLoadMorePages,
+              paginationErrorMessage == nil else {
+            return
+        }
+
+        let offset = max(1, thresholdOffset)
+        let shouldTrigger: Bool
+        if let picIndex = pictures.firstIndex(where: { $0.id == currentItem.id }) {
+            shouldTrigger = picIndex >= max(0, pictures.count - offset)
+        } else if currentItem.isDirectory,
+                  let folderIndex = currentFolders.firstIndex(where: { $0.id == currentItem.id }) {
+            shouldTrigger = pictures.isEmpty && folderIndex >= max(0, currentFolders.count - offset)
+        } else {
+            shouldTrigger = false
+        }
+
+        guard shouldTrigger else { return }
+
+        loadMoreTask = Task { [weak self] in
+            await self?.loadNextFolderPage()
+        }
+    }
+
+    private func loadFolderContents(
+        _ folder: MediaItem,
+        sortKey: MediaSortKey,
+        order: MediaSortOrder
+    ) async {
         // Record this folder as the last active selection for the current location
         if let locID = currentLocation?.id, !locID.isEmpty {
             lastSelectedFolderPerLocation[locID] = folder
         }
-        
-        // 1. Cancel previous folder scan task immediately
+
+        // 1. Advance generation and cancel any ongoing folder/pagination tasks immediately
+        folderGeneration &+= 1
+        let expectedGeneration = folderGeneration
         loadFolderTask?.cancel()
-        
+        loadFolderTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+
         // 2. Set newly selected folder and record active folder ID
         selectedFolder = folder
         activeFolderID = folder.id
         isLoading = true
+        isLoadingMore = false
+        canLoadMorePages = false
         errorMessage = nil
-        
+        paginationErrorMessage = nil
+        paginationState = nil
+        loadedFolderIDs.removeAll()
+        loadedPictureIDs.removeAll()
+
         // 3. Immediately clear out previous items so thumbnail views unmount
         // and cancel their ongoing thumbnail tasks in SwiftUI
         pictures = []
         currentFolders = []
-        
+
         // 4. Notify worker actor of active folder change to immediately invalidate pending thumbnails
         await worker.setActiveFolder(id: folder.id)
-        
+
         // 5. Spawn cancellable task and await its completion
         let targetID = folder.id
-        guard !Task.isCancelled, self.activeFolderID == targetID else {
-            if self.activeFolderID == targetID {
+        guard !Task.isCancelled,
+              self.folderGeneration == expectedGeneration,
+              self.activeFolderID == targetID else {
+            if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
                 self.isLoading = false
             }
             return
         }
+
         let targetShare = folder.shareName
         let targetPath = folder.path
         let targetName = folder.name
         let isLocal = folder.localURL != nil
         let isPhotos = folder.locationID == StorageLocation.photosLocationID
-        
+        let pageSize = self.folderPageSize
+
         let task = Task { [weak self, worker, localWorker, photosWorker] in
             guard let self else { return }
             do {
                 try Task.checkCancellation()
                 let subfolders: [MediaItem]
                 let foundPictures: [MediaItem]
-                
+                let initialPaginationState: FolderPaginationState
+
                 if isLocal {
                     let (subs, media) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
                     subfolders = subs
                     foundPictures = media
+                    initialPaginationState = FolderPaginationState(
+                        folderID: targetID,
+                        backend: .local,
+                        smbCursor: nil,
+                        nextPhotoPage: nil,
+                        sortKey: sortKey,
+                        sortOrder: order,
+                        hasMore: false
+                    )
                 } else if isPhotos {
-                    let (subs, media) = try await photosWorker.listContents(at: folder)
-                    subfolders = subs
-                    foundPictures = media
+                    let page = try await photosWorker.listContentsPage(
+                        at: folder,
+                        sortBy: sortKey,
+                        order: order,
+                        page: 0,
+                        pageSize: pageSize
+                    )
+                    subfolders = page.subfolders
+                    foundPictures = page.media
+                    initialPaginationState = FolderPaginationState(
+                        folderID: targetID,
+                        backend: .photos,
+                        smbCursor: nil,
+                        nextPhotoPage: page.nextPage,
+                        sortKey: sortKey,
+                        sortOrder: order,
+                        hasMore: page.nextPage != nil
+                    )
                 } else {
-                    let (subs, media) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
-                    subfolders = subs
-                    foundPictures = media
+                    let page = try await worker.scanFolderPage(
+                        shareName: targetShare,
+                        at: targetPath,
+                        cursor: nil,
+                        pageSize: pageSize,
+                        sortBy: sortKey,
+                        order: order
+                    )
+                    subfolders = page.folders
+                    foundPictures = page.pictures
+                    initialPaginationState = FolderPaginationState(
+                        folderID: targetID,
+                        backend: .smb,
+                        smbCursor: page.nextCursor,
+                        nextPhotoPage: nil,
+                        sortKey: sortKey,
+                        sortOrder: order,
+                        hasMore: page.nextCursor != nil
+                    )
                 }
-                
+
                 try Task.checkCancellation()
-                
-                guard !Task.isCancelled, self.activeFolderID == targetID else { return }
-                self.currentFolders = subfolders
-                self.pictures = foundPictures
-                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
+
+                guard !Task.isCancelled,
+                      self.folderGeneration == expectedGeneration,
+                      self.activeFolderID == targetID else {
+                    return
+                }
+
+                let uniqueSubfolders = self.appendUnique(subfolders, into: &self.loadedFolderIDs)
+                let uniquePictures = self.appendUnique(foundPictures, into: &self.loadedPictureIDs)
+
+                self.currentFolders = uniqueSubfolders
+                self.pictures = uniquePictures
+                self.paginationState = initialPaginationState
+                self.canLoadMorePages = initialPaginationState.hasMore
+                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: uniqueSubfolders)
                 self.isLoading = false
-                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) items")
+                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(uniqueSubfolders.count) subfolders, \(uniquePictures.count) items (hasMore: \(initialPaginationState.hasMore))")
             } catch is CancellationError {
                 // Clean up loading flag only if this folder was not superseded by a newer selection
-                if self.activeFolderID == targetID {
+                if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
                     self.isLoading = false
                 }
             } catch {
-                guard !Task.isCancelled, self.activeFolderID == targetID else { return }
+                guard !Task.isCancelled,
+                      self.folderGeneration == expectedGeneration,
+                      self.activeFolderID == targetID else {
+                    return
+                }
                 self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
                 self.isLoading = false
                 AppLog.smb.error("Error scanning folder \(targetShare, privacy: .private)/\(targetPath, privacy: .private): \(error.localizedDescription)")
             }
         }
-        
+
         loadFolderTask = task
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
             task.cancel()
         }
+        if self.folderGeneration == expectedGeneration {
+            self.loadFolderTask = nil
+        }
+    }
+
+    private func appendUnique(_ items: [MediaItem], into seenIDs: inout Set<String>) -> [MediaItem] {
+        var appended: [MediaItem] = []
+        appended.reserveCapacity(items.count)
+        for item in items where seenIDs.insert(item.id).inserted {
+            appended.append(item)
+        }
+        return appended
     }
     
     /// Lazily populates child subfolders in the sidebar tree without altering the active grid selection.
@@ -616,8 +982,11 @@ public final class StorageLocationManager {
                 let (subs, _) = try await photosWorker.listContents(at: folder)
                 subfolders = subs
             } else {
-                let (subs, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
-                subfolders = subs
+                subfolders = try await worker.scanSubfolders(
+                    shareName: folder.shareName,
+                    at: folder.path,
+                    pageSize: folderPageSize
+                )
             }
             self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
         } catch {
@@ -1266,14 +1635,24 @@ public final class StorageLocationManager {
     
     /// Disconnects from the active storage location and resets all navigation and selection state.
     public func disconnect() async {
+        folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
         activeFolderID = nil
         currentConnectionID = ""
         currentLocation = nil
         
         isConnected = false
         isLoading = false
+        isLoadingMore = false
+        canLoadMorePages = false
+        errorMessage = nil
+        paginationErrorMessage = nil
+        paginationState = nil
+        loadedFolderIDs.removeAll()
+        loadedPictureIDs.removeAll()
         folderTree = []
         currentFolders = []
         selectedFolder = nil
