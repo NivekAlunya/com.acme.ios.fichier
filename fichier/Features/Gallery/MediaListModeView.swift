@@ -78,6 +78,9 @@ struct MediaListModeView: View {
                                         .foregroundColor(.secondary)
                                 }
                             }
+                            .onAppear {
+                                manager.loadNextFolderPageIfNeeded(currentItem: subfolder)
+                            }
                         }
                     }
                     .id("topOfList")
@@ -101,6 +104,9 @@ struct MediaListModeView: View {
                                 )
                             }
                             .buttonStyle(.plain)
+                            .onAppear {
+                                manager.loadNextFolderPageIfNeeded(currentItem: pic)
+                            }
                             .simultaneousGesture(
                                 LongPressGesture().onEnded { _ in
                                     if !isSelectionMode {
@@ -111,6 +117,12 @@ struct MediaListModeView: View {
                         }
                     }
                     .id(folders.isEmpty ? "topOfList" : "picturesSection")
+                }
+
+                if manager.isLoadingMore || manager.paginationErrorMessage != nil || manager.canLoadMorePages {
+                    Section {
+                        MediaPaginationFooterView(manager: manager)
+                    }
                 }
             }
             .id(currentDirectoryID)
