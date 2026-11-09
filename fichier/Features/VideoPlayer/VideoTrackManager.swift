@@ -5,6 +5,7 @@
 
 import AVFoundation
 import Observation
+import FichierKit
 
 /// Coordinates audio track selection, closed-caption subtitle parsing, and playback rate for `VideoPlayerController`.
 ///
@@ -39,7 +40,7 @@ public final class VideoTrackManager {
     private var legibleOutput: AVPlayerItemLegibleOutput?
     private var subtitleDelegate: VideoSubtitleDelegate?
     private weak var loadedPlayerItem: AVPlayerItem?
-    private weak var loadedExtendedEngine: ExtendedPlayerEngine?
+    private weak var loadedEngine: (any PlayerEngine)?
     
     /// Designated public initializer.
     public init() {}
@@ -55,7 +56,7 @@ public final class VideoTrackManager {
             loadedPlayerItem?.remove(output)
         }
         loadedPlayerItem = nil
-        loadedExtendedEngine = nil
+        loadedEngine = nil
         availableAudios.removeAll()
         selectedAudioID = nil
         availableSubtitles.removeAll()
@@ -147,35 +148,61 @@ public final class VideoTrackManager {
         }
     }
     
-    /// Populates audio and subtitle track options from an active `ExtendedPlayerEngine`.
+    /// Populates audio and subtitle track options from an active `FichierKit.PlayerEngine`.
     ///
-    /// - Parameter extendedEngine: Active extended playback engine instance.
-    public func loadTracks(for extendedEngine: ExtendedPlayerEngine) {
-        if loadedExtendedEngine !== extendedEngine {
+    /// - Parameter playerEngine: Active playback engine instance.
+    public func loadTracks(for playerEngine: any PlayerEngine) {
+        if loadedEngine !== playerEngine {
             reset()
-            self.loadedExtendedEngine = extendedEngine
+            self.loadedEngine = playerEngine
         }
-        
-        let audios = extendedEngine.audioTrackOptions
+
+        let audios = playerEngine.availableAudioTracks.enumerated().map { idx, track in
+            let name = track.title.isEmpty
+                ? String(localized: .Strings.videoPlayerTrackFallback(idx + 1))
+                : track.title
+            return VideoTrackOption(id: track.id, displayName: name, playerAudioTrack: track)
+        }
         self.availableAudios = audios
-        let currentAudioIdx = extendedEngine.currentAudioTrackIndex
-        if let current = selectedAudioID, audios.contains(where: { $0.id == current }) {
+        if let selectedAudio = playerEngine.selectedAudioTrack,
+           audios.contains(where: { $0.id == selectedAudio.id }) {
+            self.selectedAudioID = selectedAudio.id
+        } else if let current = selectedAudioID, audios.contains(where: { $0.id == current }) {
             // Retain user selection
-        } else if let matching = audios.first(where: { $0.vlcTrackIndex == currentAudioIdx }) {
-            self.selectedAudioID = matching.id
         } else {
             self.selectedAudioID = audios.first?.id
         }
-        
-        let subs = extendedEngine.subtitleTrackOptions
-        self.availableSubtitles = subs
-        let currentSubIdx = extendedEngine.currentSubtitleTrackIndex
-        if let current = selectedSubtitleID, subs.contains(where: { $0.id == current }) {
-            // Retain user selection
-        } else if currentSubIdx == -1 {
-            self.selectedSubtitleID = "sub_off"
-        } else if let matching = subs.first(where: { $0.vlcTrackIndex == currentSubIdx }) {
-            self.selectedSubtitleID = matching.id
+
+        let engineSubtitles = playerEngine.availableSubtitleTracks
+        var subOptions: [VideoTrackOption] = []
+        if !engineSubtitles.isEmpty {
+            subOptions.append(
+                VideoTrackOption(
+                    id: "sub_off",
+                    displayName: String(localized: .Strings.videoPlayerSubtitlesOff),
+                    playerSubtitleTrack: nil
+                )
+            )
+            for (idx, track) in engineSubtitles.enumerated() {
+                let name = track.title.isEmpty
+                    ? String(localized: .Strings.videoPlayerSubtitleFallback(idx + 1))
+                    : track.title
+                subOptions.append(
+                    VideoTrackOption(
+                        id: track.id,
+                        displayName: name,
+                        playerSubtitleTrack: track
+                    )
+                )
+            }
+        }
+        self.availableSubtitles = subOptions
+
+        if subOptions.isEmpty {
+            self.selectedSubtitleID = nil
+        } else if let selectedSub = playerEngine.selectedSubtitleTrack,
+                  subOptions.contains(where: { $0.id == selectedSub.id }) {
+            self.selectedSubtitleID = selectedSub.id
         } else {
             self.selectedSubtitleID = "sub_off"
         }
@@ -190,10 +217,10 @@ public final class VideoTrackManager {
     ///
     /// - Parameters:
     ///   - playerItem: Optional active `AVPlayerItem`.
-    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    ///   - engine: Optional active `FichierKit.PlayerEngine`.
     public func toggleSubtitles(
         in playerItem: AVPlayerItem? = nil,
-        engine: ExtendedPlayerEngine? = nil
+        engine: (any PlayerEngine)? = nil
     ) {
         if isSubtitlesEnabled {
             if let offOption = availableSubtitles.first(where: { $0.id == "sub_off" }) {
@@ -211,14 +238,14 @@ public final class VideoTrackManager {
     /// - Parameters:
     ///   - option: Chosen audio track option.
     ///   - playerItem: Optional active `AVPlayerItem`.
-    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    ///   - engine: Optional active `FichierKit.PlayerEngine`.
     public func selectAudio(
         option: VideoTrackOption,
         in playerItem: AVPlayerItem? = nil,
-        engine: ExtendedPlayerEngine? = nil
+        engine: (any PlayerEngine)? = nil
     ) {
-        if let extendedEngine = engine ?? loadedExtendedEngine, let trackIndex = option.vlcTrackIndex {
-            extendedEngine.currentAudioTrackIndex = trackIndex
+        if let targetEngine = engine ?? loadedEngine, let track = option.playerAudioTrack {
+            targetEngine.selectAudioTrack(track)
             selectedAudioID = option.id
             return
         }
@@ -234,16 +261,20 @@ public final class VideoTrackManager {
     /// - Parameters:
     ///   - option: Chosen subtitle option.
     ///   - playerItem: Optional active `AVPlayerItem`.
-    ///   - engine: Optional active `ExtendedPlayerEngine`.
+    ///   - engine: Optional active `FichierKit.PlayerEngine`.
     public func selectSubtitle(
         option: VideoTrackOption,
         in playerItem: AVPlayerItem? = nil,
-        engine: ExtendedPlayerEngine? = nil
+        engine: (any PlayerEngine)? = nil
     ) {
-        if let extendedEngine = engine ?? loadedExtendedEngine {
-            let trackIndex = option.vlcTrackIndex ?? -1
-            extendedEngine.currentSubtitleTrackIndex = trackIndex
-            selectedSubtitleID = option.id
+        if let targetEngine = engine ?? loadedEngine {
+            if option.id == "sub_off" || option.playerSubtitleTrack == nil {
+                targetEngine.selectSubtitleTrack(nil)
+                selectedSubtitleID = "sub_off"
+            } else if let track = option.playerSubtitleTrack {
+                targetEngine.selectSubtitleTrack(track)
+                selectedSubtitleID = option.id
+            }
             return
         }
         
@@ -261,9 +292,9 @@ public final class VideoTrackManager {
     /// - Parameters:
     ///   - rate: Target rate enum.
     ///   - engine: Active player engine.
-    public func setPlaybackRate(_ rate: VideoPlaybackRate, for engine: (any VideoPlayerEngineProtocol)?) {
+    public func setPlaybackRate(_ rate: VideoPlaybackRate, for engine: (any PlayerEngine)?) {
         playbackRate = rate
-        engine?.playbackRate = rate
+        engine?.playbackRate = rate.rawValue
     }
     
     /// Configures the playback speed rate on the player.

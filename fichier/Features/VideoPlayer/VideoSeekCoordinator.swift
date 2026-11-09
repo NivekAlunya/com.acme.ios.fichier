@@ -5,6 +5,7 @@
 
 import AVFoundation
 import Observation
+import FichierKit
 
 /// Coordinates responsive live scrubbing and exact frame seeking for `VideoPlayerController`.
 ///
@@ -69,7 +70,7 @@ public final class VideoSeekCoordinator {
         currentPlaybackSeconds: Double,
         isPlaying: Bool,
         player: AVPlayer? = nil,
-        engine: (any VideoPlayerEngineProtocol)? = nil
+        engine: (any PlayerEngine)? = nil
     ) {
         guard !isScrubbingTimeline else { return }
         isScrubbingTimeline = true
@@ -89,7 +90,7 @@ public final class VideoSeekCoordinator {
     }
     
     /// Initiates full-screen gesture scrubbing, pausing playback if necessary.
-    public func startGestureScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, engine: (any VideoPlayerEngineProtocol)?) {
+    public func startGestureScrubbing(currentPlaybackSeconds: Double, isPlaying: Bool, engine: (any PlayerEngine)?) {
         guard !isScrubbingWithGesture else { return }
         isScrubbingWithGesture = true
         lastSeekTargetSeconds = currentPlaybackSeconds
@@ -130,7 +131,7 @@ public final class VideoSeekCoordinator {
     }
     
     /// Submits a request for live frame seeking with an abstract player engine.
-    public func requestLiveFrameSeek(to targetSeconds: Double, engine: (any VideoPlayerEngineProtocol)?) {
+    public func requestLiveFrameSeek(to targetSeconds: Double, engine: (any PlayerEngine)?) {
         let now = Date()
         let elapsed = now.timeIntervalSince(lastSeekTime)
         
@@ -168,7 +169,7 @@ public final class VideoSeekCoordinator {
     }
     
     /// Dispatches an immediate seek operation to the engine with specified tolerance.
-    public func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime, engine: (any VideoPlayerEngineProtocol)?) {
+    public func executeLiveSeek(to targetSeconds: Double, tolerance: CMTime, engine: (any PlayerEngine)?) {
         guard let engine = engine else { return }
         throttleSeekTask?.cancel()
         throttleSeekTask = nil
@@ -181,7 +182,7 @@ public final class VideoSeekCoordinator {
         lastSeekTime = Date()
         lastSeekTargetSeconds = targetSeconds
         
-        let tolSeconds = tolerance.isPositiveInfinity ? 10.0 : tolerance.seconds
+        let tolSeconds = tolerance.isPositiveInfinity ? Double.infinity : tolerance.seconds
         engine.seek(to: targetSeconds, toleranceBefore: tolSeconds, toleranceAfter: tolSeconds) { _ in
             Task { @MainActor in
                 guard thisGeneration == self.seekGeneration else { return }
@@ -195,7 +196,7 @@ public final class VideoSeekCoordinator {
     }
     
     /// Upgrades the active preview to an exact frame seek when scrubbing motion pauses for 250ms.
-    public func performStationaryExactSeek(to targetSeconds: Double, engine: (any VideoPlayerEngineProtocol)?) {
+    public func performStationaryExactSeek(to targetSeconds: Double, engine: (any PlayerEngine)?) {
         guard let engine = engine else { return }
         throttleSeekTask?.cancel()
         throttleSeekTask = nil
@@ -225,9 +226,9 @@ public final class VideoSeekCoordinator {
     public func finishSeeking(
         at targetSeconds: Double,
         resumePlaying: Bool,
-        engine: (any VideoPlayerEngineProtocol)?,
-        onBuffering: ((Bool) -> Void)? = nil,
-        onComplete: (() -> Void)? = nil
+        engine: (any PlayerEngine)?,
+        onBuffering: (@MainActor @Sendable (Bool) -> Void)? = nil,
+        onComplete: (@MainActor @Sendable () -> Void)? = nil
     ) {
         stationarySeekTask?.cancel()
         stationarySeekTask = nil
@@ -373,8 +374,8 @@ public final class VideoSeekCoordinator {
         at targetSeconds: Double,
         resumePlaying: Bool,
         player: AVPlayer?,
-        onBuffering: ((Bool) -> Void)? = nil,
-        onComplete: (() -> Void)? = nil
+        onBuffering: (@MainActor @Sendable (Bool) -> Void)? = nil,
+        onComplete: (@MainActor @Sendable () -> Void)? = nil
     ) {
         stationarySeekTask?.cancel()
         stationarySeekTask = nil

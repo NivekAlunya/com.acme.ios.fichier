@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Composed overlay layer integrating top, center, and bottom HUD controls for video playback.
 ///

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVFoundation
+import FichierKit
 
 /// Centered controls overlay presenting playback indicators, large play/pause toggles, and transport navigation.
 ///
