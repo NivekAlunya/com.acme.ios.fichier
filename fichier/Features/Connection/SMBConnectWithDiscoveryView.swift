@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Modal sheet presenting local network Bonjour discovery alongside manual SMB connection inputs.
 ///

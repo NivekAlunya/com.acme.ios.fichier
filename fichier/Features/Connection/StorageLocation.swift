@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Represents a unified storage root displayed in the sidebar and navigation views.
 ///

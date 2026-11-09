@@ -3,6 +3,7 @@
 //  fichier
 //
 
+import FichierKit
 import SwiftUI
 
 /// Intermediate content column in the `NavigationSplitView` displaying the active location's directory hierarchy.

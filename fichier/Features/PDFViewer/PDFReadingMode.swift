@@ -12,7 +12,7 @@ import Foundation
 /// - `.continuous`: Vertical single-page continuous scrolling using native `PDFView`.
 /// - `.book`: Two pages side-by-side with Page 1 treated as an isolated right-hand cover.
 /// - `.twoUp`: Two pages side-by-side starting immediately with Pages 1 and 2 paired.
-public enum PDFReadingMode: String, CaseIterable, Identifiable, Sendable {
+nonisolated public enum PDFReadingMode: String, CaseIterable, Identifiable, Sendable {
     /// Vertical scrolling single page reading experience.
     case continuous
     
