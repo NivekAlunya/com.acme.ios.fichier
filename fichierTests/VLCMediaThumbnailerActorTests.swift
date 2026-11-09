@@ -4,20 +4,21 @@
 //
 
 #if DEBUG && canImport(XCTest)
-import CoreMedia
+import UIKit
 import XCTest
+import FichierKit
 @testable import fichier
 
 final class VLCMediaThumbnailerActorTests: XCTestCase {
     func testSingletonInstanceExists() async {
-        let actor = VLCMediaThumbnailerActor.shared
+        let actor = VLCVideoThumbnailActor.shared
         _ = actor
-        XCTAssertTrue(true, "VLCMediaThumbnailerActor singleton must be reachable")
+        XCTAssertTrue(true, "VLCVideoThumbnailActor singleton must be reachable")
     }
     
     func testNonexistentMediaURLSafelyReturnsNil() async {
         let nonexistentURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).mkv")
-        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+        let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
             from: nonexistentURL,
             maxDimension: 260,
             snapshotPosition: 0.05,
@@ -28,7 +29,7 @@ final class VLCMediaThumbnailerActorTests: XCTestCase {
     
     func testWatchdogTimeoutReturnsNil() async {
         let dummyURL = URL(string: "http://127.0.0.1:1/nonexistent.webm") ?? URL(fileURLWithPath: "/")
-        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+        let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
             from: dummyURL,
             maxDimension: 260,
             snapshotPosition: 0.05,
@@ -42,7 +43,7 @@ final class VLCMediaThumbnailerActorTests: XCTestCase {
         await withTaskGroup(of: UIImage?.self) { group in
             for _ in 0..<3 {
                 group.addTask {
-                    await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                    await VLCVideoThumbnailActor.shared.generateThumbnail(
                         from: dummyURL,
                         maxDimension: 260,
                         snapshotPosition: 0.05,
@@ -58,24 +59,24 @@ final class VLCMediaThumbnailerActorTests: XCTestCase {
     
     func testGenerateThumbnailWithPreferredTimeSafelyReturnsNilOnNonexistentFile() async {
         let nonexistentURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).mkv")
-        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+        let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
             from: nonexistentURL,
             maxDimension: 260,
-            preferredTime: CMTime(seconds: 15, preferredTimescale: 600),
-            timeoutSeconds: 0.3
+            timeoutSeconds: 0.3,
+            snapshotTimeSeconds: 15.0
         )
-        XCTAssertNil(thumb, "Thumbnail extraction with positive preferredTime on missing file must safely return nil")
+        XCTAssertNil(thumb, "Thumbnail extraction with positive snapshotTimeSeconds on missing file must safely return nil")
     }
     
     func testGenerateThumbnailWithZeroPreferredTimeSafelyReturnsNilOnNonexistentFile() async {
         let nonexistentURL = URL(fileURLWithPath: "/tmp/nonexistent_\(UUID().uuidString).mkv")
-        let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+        let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
             from: nonexistentURL,
             maxDimension: 260,
-            preferredTime: .zero,
-            timeoutSeconds: 0.3
+            timeoutSeconds: 0.3,
+            snapshotTimeSeconds: 0.0
         )
-        XCTAssertNil(thumb, "Thumbnail extraction with zero preferredTime on missing file must safely return nil")
+        XCTAssertNil(thumb, "Thumbnail extraction with zero snapshotTimeSeconds on missing file must safely return nil")
     }
 }
 #endif

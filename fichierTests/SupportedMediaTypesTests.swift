@@ -5,6 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+import FichierKit
 @testable import fichier
 
 final class SupportedMediaTypesTests: XCTestCase {
