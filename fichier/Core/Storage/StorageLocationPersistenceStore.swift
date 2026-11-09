@@ -5,32 +5,42 @@
 
 import Foundation
 import OSLog
+import FichierKit
 
 /// Persistence manager responsible for storing and loading user connections and sandboxed bookmarks.
 ///
 /// Encapsulates access to `UserDefaults` for SMB server connection metadata and local/iCloud Drive
-/// security-scoped folder bookmarks, as well as `SMBKeychain` for secure credential storage.
+/// security-scoped folder bookmarks, as well as `FichierKit.SMBPasswordStore` for secure credential storage.
 @MainActor
 public final class StorageLocationPersistenceStore {
-    
+
     /// Key for persisted SMB connections in `UserDefaults`.
     private let savedConnectionsKey = "SavedSMBServerConnections_v2"
-    
+
     /// Key for persisted local and iCloud Drive folder bookmarks in `UserDefaults`.
     private let savedFolderLocationsKey = "SavedFolderLocations_v1"
-    
+
     /// Shared user defaults instance.
     private let userDefaults: UserDefaults
-    
-    /// Initializes a new persistence store with the given defaults instance.
+
+    /// Secure Keychain store from `FichierKit`.
+    private let passwordStore: SMBPasswordStore
+
+    /// Initializes a new persistence store with the given defaults instance and password store.
     ///
-    /// - Parameter userDefaults: Target `UserDefaults` backing store (defaults to `.standard`).
-    public init(userDefaults: UserDefaults = .standard) {
+    /// - Parameters:
+    ///   - userDefaults: Target `UserDefaults` backing store (defaults to `.standard`).
+    ///   - passwordStore: Target `SMBPasswordStore` (defaults to `.shared`).
+    public init(
+        userDefaults: UserDefaults = .standard,
+        passwordStore: SMBPasswordStore = .shared
+    ) {
         self.userDefaults = userDefaults
+        self.passwordStore = passwordStore
     }
-    
+
     // MARK: - SMB Connections Persistence
-    
+
     /// Loads and decodes persisted SMB connections from `UserDefaults`.
     ///
     /// - Returns: An array of `SavedSMBConnection` sorted with most recent connections first.
@@ -46,15 +56,15 @@ public final class StorageLocationPersistenceStore {
             return []
         }
     }
-    
+
     /// Retrieves the stored password from the secure Keychain for a given SMB connection.
     ///
     /// - Parameter connection: The saved connection metadata.
     /// - Returns: The decrypted password, or an empty string if missing.
     public func password(for connection: SavedSMBConnection) async -> String {
-        await SMBKeychain.loadPassword(for: connection.id) ?? ""
+        await passwordStore.loadPassword(for: connection.id) ?? ""
     }
-    
+
     /// Stores or updates a validated SMB connection record and saves its password to the Keychain.
     ///
     /// - Parameters:
@@ -73,22 +83,22 @@ public final class StorageLocationPersistenceStore {
     ) async -> [SavedSMBConnection] {
         let existingHostname = existingConnections.first(where: { $0.id == "\(user)@\(host)" })?.hostname
         let finalHostname = hostname ?? existingHostname
-        
+
         let newEntry = SavedSMBConnection(
             host: host,
             username: user,
             lastConnected: Date(),
             hostname: finalHostname
         )
-        await SMBKeychain.savePassword(pass, for: newEntry.id)
-        
+        await passwordStore.savePassword(pass, for: newEntry.id)
+
         var updated = existingConnections.filter { $0.id != newEntry.id }
         updated.insert(newEntry, at: 0)
-        
+
         persistConnections(updated)
         return updated
     }
-    
+
     /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
     ///
     /// - Parameters:
@@ -99,13 +109,13 @@ public final class StorageLocationPersistenceStore {
         _ connection: SavedSMBConnection,
         from existingConnections: [SavedSMBConnection]
     ) async -> [SavedSMBConnection] {
-        await SMBKeychain.deletePassword(for: connection.id)
+        await passwordStore.deletePassword(for: connection.id)
         var updated = existingConnections
         updated.removeAll { $0.id == connection.id }
         persistConnections(updated)
         return updated
     }
-    
+
     /// Serializes and writes SMB connection records to `UserDefaults`.
     private func persistConnections(_ connections: [SavedSMBConnection]) {
         do {
@@ -115,9 +125,9 @@ public final class StorageLocationPersistenceStore {
             AppLog.storage.error("Failed to encode and persist SMB connections: \(error.localizedDescription)")
         }
     }
-    
+
     // MARK: - Folder Locations Persistence (Local & iCloud Drive)
-    
+
     /// Loads and decodes local folder bookmarks from `UserDefaults`.
     ///
     /// - Returns: An array of `SavedFolderLocation` sorted by addition date descending.
@@ -133,7 +143,7 @@ public final class StorageLocationPersistenceStore {
             return []
         }
     }
-    
+
     /// Appends or updates a saved local folder location and persists it to `UserDefaults`.
     ///
     /// - Parameters:
@@ -149,7 +159,7 @@ public final class StorageLocationPersistenceStore {
         persistFolderLocations(updated)
         return updated
     }
-    
+
     /// Removes a saved local folder location from `UserDefaults`.
     ///
     /// - Parameters:
@@ -165,7 +175,7 @@ public final class StorageLocationPersistenceStore {
         persistFolderLocations(updated)
         return updated
     }
-    
+
     /// Updates refreshed security-scoped bookmark data for an existing folder location.
     ///
     /// - Parameters:
@@ -192,7 +202,7 @@ public final class StorageLocationPersistenceStore {
         persistFolderLocations(updated)
         return updated
     }
-    
+
     /// Serializes and writes folder location records to `UserDefaults`.
     private func persistFolderLocations(_ locations: [SavedFolderLocation]) {
         do {

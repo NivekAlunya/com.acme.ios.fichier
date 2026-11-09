@@ -11,12 +11,13 @@ import AVFoundation
 import PDFKit
 #endif
 import OSLog
+import FichierKit
 
 /// Centralized state manager and coordinator for all media storage backends in the application.
 ///
 /// `StorageLocationManager` is an `@Observable` model object isolated to the `@MainActor`. It coordinates
 /// browsing, caching, and streaming across three distinct storage backends:
-/// 1. **SMB Network Shares** — Managed via `SMBClientActor` and authenticated via `SMBKeychain`.
+/// 1. **SMB Network Shares** — Managed via `SMBClientActor` and authenticated via `FichierKit.SMBPasswordStore`.
 /// 2. **Local and iCloud Drive Folders** — Managed via `LocalStorageActor` using security-scoped bookmarks.
 /// 3. **Apple Photos Library** — Managed via `PhotoLibraryActor` using PhotoKit.
 ///
@@ -24,8 +25,8 @@ import OSLog
 /// - Maintains active connections and persisted credentials for servers and local folders.
 /// - Drives navigation through hierarchical folder trees and tracks selected media collections.
 /// - Coordinates two-tier in-memory and persistent disk caching for thumbnails and full-resolution media.
-/// - Dispatches video thumbnail generation through a bounded concurrency limiter (`VideoThumbnailLimiter`)
-///   and custom resource loaders (`SMBResourceLoaderDelegate`).
+/// - Dispatches video thumbnail generation through a bounded concurrency limiter (`FichierKit.SMBVideoThumbnailLimiter`)
+///   and custom resource loaders (`FichierKit.SMBAVAssetResourceLoaderDelegate`).
 /// - Handles system memory pressure and background lifecycle transitions to avoid out-of-memory (OOM) terminations.
 @Observable
 @MainActor
@@ -91,33 +92,55 @@ public final class StorageLocationManager {
     private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
     
     /// Background actor managing SMB connections, directory scanning, and streaming.
-    private let worker = SMBClientActor()
+    private let worker: SMBClientActor
     
     /// Nonisolated accessor exposing the worker actor for background streaming operations.
     nonisolated var clientActor: SMBClientActor { worker }
     
     /// Background actor managing local sandbox and security-scoped file system access.
-    private let localWorker = LocalStorageActor()
+    private let localWorker: LocalStorageActor
     
     /// Background actor managing PhotoKit queries and PHAsset fetching.
-    private let photosWorker = PhotoLibraryActor()
+    private let photosWorker: PhotoLibraryActor
     
     /// Concurrency limiter preventing socket saturation during parallel video keyframe extraction.
-    private let videoThumbnailLimiter = VideoThumbnailLimiter()
+    private let videoThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 2)
     
     #if !os(tvOS)
     /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
-    private let pdfThumbnailLimiter = PDFThumbnailLimiter()
+    private let pdfThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
     #endif
     
     /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
-    private let persistenceStore = StorageLocationPersistenceStore()
+    private let persistenceStore: StorageLocationPersistenceStore
     
     /// Navigation coordinator handling root boundary checks and tree hierarchy derivation.
-    private let navigationCoordinator = FolderNavigationCoordinator()
+    private let navigationCoordinator: FolderNavigationCoordinator
     
     /// Initializes the manager, restoring saved connections and registering lifecycle observers.
-    public init() {
+    public convenience init() {
+        self.init(
+            worker: SMBClientActor(),
+            localWorker: LocalStorageActor(),
+            photosWorker: PhotoLibraryActor(),
+            persistenceStore: StorageLocationPersistenceStore(),
+            navigationCoordinator: FolderNavigationCoordinator()
+        )
+    }
+
+    /// Dependency-injected initializer used internally and by unit tests.
+    init(
+        worker: SMBClientActor,
+        localWorker: LocalStorageActor = LocalStorageActor(),
+        photosWorker: PhotoLibraryActor = PhotoLibraryActor(),
+        persistenceStore: StorageLocationPersistenceStore = StorageLocationPersistenceStore(),
+        navigationCoordinator: FolderNavigationCoordinator = FolderNavigationCoordinator()
+    ) {
+        self.worker = worker
+        self.localWorker = localWorker
+        self.photosWorker = photosWorker
+        self.persistenceStore = persistenceStore
+        self.navigationCoordinator = navigationCoordinator
         loadSavedConnections()
         loadSavedFolderLocations()
         setupLifecycleObservers()
@@ -374,9 +397,7 @@ public final class StorageLocationManager {
             return
         }
         
-        let credential = URLCredential(user: user, password: pass, persistence: .forSession)
-        
-        guard let url = URL(string: "smb://\(cleanHost)") else {
+        guard URL(string: "smb://\(cleanHost)") != nil else {
             errorMessage = String(localized: .Strings.networkingErrorInvalidHostUrl)
             isLoading = false
             return
@@ -384,11 +405,13 @@ public final class StorageLocationManager {
         
         let connID = user.isEmpty ? cleanHost : "\(user)@\(cleanHost)"
         self.currentConnectionID = connID
+        let server = SavedSMBConnection(host: cleanHost, username: user, lastConnected: Date(), hostname: hostname)
         
         do {
-            let discoveredShares = try await worker.connectAndListShares(url: url, credential: credential, connectionID: connID)
+            let discoveredShares = try await worker.connectAndListShares(server: server, password: pass, connectionID: connID)
             guard !discoveredShares.isEmpty else {
                 errorMessage = String(localized: .Strings.networkingErrorNoSharedFolders)
+                isConnected = false
                 isLoading = false
                 return
             }
@@ -518,6 +541,12 @@ public final class StorageLocationManager {
         
         // 5. Spawn cancellable task and await its completion
         let targetID = folder.id
+        guard !Task.isCancelled, self.activeFolderID == targetID else {
+            if self.activeFolderID == targetID {
+                self.isLoading = false
+            }
+            return
+        }
         let targetShare = folder.shareName
         let targetPath = folder.path
         let targetName = folder.name
@@ -554,7 +583,10 @@ public final class StorageLocationManager {
                 self.isLoading = false
                 AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) items")
             } catch is CancellationError {
-                // Superseded by another folder click; silently exit
+                // Clean up loading flag only if this folder was not superseded by a newer selection
+                if self.activeFolderID == targetID {
+                    self.isLoading = false
+                }
             } catch {
                 guard !Task.isCancelled, self.activeFolderID == targetID else { return }
                 self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
@@ -564,7 +596,11 @@ public final class StorageLocationManager {
         }
         
         loadFolderTask = task
-        await task.value
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
     
     /// Lazily populates child subfolders in the sidebar tree without altering the active grid selection.
@@ -779,18 +815,6 @@ public final class StorageLocationManager {
     
     // MARK: - Streaming Helpers
     
-    /// Constructs a virtual custom scheme URL (`smbstream://`) intercepted by AVPlayer and AVAssetResourceLoader.
-    ///
-    /// - Parameters:
-    ///   - itemName: File name of the media asset.
-    ///   - uniqueID: Session UUID distinguishing resource loader instances.
-    /// - Returns: A tuple with the synthetic streaming URL and its unique session identifier.
-    nonisolated public static func makeStreamURL(for itemName: String, uniqueID: String = UUID().uuidString) -> (url: URL, uniqueID: String)? {
-        let safeName = itemName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "video.mp4"
-        guard let url = URL(string: "smbstream://localhost/\(uniqueID)/\(safeName)") else { return nil }
-        return (url, uniqueID)
-    }
-    
     /// Ensures a media item has a positive byte size populated, querying file attributes if missing.
     ///
     /// - Parameter item: The media item to validate.
@@ -801,14 +825,14 @@ public final class StorageLocationManager {
         return realSize > 0 ? item.withSize(realSize) : item
     }
 
-    /// Progressive video keyframe extractor over SMB using AVAssetResourceLoader.
+    /// Progressive video keyframe extractor over SMB using `FichierKit.SMBAVAssetResourceLoaderDelegate`.
     ///
     /// ### Algorithmic Details & Concurrency Control
     /// 1. Uses `videoThumbnailLimiter.withPermit` to cap simultaneous thumbnail extraction tasks (default max 2),
     ///    preventing socket congestion on the SMB server.
-    /// 2. Configures `SMBResourceLoaderDelegate` with a 256 KB chunk size for efficient range-request header parsing.
-    /// 3. Employs `AVAssetImageGenerator` with tight tolerances targeting a standardized 12.0s timestamp,
-    ///    with fallbacks to `.zero` and 1.0s if the video is very short.
+    /// 2. Configures `SMBAVAssetResourceLoaderDelegate` with a 256 KB chunk size for efficient range-request header parsing.
+    /// 3. Employs `AVAssetImageGenerator` with tight tolerances targeting a standardized 15.0s timestamp,
+    ///    with fallbacks to `.zero` and 0.5s if the video is very short.
     /// 4. Races the extraction against a 12-second timeout inside a structured `TaskGroup`, immediately
     ///    cancelling underlying network requests and CGImage generation upon timeout or external cancellation.
     ///
@@ -840,64 +864,94 @@ public final class StorageLocationManager {
                 return await streamExtendedVideoThumbnail(for: validItem, maxDimension: maxDimension)
             }
             
-            guard let (streamURL, uniqueID) = Self.makeStreamURL(for: validItem.name) else {
+            guard let client = await worker.activeClient() else {
                 return nil
             }
             
-            let asset = AVURLAsset(url: streamURL)
-            // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
-            let delegate = SMBResourceLoaderDelegate(worker: worker, item: validItem, chunkSize: 256 * 1024)
-            // swiftlint:disable:next no_legacy_dispatch_queue
-            let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
-            asset.resourceLoader.setDelegate(delegate, queue: queue)
+            let streamURL = SMBAVAssetResourceLoaderDelegate.makeStreamURL(fileName: validItem.name)
+            guard streamURL.scheme == SMBAVAssetResourceLoaderDelegate.scheme else {
+                return nil
+            }
             
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            let standardDim = MediaCacheManager.standardThumbnailDimension
-            generator.maximumSize = CGSize(width: standardDim, height: standardDim)
-            generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
-            generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
-            
-            return await withTaskCancellationHandler {
-                await withTaskGroup(of: UIImage?.self) { group in
-                    group.addTask {
-                        // 1. Try representative frame first using standardized thumbnail timestamp
-                        do {
-                            let (cgImage, _) = try await generator.image(at: MediaCacheManager.defaultVideoThumbnailTime)
-                            return UIImage(cgImage: cgImage)
-                        } catch {
-                            guard !Task.isCancelled else { return nil }
-                            // 2. Fallback: try .zero or standardized fallback timestamp if video is shorter
-                            generator.requestedTimeToleranceBefore = .positiveInfinity
-                            generator.requestedTimeToleranceAfter = .positiveInfinity
-                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {
-                                return UIImage(cgImage: cgImage)
-                            }
-                            if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: MediaCacheManager.fallbackVideoThumbnailTime) {
-                                return UIImage(cgImage: cgImage)
-                            }
-                            return nil
-                        }
-                    }
+            return await Self.extractStreamVideoFrame(
+                streamURL: streamURL,
+                uniqueID: UUID().uuidString,
+                client: client,
+                item: validItem
+            )
+        }
+    }
+    
+    private nonisolated static func extractStreamVideoFrame(
+        streamURL: URL,
+        uniqueID: String,
+        client: any SMBClientProtocol,
+        item: MediaItem
+    ) async -> UIImage? {
+        let asset = AVURLAsset(url: streamURL)
+        // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
+        let delegate = SMBAVAssetResourceLoaderDelegate(
+            client: client,
+            share: item.shareName,
+            path: item.smbRelativePath,
+            fileName: item.name,
+            fileSize: item.size,
+            chunkSize: 256 * 1024
+        )
+        // swiftlint:disable:next no_legacy_dispatch_queue
+        let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
+        asset.resourceLoader.setDelegate(delegate, queue: queue)
+        
+        defer {
+            delegate.cancelAll()
+            asset.cancelLoading()
+            asset.resourceLoader.setDelegate(nil, queue: nil)
+        }
+        
+        let result = await withTaskCancellationHandler {
+            await withTaskGroup(of: UIImage?.self) { group in
+                group.addTask {
+                    let generator = AVAssetImageGenerator(asset: asset)
+                    generator.appliesPreferredTrackTransform = true
+                    let standardDim = MediaCacheManager.standardThumbnailDimension
+                    generator.maximumSize = CGSize(width: standardDim, height: standardDim)
+                    generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
+                    generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
                     
-                    group.addTask {
-                        try? await Task.sleep(for: .seconds(12.0))
+                    // 1. Try representative frame first using standardized thumbnail timestamp
+                    do {
+                        let (cgImage, _) = try await generator.image(at: MediaCacheManager.defaultVideoThumbnailTime)
+                        return UIImage(cgImage: cgImage)
+                    } catch {
+                        guard !Task.isCancelled else { return nil }
+                        // 2. Fallback: try .zero or standardized fallback timestamp if video is shorter
+                        generator.requestedTimeToleranceBefore = .positiveInfinity
+                        generator.requestedTimeToleranceAfter = .positiveInfinity
+                        if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {
+                            return UIImage(cgImage: cgImage)
+                        }
+                        if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: MediaCacheManager.fallbackVideoThumbnailTime) {
+                            return UIImage(cgImage: cgImage)
+                        }
                         return nil
                     }
-                    
-                    let first = (await group.next()).flatMap { $0 }
-                    group.cancelAll()
-                    generator.cancelAllCGImageGeneration()
-                    delegate.cancelAll()
-                    asset.resourceLoader.setDelegate(nil, queue: nil)
-                    return first
                 }
-            } onCancel: {
-                generator.cancelAllCGImageGeneration()
-                delegate.cancelAll()
-                asset.resourceLoader.setDelegate(nil, queue: nil)
+                
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(12.0))
+                    delegate.cancelAll()
+                    return nil
+                }
+                
+                let first = (await group.next()).flatMap { $0 }
+                group.cancelAll()
+                return first
             }
+        } onCancel: {
+            delegate.cancelAll()
         }
+        withExtendedLifetime((delegate, queue)) {}
+        return result
     }
     
     /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via VLCKit.
@@ -905,12 +959,19 @@ public final class StorageLocationManager {
         for item: MediaItem,
         maxDimension: CGFloat
     ) async -> UIImage? {
-        guard !Task.isCancelled else { return nil }
-        let server = SMBStreamingServerActor(worker: self.worker, item: item)
+        guard !Task.isCancelled,
+              let client = await worker.activeClient() else { return nil }
+        let server = SMBStreamingServer(
+            client: client,
+            share: item.shareName,
+            path: item.smbRelativePath,
+            fileName: item.name,
+            totalSize: item.size
+        )
         do {
             let streamURL = try await server.start()
             
-            let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
                 from: streamURL,
                 maxDimension: maxDimension,
                 snapshotPosition: 0.05
@@ -920,7 +981,7 @@ public final class StorageLocationManager {
             if let thumb {
                 result = thumb
             } else {
-                result = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+                result = await VLCVideoThumbnailActor.shared.generateThumbnail(
                     from: streamURL,
                     maxDimension: maxDimension,
                     snapshotPosition: 0.0
@@ -944,7 +1005,7 @@ public final class StorageLocationManager {
     /// 2. **Fast-Path Prefix Read**: Reads the initial 1 MB prefix over SMB. For linearized (web-optimized) PDFs,
     ///    Page 1 is rendered and cached in ~200ms without transferring the remaining document.
     /// 3. **Bounded Ingestion or Stylized Cover**:
-    ///    - If the document is $\le 12 \text{ MB}$, downloads via `PDFThumbnailLimiter` (max 1 concurrent operation)
+    ///    - If the document is $\le 12 \text{ MB}$, downloads via bounded concurrency limiter (max 1 concurrent operation)
     ///      with a strict 8-second timeout to prevent socket starvation.
     ///    - If the document exceeds $12 \text{ MB}$, or if download fails/times out, immediately generates an
     ///      elegant stylized vector PDF cover card with title and file size.
