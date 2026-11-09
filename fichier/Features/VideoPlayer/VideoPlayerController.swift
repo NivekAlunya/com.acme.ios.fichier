@@ -49,7 +49,7 @@ public final class VideoPlayerController {
     /// Underlying native AVFoundation engine if active.
     public private(set) var nativeEngine: NativePlayerEngine?
     
-    /// Underlying extended MobileVLCKit engine if active.
+    /// Underlying extended VLCKit engine if active.
     public private(set) var extendedEngine: ExtendedPlayerEngine?
     
     /// Local loopback HTTP streaming server serving byte-range queries over SMB.
@@ -360,6 +360,9 @@ public final class VideoPlayerController {
             onStateUpdate: { [weak self] state in
                 guard let self else { return }
                 let wasPlaying = self.playbackState.isPlaying
+                if case .failed(let message) = state {
+                    self.errorMessage = String(localized: .Strings.videoPlayerErrorPlayback(message))
+                }
                 if self.playbackState != state {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         self.playbackState = state

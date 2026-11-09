@@ -6,7 +6,7 @@
 import SwiftUI
 import UIKit
 
-/// SwiftUI wrapper embedding MobileVLCKit's rendering view within the unified video player canvas.
+/// SwiftUI wrapper embedding VLCKit's rendering view within the unified video player canvas.
 ///
 /// Handles view lifecycle and two-finger gesture forwarding to preserve identical interactions
 /// across both native and extended video backends.

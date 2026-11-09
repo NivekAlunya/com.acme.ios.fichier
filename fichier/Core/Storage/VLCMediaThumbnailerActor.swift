@@ -6,11 +6,11 @@
 import Foundation
 import UIKit
 import CoreMedia
-#if canImport(MobileVLCKit)
-import MobileVLCKit
+#if canImport(VLCKit)
+import VLCKit
 #endif
 
-/// Thread-safe actor coordinating background video thumbnail extraction via MobileVLCKit.
+/// Thread-safe actor coordinating background video thumbnail extraction via VLCKit.
 ///
 /// Serializes LibVLC extraction sessions to ensure low memory pressure and stable process state,
 /// and enforces watchdog timeouts to prevent deadlocks on corrupt media streams.
@@ -62,14 +62,14 @@ public actor VLCMediaThumbnailerActor {
         preferredTime: CMTime = MediaCacheManager.defaultVideoThumbnailTime,
         timeoutSeconds: Double = 4.0
     ) async -> UIImage? {
-        #if canImport(MobileVLCKit)
+        #if canImport(VLCKit)
         guard !Task.isCancelled else { return nil }
         await acquirePermit()
         defer { releasePermit() }
         guard !Task.isCancelled else { return nil }
         
+        guard let media = VLCMedia(url: url) else { return nil }
         let sessionID = UUID()
-        let media = VLCMedia(url: url)
         
         let position: Float
         if preferredTime <= .zero {
@@ -123,14 +123,14 @@ public actor VLCMediaThumbnailerActor {
         snapshotPosition: Float,
         timeoutSeconds: Double = 4.0
     ) async -> UIImage? {
-        #if canImport(MobileVLCKit)
+        #if canImport(VLCKit)
         guard !Task.isCancelled else { return nil }
         await acquirePermit()
         defer { releasePermit() }
         guard !Task.isCancelled else { return nil }
         
+        guard let media = VLCMedia(url: url) else { return nil }
         let sessionID = UUID()
-        let media = VLCMedia(url: url)
         let session = await VLCMediaThumbnailerSession(sessionID: sessionID, owner: self)
         self.activeSessions[sessionID] = session
         

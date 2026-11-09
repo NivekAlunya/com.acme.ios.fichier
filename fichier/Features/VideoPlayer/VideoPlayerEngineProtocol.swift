@@ -7,7 +7,7 @@ import Foundation
 
 /// Unified abstraction defining the core playback, seeking, volume, and lifecycle contract across video backends.
 ///
-/// Both `NativePlayerEngine` (AVFoundation) and `ExtendedPlayerEngine` (MobileVLCKit) conform
+/// Both `NativePlayerEngine` (AVFoundation) and `ExtendedPlayerEngine` (VLCKit) conform
 /// to this protocol, enabling `VideoPlayerController` and the SwiftUI HUD to remain backend-agnostic.
 @MainActor
 public protocol VideoPlayerEngineProtocol: AnyObject, Sendable {

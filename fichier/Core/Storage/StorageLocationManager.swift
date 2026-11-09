@@ -900,7 +900,7 @@ public final class StorageLocationManager {
         }
     }
     
-    /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via MobileVLCKit.
+    /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via VLCKit.
     private func streamExtendedVideoThumbnail(
         for item: MediaItem,
         maxDimension: CGFloat

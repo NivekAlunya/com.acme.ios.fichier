@@ -10,6 +10,6 @@ public enum VideoEngineKind: Sendable, Equatable {
     /// Apple AVFoundation native playback engine (AVPlayer / AVPlayerLayer) for standard Apple formats.
     case native
     
-    /// Extended open-source decoding engine (MobileVLCKit / LibVLC) for open containers and non-Apple codecs.
+    /// Extended open-source decoding engine (VLCKit / LibVLC) for open containers and non-Apple codecs.
     case extended
 }

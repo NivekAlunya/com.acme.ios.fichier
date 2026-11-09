@@ -9,7 +9,7 @@ import Network
 /// Lightweight loopback HTTP server bridging SMB byte-range queries into standard HTTP 1.1 streaming.
 ///
 /// Runs strictly on `127.0.0.1` on an OS-assigned ephemeral port using Apple's `Network.framework`.
-/// Translates incoming HTTP `Range: bytes=X-Y` requests from `MobileVLCKit` (or any media player) directly into
+/// Translates incoming HTTP `Range: bytes=X-Y` requests from `VLCKit` (or any media player) directly into
 /// `SMBClientActor.fetchMediaRange(for:offset:length:)`, returning standard `206 Partial Content` payloads.
 actor SMBStreamingServerActor {
     private let worker: SMBClientActor

@@ -1,5 +1,5 @@
 {
-  "originHash" : "bb22d2509bc00ce2196e229e15a57f32b582655502d112c8bc8dae44fffcc636",
+  "originHash" : "46ab0319489030eacc890b7560df77b75cc459c98067b98de1238501592649fd",
   "pins" : [
     {
       "identity" : "amsmb2",
@@ -11,12 +11,12 @@
       }
     },
     {
-      "identity" : "mobilevlckit-spm",
+      "identity" : "vlckit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/showbie/MobileVLCKit-SPM.git",
+      "location" : "https://github.com/videolan/vlckit.git",
       "state" : {
-        "revision" : "e4ea102e1df41881f24075edf54915e9d5fb8b7a",
-        "version" : "3.7.3"
+        "revision" : "8f5ce02f09a7da5d061a24ddac3cb432f2a9b332",
+        "version" : "4.0.0-a25"
       }
     }
   ],
