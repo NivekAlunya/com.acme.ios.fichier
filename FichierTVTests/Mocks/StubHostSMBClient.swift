@@ -54,4 +54,6 @@ final class StubHostSMBClient: SMBClientProtocol, Sendable {
         let key = "\(share)/\(path)"
         return Int64(mockFileData[key]?.count ?? 0)
     }
+
+    func disconnect() async {}
 }

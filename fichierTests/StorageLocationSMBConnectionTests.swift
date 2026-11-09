@@ -8,6 +8,7 @@
 #if DEBUG
 import Foundation
 import Testing
+import UIKit
 import FichierKit
 @testable import fichier
 
@@ -122,8 +123,10 @@ struct StorageLocationSMBConnectionTests {
         #expect(failingManager.errorMessage?.contains("Authentication failed") == true)
         #expect(failingManager.savedConnections.isEmpty)
         #expect(failingManager.folderTree.isEmpty)
+        #expect(failingManager.currentConnectionID.isEmpty)
+        #expect(await failingClient.disconnectCalls == 1)
 
-        // Empty shares response does not connect or persist
+        // Empty shares response does not connect or persist, and disconnects ephemeral client
         let emptyClient = MockSMBClient(shares: [])
         let emptyManager = StorageLocationManager(worker: SMBClientActor { _, _ in emptyClient }, persistenceStore: store)
 
@@ -133,6 +136,9 @@ struct StorageLocationSMBConnectionTests {
         #expect(!emptyManager.isLoading)
         #expect(emptyManager.errorMessage != nil)
         #expect(emptyManager.savedConnections.isEmpty)
+        #expect(emptyManager.currentConnectionID.isEmpty)
+        #expect(emptyManager.folderTree.isEmpty)
+        #expect(await emptyClient.disconnectCalls >= 1)
     }
 
     @Test("Invalid host format with explicit port fails immediately without hitting SMB client")
@@ -178,6 +184,130 @@ struct StorageLocationSMBConnectionTests {
         #expect(!manager.isLoading)
         #expect(manager.errorMessage == nil)
         #expect(manager.folderTree.map(\.name) == ["Docs", "Photos"])
+    }
+
+    @Test("SMBClientActor disconnect invokes protocol disconnect on injected client even under cancellation")
+    func workerDisconnectCallsProtocolOnInjectedClient() async throws {
+        let client = MockSMBClient(shares: ["Photos"])
+        let worker = SMBClientActor { _, _ in client }
+        let server = SavedSMBConnection(host: "192.168.1.55", username: "alice", lastConnected: Date())
+
+        let shares = try await worker.connectAndListShares(server: server, password: "pw", connectionID: "alice@192.168.1.55")
+        #expect(shares.count == 1)
+        #expect(await worker.activeClient() != nil)
+
+        worker.cacheThumbnail(UIImage(), forKey: "sample_thumb" as NSString)
+        #expect(worker.getCachedThumbnail(forKey: "sample_thumb" as NSString) != nil)
+
+        var streamContinuation: AsyncStream<Void>.Continuation?
+        let gateStream = AsyncStream<Void> { continuation in
+            streamContinuation = continuation
+        }
+        let cancelledDisconnectTask = Task {
+            for await _ in gateStream { break }
+            await worker.disconnect()
+        }
+        cancelledDisconnectTask.cancel()
+        streamContinuation?.finish()
+        await cancelledDisconnectTask.value
+
+        #expect(await client.disconnectCalls == 1)
+        #expect(await worker.activeClient() == nil)
+        #expect(worker.getCachedThumbnail(forKey: "sample_thumb" as NSString) == nil)
+    }
+
+    @Test("Replacing SMB session disconnects previous client and cleans up if replacement fails")
+    func replacingSessionDisconnectsPreviousAndFailedReplacement() async throws {
+        let client1 = MockSMBClient(shares: ["ShareOne"])
+        let client2 = MockSMBClient(shares: ["ShareTwo"])
+        let client3 = MockSMBClient(sharesError: SMBError.badCredentials)
+
+        let worker = SMBClientActor { server, _ in
+            switch server.host {
+            case "nas1.local": return client1
+            case "nas2.local": return client2
+            default: return client3
+            }
+        }
+        let server1 = SavedSMBConnection(host: "nas1.local", username: "alice", lastConnected: Date())
+        let server2 = SavedSMBConnection(host: "nas2.local", username: "alice", lastConnected: Date())
+        let server3 = SavedSMBConnection(host: "nas3.local", username: "alice", lastConnected: Date())
+
+        let firstShares = try await worker.connectAndListShares(server: server1, password: "pw", connectionID: "c1")
+        #expect(firstShares.map(\.name) == ["ShareOne"])
+        #expect(await client1.disconnectCalls == 0)
+
+        let secondShares = try await worker.connectAndListShares(server: server2, password: "pw", connectionID: "c2")
+        #expect(secondShares.map(\.name) == ["ShareTwo"])
+        #expect(await client1.disconnectCalls == 1)
+        #expect(await client2.disconnectCalls == 0)
+        #expect(await worker.activeClient() != nil)
+
+        do {
+            _ = try await worker.connectAndListShares(server: server3, password: "bad", connectionID: "c3")
+            Issue.record("Expected replacement connection to throw")
+        } catch {
+            #expect(error is SMBError)
+        }
+
+        #expect(await client2.disconnectCalls == 1)
+        #expect(await client3.disconnectCalls == 1)
+        #expect(await worker.activeClient() == nil)
+    }
+
+    @Test("Cancelling in-flight SMB connection disconnects ephemeral client and resets manager state")
+    func cancellingInFlightConnectionCleansUp() async {
+        let (defaults, suiteName, _, store) = makeIsolatedPersistence()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let client1 = MockSMBClient(shares: ["Alpha", "Beta"])
+        let client2 = MockSMBClient(shares: ["Gamma"])
+        let worker = SMBClientActor { server, _ in
+            server.host == "nas1.local" ? client1 : client2
+        }
+        let manager = StorageLocationManager(worker: worker, persistenceStore: store)
+
+        await manager.connect(host: "nas1.local", user: "alice", pass: "pw1")
+        #expect(manager.isConnected)
+        #expect(manager.folderTree.map(\.name) == ["Alpha", "Beta"])
+
+        await client2.armSharesGate()
+        let connectTask = Task {
+            await manager.connect(host: "nas2.local", user: "bob", pass: "pw2")
+        }
+        await client2.waitUntilListSharesStarts()
+        #expect(await client1.disconnectCalls == 1)
+        #expect(manager.isLoading)
+
+        connectTask.cancel()
+        await client2.releaseSharesGate()
+        await connectTask.value
+
+        #expect(await client2.disconnectCalls >= 1)
+        #expect(await worker.activeClient() == nil)
+        #expect(!manager.isConnected)
+        #expect(!manager.isLoading)
+        #expect(manager.errorMessage == nil)
+        #expect(manager.folderTree.isEmpty)
+        #expect(manager.currentConnectionID.isEmpty)
+    }
+
+    @Test("SMB share enumeration paginates deterministically with bounded page sizes")
+    func shareEnumerationUsesBoundedPages() async throws {
+        let client = MockSMBClient(shares: ["Zebra", "Alpha", "Media", "Docs", "Music"])
+        let worker = SMBClientActor { _, _ in client }
+        let server = SavedSMBConnection(host: "nas.local", username: "alice", lastConnected: Date())
+
+        let initialShares = try await worker.connectAndListShares(
+            server: server,
+            password: "pw",
+            connectionID: "alice@nas.local",
+            sharePageSize: 2
+        )
+        #expect(initialShares.map(\.name) == ["Alpha", "Docs", "Media", "Music", "Zebra"])
+
+        let refreshed = try await worker.refreshShares(pageSize: 2)
+        #expect(refreshed.map(\.name) == ["Alpha", "Docs", "Media", "Music", "Zebra"])
     }
 }
 #endif

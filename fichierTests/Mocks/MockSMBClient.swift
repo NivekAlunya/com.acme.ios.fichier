@@ -16,12 +16,21 @@ actor MockSMBClient: SMBClientProtocol {
     private var sharesError: (any Error)?
     private var directoryContents: [String: [MediaSourceItem]]
     private var directoryErrors: [String: any Error]
+    private var pageErrors: [String: any Error] = [:]
     private var fileData: [String: Data]
     private var fileErrors: [String: any Error]
 
     private(set) var listSharesCalls: Int = 0
     private(set) var listDirectoryCalls: [String] = []
+    private(set) var listDirectoryPageCalls: [MockSMBDirectoryPageCall] = []
     private(set) var readFileCalls: [String] = []
+    private(set) var disconnectCalls: Int = 0
+
+    private var isSharesGateArmed = false
+    private var hasSharesGateStarted = false
+    private var sharesStartWaiters: [CheckedContinuation<Void, Never>] = []
+    private var sharesReleaseWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
+    private var cancelledSharesWaitIDs: Set<UUID> = []
 
     private var armedDirectoryGates: Set<String> = []
     private var startedDirectoryGates: Set<String> = []
@@ -55,9 +64,41 @@ actor MockSMBClient: SMBClientProtocol {
         directoryContents[key] = contents
     }
 
+    func setPageError(_ error: (any Error)?, forKey key: String, cursor: String?) {
+        let pageKey = "\(key)|\(cursor ?? "__initial__")"
+        if let error {
+            pageErrors[pageKey] = error
+        } else {
+            pageErrors.removeValue(forKey: pageKey)
+        }
+    }
+
     func updateShares(_ shares: [String], error: (any Error)? = nil) {
         self.shares = shares
         self.sharesError = error
+    }
+
+    func armSharesGate() {
+        isSharesGateArmed = true
+        hasSharesGateStarted = false
+    }
+
+    func waitUntilListSharesStarts() async {
+        if hasSharesGateStarted {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            sharesStartWaiters.append(continuation)
+        }
+    }
+
+    func releaseSharesGate() {
+        isSharesGateArmed = false
+        let waiters = sharesReleaseWaiters
+        sharesReleaseWaiters.removeAll()
+        for continuation in waiters.values {
+            continuation.resume()
+        }
     }
 
     func armDirectoryGate(forKey key: String) {
@@ -130,6 +171,27 @@ actor MockSMBClient: SMBClientProtocol {
         }
     }
 
+    private func suspendForSharesGate(waitID: UUID) async throws {
+        try Task.checkCancellation()
+        if cancelledSharesWaitIDs.remove(waitID) != nil {
+            throw CancellationError()
+        }
+        if !isSharesGateArmed {
+            return
+        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            sharesReleaseWaiters[waitID] = continuation
+        }
+    }
+
+    private func cancelSharesWaiter(id: UUID) {
+        if let continuation = sharesReleaseWaiters.removeValue(forKey: id) {
+            continuation.resume(throwing: CancellationError())
+        } else {
+            cancelledSharesWaitIDs.insert(id)
+        }
+    }
+
     private func cancelDirectoryWaiter(forKey key: String, id: UUID) {
         if let continuation = directoryReleaseWaiters[key]?.removeValue(forKey: id) {
             continuation.resume(throwing: CancellationError())
@@ -154,6 +216,24 @@ actor MockSMBClient: SMBClientProtocol {
     func listShares() async throws -> [String] {
         try Task.checkCancellation()
         listSharesCalls += 1
+
+        if isSharesGateArmed {
+            hasSharesGateStarted = true
+            let startWaiters = sharesStartWaiters
+            sharesStartWaiters.removeAll()
+            for waiter in startWaiters {
+                waiter.resume()
+            }
+
+            let waitID = UUID()
+            try await withTaskCancellationHandler {
+                try await self.suspendForSharesGate(waitID: waitID)
+            } onCancel: {
+                Task { await self.cancelSharesWaiter(id: waitID) }
+            }
+        }
+
+        try Task.checkCancellation()
         if let sharesError {
             throw sharesError
         }
@@ -184,6 +264,89 @@ actor MockSMBClient: SMBClientProtocol {
             throw error
         }
         return directoryContents[key] ?? []
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    func listDirectoryPage(
+        share: String,
+        path: String,
+        cursor: String?,
+        pageSize: Int,
+        sortBy sortKey: MediaSortKey,
+        order sortOrder: MediaSortOrder
+    ) async throws -> SMBDirectoryPage {
+        let key = Self.normalizedKey(share: share, path: path)
+        let pageKey = "\(key)|\(cursor ?? "__initial__")"
+        listDirectoryPageCalls.append(
+            MockSMBDirectoryPageCall(
+                key: key,
+                cursor: cursor,
+                pageSize: pageSize,
+                sortKey: sortKey,
+                sortOrder: sortOrder
+            )
+        )
+
+        let activeGateKey: String?
+        if armedDirectoryGates.contains(key) {
+            activeGateKey = key
+        } else if armedDirectoryGates.contains(pageKey) {
+            activeGateKey = pageKey
+        } else {
+            activeGateKey = nil
+        }
+
+        if let activeGateKey {
+            startedDirectoryGates.insert(activeGateKey)
+            let startWaiters = directoryStartWaiters.removeValue(forKey: activeGateKey) ?? []
+            for waiter in startWaiters {
+                waiter.resume()
+            }
+
+            let waitID = UUID()
+            try await withTaskCancellationHandler {
+                try await self.suspendForDirectoryGate(key: activeGateKey, waitID: waitID)
+            } onCancel: {
+                Task { await self.cancelDirectoryWaiter(forKey: activeGateKey, id: waitID) }
+            }
+        }
+
+        try Task.checkCancellation()
+        if let error = pageErrors[pageKey] ?? directoryErrors[key] {
+            throw error
+        }
+
+        guard pageSize > 0 else {
+            return SMBDirectoryPage(items: [], nextCursor: nil, totalCount: nil)
+        }
+
+        let offset: Int
+        if let cursor {
+            guard let parsedOffset = Int(cursor), parsedOffset >= 0 else {
+                return SMBDirectoryPage(items: [], nextCursor: nil, totalCount: nil)
+            }
+            offset = parsedOffset
+        } else {
+            offset = 0
+        }
+
+        let sorted = MediaSourceItemSortComparator.sortFoldersFirst(
+            directoryContents[key] ?? [],
+            sortBy: sortKey,
+            order: sortOrder
+        )
+        guard offset < sorted.count else {
+            return SMBDirectoryPage(items: [], nextCursor: nil, totalCount: sorted.count)
+        }
+
+        let endIndex = min(offset + pageSize, sorted.count)
+        let slice = Array(sorted[offset..<endIndex])
+        let nextCursor = endIndex < sorted.count ? String(endIndex) : nil
+        return SMBDirectoryPage(items: slice, nextCursor: nextCursor, totalCount: sorted.count)
+    }
+
+    func disconnect() async {
+        disconnectCalls += 1
     }
 
     func readFileData(share: String, path: String, maxBytes: Int64?) async throws -> Data {
