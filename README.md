@@ -1,41 +1,43 @@
 # fichier
 
-**fichier** is a high-performance native iOS & iPadOS application designed for seamless browsing, previewing, and streaming of photos and videos hosted on network storage (Samba / SMB shares, NAS, Mac, Windows, Linux), local sandboxed folders, iCloud Drive, and the Apple Photos Library.
+**fichier** is a native **iOS**, **iPadOS**, and **Apple TV (tvOS)** application designed for seamless browsing, previewing, and streaming of photos, videos, and documents hosted on network storage (Samba / SMB shares, NAS, Mac, Windows, Linux), local sandboxed folders, iCloud Drive, and the Apple Photos Library.
 
-Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, *fichier* allows direct on-the-fly streaming of large media files (including 50GB+ 4K videos) without requiring full downloads or third-party cloud servers.
+Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, *fichier* pairs the iOS/iPadOS app (`fichier`) with a dedicated Apple TV experience (`FichierTV`) powered by the shared **`FichierKit`** Swift 6 package—enabling direct on-the-fly streaming of large media files (including 50GB+ 4K videos) without staging full downloads on device storage.
 
 ---
 
 ## 🌟 Key Features
 
 ### 📡 Network, Storage & Discovery
-- **Unified Location Hub**: Seamlessly browse remote **SMB2/SMB3 shares**, local device folders, **iCloud Drive folders**, and the **Apple Photos Library** from a single unified sidebar (`LocationsSidebarView`).
+- **Unified Location Hub**: Seamlessly browse remote **SMB2/SMB3 shares**, local device folders, **iCloud Drive folders**, and the **Apple Photos Library** from a single unified sidebar (`LocationsSidebarView`) on iOS/iPadOS or top navigation sections (`TVRootMediaBrowserView`) on tvOS.
 - **Bonjour / mDNS Discovery**: Automatically scans the local network for SMB servers (`_smb._tcp`) via Apple's `Network` framework (`SMBHostDiscovery`).
-- **Secure Keychain Storage**: Server hostnames, usernames, and passwords are saved securely in the iOS Keychain (`SMBKeychain`).
-- **Multiple Share / Drive Mounts**: Switch between available shares on connected servers on the fly with clean lifecycle teardown.
+- **Secure Keychain Storage**: Server hostnames, usernames, and passwords are stored securely in the Keychain (`SMBKeychain` on iOS/iPadOS, `SMBPasswordStore` in `FichierKit` on tvOS).
+- **Multiple Share & Pre-Save Validation**: Switch between available shares on connected servers with clean lifecycle teardown, and validate credentials and accessible shares before persisting connections.
 
 ### 📁 Browsing & Organization
-- **Hierarchical Sidebar Tree**: Recursive folder tree navigation (`SidebarFolderTreeView`, `FolderTreeContentView`, and `FolderTreeNodeView`) for deep directory structures with automatic expansion of selected paths.
-- **Parent Folder Quick Navigation**: Blue-tinted parent folder button (`arrow.up.folder`) positioned at the first slot in the gallery toolbar for one-tap navigation back to the parent directory, disabled at root level to prevent toolbar layout shifts.
-- **Adaptive Gallery Views**: Toggle between customizable multi-density **Grid** and detailed **List** view (`ViewMode`, `GridSize`).
-- **Pinch-to-Resize Grid**: Fluid pinch gestures dynamically change thumbnail density between small, medium, and large layouts.
+- **Hierarchical Sidebar Tree**: Recursive folder tree navigation (`SidebarFolderTreeView`, `FolderTreeContentView`, `FolderTreeNodeView`) for deep directory structures with automatic expansion of selected paths (`FolderNavigationCoordinator`).
+- **Parent Folder Quick Navigation**: Blue-tinted parent folder button (`arrow.up.folder`) in the gallery toolbar for one-tap navigation back to the parent directory, disabled at root level to prevent toolbar layout shifts.
+- **Adaptive Gallery Views**: Toggle between customizable multi-density **Grid** (`MediaGridModeView`) and detailed **List** views (`MediaListModeView`), with clean loading/error/empty states (`MediaGridEmptyStateView`).
+- **Pinch-to-Resize Grid**: Fluid pinch gestures dynamically change thumbnail density between small, medium, and large layouts (`ViewMode`, `GridSize`).
 - **Filtering & Sorting**:
-  - Filter by **All**, **Photos Only**, **Videos Only**, **Documents Only**, or **Favorites**.
-  - Sort by **Name**, **Date Modified**, or **File Size** (ascending / descending).
-  - Contextual photo and video paging preserves the user's active filter and sort order.
-- **40+ Supported Media & Document Formats**: Broad format coverage including standard images (JPEG, PNG, HEIC, GIF, WebP, AVIF, TIFF, BMP, ICO, JP2), professional Camera RAW formats (DNG, CR2, CR3, NEF, ARW, RW2, ORF, PEF, RAF), native streaming video (MP4, MOV, M4V), extended video containers (MKV, AVI, WebM, FLV, WMV, TS, OGV, RM), and native PDF documents (PDF). See [`feature_more_codec.md`](file:///Users/kevinlaunay/source/apple/com.acme.ios.fichier/feature_more_codec.md).
+  - Filter by **All**, **Photos Only**, **Videos Only**, or **Documents Only**, plus a **Favorites** toggle.
+  - Sort by **Name**, **Date Modified**, or **File Size** (ascending / descending); contextual photo and video paging preserves active filter and sort state.
+- **53 Supported Media & Document Formats (`SupportedMediaTypes`)**:
+  - **28 Image Formats**: Standard, animated, and high-efficiency formats (`JPEG`, `PNG`, `HEIC`, `HEIF`, `GIF`, `WebP`, `AVIF`, `TIFF`, `BMP`, `ICO`, `JP2`) plus Camera RAW (`CR2`, `CR3`, `NEF`, `ARW`, `DNG`, `ORF`, `RW2`, `PEF`, `RAF`).
+  - **4 Native Video Formats**: `MP4`, `MOV`, `M4V`, `3GP`.
+  - **20 Extended Video Formats**: `MKV`, `AVI`, `WebM`, `FLV`, `F4V`, `WMV`, `ASF`, `TS`, `M2TS`, `MTS`, `M2V`, `MPG`, `MPEG`, `VOB`, `OGV`, `RM`, `MXF`, `WTV`, `HEVC`, `MJPEG`.
+  - **1 Document Format (iOS / iPadOS)**: Native `PDF` rendering and inspection.
 - **Multi-Selection & Batch Actions**: Batch AirDrop / Share Sheet export and batch save to Apple Photos (`MediaSelectionBottomBar`).
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
 
-### 📄 PDF & Document Viewer
+### 📄 PDF & Document Viewer (iOS & iPadOS)
 - **Dual Reading Modes**:
   - **Single Page Continuous Scroll**: Native vertical scrolling with dynamic pinch-to-zoom and double-tap zoom capabilities (`PDFKitRepresentedView`).
   - **Two-Page Book Mode**: Spread-based layout (`PDFSpreadPageView`, `PDFSpread`) with an interactive 1:1 finger swipe carousel (`TabView`), dynamic spread indicators (`Pages X–Y of Z`), and an optional **First Page as Cover** layout toggle.
-- **Reading Mode Persistence**: Reading mode preferences (`isBookMode`, `displaysAsBook`) are automatically saved via `@AppStorage` and globally configurable in **App Settings** (`AppSettingsView`).
-- **Leading-Edge Thumbnail Sidebar**: Vertically scrollable glassmorphic thumbnail sidebar (`PDFLeadingThumbnailSidebarView`, `PDFThumbnailItemCell`) with automatic active page/spread tracking, auto-centering scroll synchronization, and one-tap page jumps.
-- **Dynamic Reading HUD & Keyboard Shortcuts**: Glassmorphic overlay with dynamic page/spread indicator (`Page X of Y` or `Pages X–Y of Z`), document title, file size, favorite bookmarking, and native Share Sheet export (`PDFDetailView`). Full keyboard navigation (`b` for book mode, `←` / `→` for page turning, `Esc` to dismiss).
-- **Zero-Latency Local Caching**: On-demand atomic download from SMB servers to the dedicated document cache directory (`SMBDocuments`) with live percentage and byte progress indicator.
-- **Instant Grid Preview**: High-resolution 420px first-page master thumbnail generation stored in the two-tier cache for 0ms gallery loading.
+- **Reading Mode Persistence**: Reading mode preferences (`isBookMode`, `displaysAsBook`) automatically save via `@AppStorage` and can be configured in **App Settings** (`AppSettingsView`).
+- **Leading-Edge Thumbnail Sidebar**: Vertically scrollable glassmorphic thumbnail sidebar (`PDFLeadingThumbnailSidebarView`, `PDFThumbnailItemCell`) with active page/spread tracking, auto-centering scroll synchronization, throttled SMB extraction (`PDFThumbnailLimiter`), and one-tap page jumps.
+- **Dynamic Reading HUD & Keyboard Shortcuts**: Glassmorphic overlay with live page/spread indicator, document title, file size, favorite bookmarking, Share Sheet export (`PDFDetailView`), and keyboard navigation (`b` for book mode, `←` / `→` for page turning, `Esc` to dismiss).
+- **Zero-Latency Local Caching**: Atomic downloads from SMB servers to the document cache directory (`SMBDocuments`) with live byte progress and 420px first-page grid thumbnails.
 
 ### 📸 Photo Viewer & Slideshow
 - **Deep Zoom & Pan**: Integrated `UIScrollView`-backed zoom (`ZoomableImageView`) providing 1:1 pixel rendering, double-tap zoom, and smooth deceleration.
@@ -45,41 +47,32 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Camera Roll Export**: One-tap export to Apple Photos (`PhotoLibrarySaver`) with proper permission handling.
 
 ### 🎬 Video Player & Streaming Engine (Video Player 2.0)
-- **Hybrid Dual-Engine Architecture (`VideoPlayerEngineProtocol`)**: Intelligently routes media based on container and codec while maintaining identical controls and gestures:
-  - **Native Engine (`NativePlayerEngine`)**: Hardware-accelerated Apple `AVPlayer` with `SMBResourceLoaderDelegate` for `.mp4`, `.mov`, and `.m4v`.
-  - **Extended Engine (`ExtendedPlayerEngine`)**: VideoLAN `MobileVLCKit` engine decoding open containers (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, `.rm`) and non-Apple audio/subtitles (Vorbis, AC-3, ASS/SSA).
+- **Hybrid Dual-Engine Architecture (`VideoPlayerEngineProtocol`)**: Intelligently routes media based on container and codec while maintaining unified controls and gestures:
+  - **Native Engine (`NativePlayerEngine`)**: Hardware-accelerated Apple `AVPlayer` with `SMBResourceLoaderDelegate` for `.mp4`, `.mov`, `.m4v`, and `.3gp`.
+  - **Extended Engine (`ExtendedPlayerEngine`)**: VideoLAN `VLCKit` (`4.x`) engine decoding open containers (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, `.rm`, etc.) and non-Apple audio/subtitles (Vorbis, AC-3, DTS, TrueHD, ASS/SSA).
 - **Pure Swift 6 HTTP Loopback Streaming (`SMBStreamingServerActor`)**: Uses Apple's `Network` framework (`NWListener`) on `127.0.0.1` to stream remote SMB byte ranges directly into LibVLC on demand without staging temporary files on disk.
-- **Decoupled State-Machine Architecture**: Built with `@Observable @MainActor` coordinator (`VideoPlayerController`), an explicit `Sendable` playback state machine (`VideoPlaybackState`), a hardened seek coordinator (`VideoSeekCoordinator`), and modular single-responsibility views.
+- **Decoupled State-Machine Architecture**: Built with `@Observable @MainActor` coordinator (`VideoPlayerController`), an explicit `Sendable` playback state machine (`VideoPlaybackState`), a hardened seek coordinator (`VideoSeekCoordinator`), typed stream errors (`SMBStreamError`), and modular single-responsibility views.
 - **Byte-Range On-Demand Streaming**: Custom `AVAssetResourceLoaderDelegate` (`SMBResourceLoaderDelegate`) intercepts AVPlayer byte requests and streams directly from SMB servers over TCP in fast 512KB chunks.
 - **Hardened Seeking & Frame Scrubbing**:
-  - Adaptive 0.5s - 1.5s seek tolerance for instant scrub resumption without stalling over SMB.
+  - Adaptive 0.5s – 1.5s seek tolerance for instant scrub resumption without stalling over SMB.
   - Live preview frame scrubbing with stationary exact-frame debounce (250ms).
-  - Re-entrancy locking (`isFinishingSeek`) preventing background playback monitors from resetting playing state during network fill.
-  - Generational seek tracking (`seekGeneration`) ensuring only the latest user-intended target resumes playback.
-  - Pre-buffered 2.0s forward read-ahead window for smooth resumption without Wi-Fi roundtrip latency.
-- **Picture in Picture (PiP) & AirPlay**: Seamless background PiP and native AirPlay audio/video routing (`AirPlayButtonView`, `CustomVideoPlayerCoordinator`).
-- **Audio & Subtitle Track Selection**: Dedicated track manager for switching audio tracks and external/embedded subtitles (`VideoTrackManager`).
-- **Speed Control & Resume**: Multi-speed playback (0.5x to 2.0x) and automatic position resumption (`VideoPlaybackStore`).
+  - Re-entrancy locking (`isFinishingSeek`), generational seek tracking (`seekGeneration`), and a 2.0s forward read-ahead buffer.
+- **Picture in Picture (PiP) & AirPlay**: Background PiP and native AirPlay routing (`AirPlayButtonView`, `CustomVideoPlayerCoordinator`).
+- **Audio, Subtitles, Speed & Resume**: Track switching (`VideoTrackManager`), multi-speed playback (`0.5x` – `2.0x`), and persisted resume timestamps (`VideoPlaybackStore`).
 
 ### ⚡ Two-Tier Caching System
 - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: In-memory LRU cache wrapping `NSCache` with `@unchecked Sendable` isolation for immediate UI responsiveness.
-- **Bounded Disk Cache (`MediaCacheManager`)**: Persistent disk cache with a unified 420px master thumbnail dimension (`standardThumbnailDimension`) eliminating redundant re-encodings across grid sizes, real-time size computation, background 300MB FIFO eviction, and one-tap manual cache purging.
-- **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
-  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by MobileVLCKit (`VLCMediaThumbnailer`).
-  - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.
-  - Seamlessly bridges loopback HTTP streaming (`SMBStreamingServerActor`) to extract keyframes directly from remote SMB shares on demand.
-- **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**:
-  - When thumbnail extraction fails or times out, a non-blocking placeholder displays a centered play icon and label with `.allowsHitTesting(false)`.
-  - Tapping anywhere across the cell surface opens and plays the video without obstruction.
-  - A compact, non-interfering retry icon is located in the top-leading corner for manual preview refresh.
+- **Actor-Isolated Disk Cache (`MediaCacheManager`, `MediaDiskCacheActor`)**: Persistent disk cache standardizing on a 420px master thumbnail dimension (`standardThumbnailDimension`), eliminating redundant re-encodings across grid sizes with real-time size reporting, background 300MB FIFO eviction, and one-tap cache purging.
+- **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**: Serialized `VLCKit` (`VLCMediaThumbnailer`) keyframe extraction over loopback HTTP (`SMBStreamingServerActor`) with watchdog timeouts and concurrency throttling (`VideoThumbnailLimiter`).
+- **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**: Displays a non-interactive play placeholder on timeout/failure (`allowsHitTesting(false)`) alongside a non-interfering top-leading retry trigger.
 
 ```mermaid
 flowchart LR
     Request["Thumbnail Request"] --> Tier1{"Tier 1: RAM Cache<br/>ThreadSafeMemoryCache"}
     Tier1 -->|"Hit (0ms)"| Render["Render UI"]
-    Tier1 -->|Miss| Tier2{"Tier 2: Disk Cache<br/>MediaCacheManager"}
+    Tier1 -->|Miss| Tier2{"Tier 2: Disk Cache<br/>MediaDiskCacheActor"}
     Tier2 -->|"Hit (2-5ms)"| Promote["Promote to Tier 1"] --> Render
-    Tier2 -->|Miss| Remote["Fetch via SMBClientActor / LocalActor"]
+    Tier2 -->|Miss| Remote["Fetch via SMBClientActor / LocalStorageActor"]
     Remote --> Downsample["Downsample to 420px Standard"]
     Downsample --> SaveDisk["Save to Tier 2 Disk"]
     Downsample --> SaveRAM["Save to Tier 1 RAM"]
@@ -88,151 +81,335 @@ flowchart LR
 
 ---
 
+## 📺 Apple TV (`FichierTV`) Experience
+
+Built natively for tvOS 18+ using **`FichierKit`** and Focus Engine ergonomics:
+
+- **Top-Level Segmented Navigation (`TVRootMediaBrowserView`)**: Switches cleanly between **Photos** and **Shares** inside a single `NavigationStack` so Menu button presses pop logically without exiting the app prematurely.
+- **SMB Server Shelf & Bonjour Form (`TVSharesRootView`, `TVServerFormView`)**: Horizontal card shelf with live reachability status badges (`Online` / `Offline` / `Connecting`), context menus & Play/Pause action sheets, Bonjour `_smb._tcp` discovery, and pre-save credential/share validation.
+- **Focused Media Browser (`TVMediaBrowserView`, `TVBrowserViewModel`)**: Photos authorization & limited-access guidance banner (`TVPhotosRootView`), 4-column grid and detailed list views persisted per source, filename-first sorting (`Name`, `Date`, `Size`, `Type`), infinite pagination, and first-item focus restoration.
+- **Fullscreen TV Photo Viewer & Slideshow (`TVImageViewerView`)**: D-pad Left/Right browsing backed by multi-page lookahead pagination (`TVViewerPaginationContext`), Play/Pause slideshow toggle, and persisted interval/transition settings (`TVSlideshowSettingsView`).
+- **TV Video Player & Accelerated Long-Video Seeking (`TVVideoPlayerView`, `TVVideoPlayerViewModel`)**:
+  - **Dual-Engine & System Remote Integration**: Runs `AVPlayerEngine` and `TVVLCPlayerEngine` with automatic fallback, `SMBStreamingServer` loopback HTTP streaming, and `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter` hardware/CEC/IR integration (`TVSystemRemoteCommandBridge`).
+  - **Chapters & Quick Jump (`TVVideoChaptersSheetView`, `TVVideoQuickJumpOption`)**: Instant percentage presets (`0%`, `25%`, `50%`, `75%`), relative long-jump pills (`-10 min`, `+10 min`, `+30 min`), and embedded chapter markers rendered on both the chapter sheet and scrubber track.
+  - **Siri Remote `<<`/`>>` Tap & Progressive Hold Acceleration (`TVPlayerRemoteCatcherUIView`, `TVRemoteSeekCalculator`)**:
+    - Short tap (`< 0.30s`): jumps **`±15s`**; double-tap within `0.50s` jumps **`±60s`** total.
+    - Hold (`>= 0.30s`): accelerates progressively across three tiers scaled cleanly to total video duration so scrubbing 1–2 hour movies remains fast and controllable.
+    - Focused HUD scrubbing also supports D-pad accelerated steps and continuous touchpad swipe panning (`TVOverlayPanCaptureUIView`), with a 4-stage **Menu** cancellation hierarchy (cancel active hold → cancel scrub → hide HUD → pop player).
+  - **Live Seek Preview Thumbnails (`TVVideoSeekPreviewHUDView`, `TVSeekThumbnailService`)**: Floating 16:9 thumbnail preview card (`TVSeekThumbnailPreviewCardView`) backed by an actor-isolated LRU `NSCache` extracting quantized (`2s`–`30s` cadence) keyframes on the fly via `AVAssetImageGenerator` or `VLCVideoThumbnailActor`.
+
+```mermaid
+flowchart LR
+    Press["Siri Remote << / >> or Touchpad Swipe"] --> Timing{"Input Timing"}
+    Timing -->|"Tap < 0.30s"| Tap["Single Tap ±15s<br/>(Double-Tap <= 0.50s -> ±60s)"]
+    Timing -->|"Hold >= 0.30s"| Hold["20 Hz Progressive Hold Loop<br/>(Duration-Scaled Tiers)"]
+    Timing -->|"HUD Focused Pan/Move"| Scrub["Touchpad Pan / Step Scrubbing"]
+    Hold --> Preview["TVVideoSeekPreviewHUDView<br/>+ Delta/Target Pill"]
+    Scrub --> Preview
+    Hold --> Quantize["TVSeekThumbnailService<br/>Quantize Timestamp (2s–30s)"]
+    Scrub --> Quantize
+    Quantize --> CacheHit{"NSCache Hit?"}
+    CacheHit -->|Yes| Card["Render TVSeekThumbnailPreviewCardView"]
+    CacheHit -->|No| Extract["AVAssetImageGenerator / VLCVideoThumbnailActor"] --> Card
+    Tap --> Commit["PlayerEngine.seek(precision: .fast)"]
+    Hold -->|Release| Commit
+```
+
+---
+
 ## 🏗️ Architecture & Code Organization
 
-The project adheres to two strict structural principles:
-1. **One Definition (`class`, `struct`, `enum`, `actor`) = One File**: Exactly 106 independent, modular Swift files (95 application files + 11 unit test suites).
-2. **Pure Swift Concurrency**: Built entirely on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks or Grand Central Dispatch synchronization.
+The repository adheres to two strict structural principles across both app targets:
+1. **One Definition (`class`, `struct`, `enum`, `actor`, `protocol`) = One File**:
+   - **`fichier` (iOS / iPadOS)**: **107** modular Swift source files + **21** unit test suites (**109** tests) in `fichierTests/`.
+   - **`FichierTV` (tvOS)**: **61** modular Swift source files + **25** Swift files in `FichierTVTests/` (**9** test suites with **42** tests + **16** mocks/stubs/fixtures under `Mocks/`).
+   - **`FichierKit` (Shared SPM Package)**: **64** Swift files (`60` library sources + `4` test/fixture files, **28** tests) located alongside the app at `../library/com.acme.swift.package.FichierKit`.
+2. **Pure Swift Concurrency**: Built on modern Swift concurrency (`actor`, `async/await`, `Task`, `@MainActor`, `Sendable`) with zero legacy locks (`NSLock`, `pthread_mutex`, `os_unfair_lock`, `DispatchSemaphore`) and minimal `Sendable` isolation bridges where Apple's C/Obj-C frameworks require dispatch queues.
+
+### Multi-Target Workspace Architecture
+
+```mermaid
+flowchart TD
+    subgraph AppTargets["Xcode Targets (fichier.xcodeproj)"]
+        IOS["fichier (iOS / iPadOS 26.6+)<br/>107 app files • 21 test files"]
+        TV["FichierTV (tvOS 18.0+)<br/>61 app files • 25 test & mock files"]
+    end
+
+    subgraph Packages["Swift Package Dependencies"]
+        KIT["FichierKit (Local SPM)<br/>../library/com.acme.swift.package.FichierKit"]
+        SMB["AMSMB2 (>= 4.0.3)<br/>libsmb2 SMB2/SMB3 Client"]
+        VLC["VLCKit (4.0.0-a25)<br/>VideoLAN LibVLC"]
+    end
+
+    IOS --> SMB
+    IOS --> VLC
+    TV --> KIT
+    TV --> SMB
+    KIT --> SMB
+    KIT --> VLC
+```
 
 ### Directory Structure
 
 ```
-fichier/
+com.acme.ios.fichier/
 │
-├── MyApp.swift                             # Application entry point (@main)
-├── Assets.xcassets/                        # Accent colors and asset catalog
-├── fichier.icon/                           # Modern layered Xcode app icon
+├── Configuration/                                  # Build configuration templates
+│   └── Config.xcconfig                             # Shared team ID configuration (+ gitignored Local.xcconfig)
+├── fichier-Info.plist                              # iOS/iPadOS privacy descriptions, background audio & UTTypes
+├── FichierTV-Info.plist                            # tvOS privacy descriptions, background audio & UTTypes
 │
-├── Features/                               # Vertical feature modules
-│   ├── Connection/                         # Storage location management & host discovery
-│   │   ├── DiscoveredHost.swift            # Discovered Bonjour host model
-│   │   ├── RootSMBView.swift               # SplitView / Root host switcher
-│   │   ├── SavedFolderLocation.swift       # Bookmark for local/iCloud folders
-│   │   ├── SavedSMBConnection.swift        # Saved connection metadata model
-│   │   ├── SMBConnectWithDiscoveryView.swift# Bonjour discovery list & credential form
-│   │   ├── StorageLocation.swift           # Unified location model (SMB, Local, iCloud, Photos)
-│   │   └── StorageLocationKind.swift       # Location kind enum
-│   │
-│   ├── Sidebar/                            # Hierarchical folder tree navigation
-│   │   ├── FolderTreeContentView.swift     # Content column folder navigator
-│   │   ├── FolderTreeNodeView.swift        # Recursive tree node component
-│   │   ├── LocationsSidebarView.swift      # Unified locations sidebar list
-│   │   └── SidebarFolderTreeView.swift     # Sidebar container
-│   │
-│   ├── Gallery/                            # Media browsing, grid, list & filtering
-│   │   ├── GridSize.swift                  # Small, Medium, Large grid layout enum
-│   │   ├── MediaActivityShareSheet.swift   # UIActivityViewController wrapper
-│   │   ├── MediaFilter.swift               # All, Photos, Videos, Documents filter enum
-│   │   ├── MediaGridView.swift             # Main media gallery view & toolbars
-│   │   ├── MediaListRowCell.swift          # List row item with metadata
-│   │   ├── MediaSelectionBottomBar.swift   # Floating multi-selection action bar
-│   │   ├── MediaThumbnailCell.swift        # Grid thumbnail cell wrapper
-│   │   ├── MediaThumbnailView.swift        # Reusable thumbnail loader & badges
-│   │   ├── SortOption.swift                # Name, Date, Size sort enum
-│   │   ├── VideoFormatStyle.swift          # Video format capsule styling & color registry
-│   │   ├── VideoProgressRing.swift         # Circular playback progress badge
-│   │   └── ViewMode.swift                  # Grid vs List enum
-│   │
-│   ├── PhotoViewer/                        # Fullscreen image viewer, gestures & EXIF
-│   │   ├── PictureDetailView.swift         # Fullscreen pager & unified HUD
-│   │   ├── PictureEXIFData.swift           # Parsed EXIF property model
-│   │   ├── PictureInfoSheet.swift          # Modal EXIF sheet
-│   │   ├── PictureViewerBottomBarView.swift# Liquid glass bottom action toolbar
-│   │   ├── PictureViewerTopBarView.swift   # Top bar with close button & file info capsule
-│   │   ├── SlideDirection.swift            # Transition direction enum
-│   │   ├── SlideshowTransitionStyle.swift  # Slide, Dissolve, Ken Burns transition enum
-│   │   ├── ZoomableImageCoordinator.swift  # UIScrollViewDelegate handling double-tap & zoom
-│   │   ├── ZoomableImageView.swift         # UIViewRepresentable wrapping UIScrollView
-│   │   └── ZoomablePicturePageView.swift   # Single-image container with tap handlers
-│   │
-│   ├── PDFViewer/                          # Native PDF Document Viewing
-│   │   ├── PDFDetailView.swift             # Fullscreen document viewer HUD & download progress
-│   │   ├── PDFKitCoordinator.swift         # Delegate & notification coordinator for PDFView
-│   │   ├── PDFKitRepresentedView.swift     # UIViewRepresentable hosting PDFView (Single Page)
-│   │   ├── PDFLeadingThumbnailSidebarView.swift # Floating vertical thumbnail sidebar on leading edge
-│   │   ├── PDFPageCanvasRepresentable.swift# UIViewRepresentable wrapper for vector page canvas
-│   │   ├── PDFPageCanvasView.swift         # CoreGraphics vector PDF page rendering view
-│   │   ├── PDFReadingMode.swift            # Reading mode enum (continuous, book, twoUp)
-│   │   ├── PDFSpread.swift                 # Page spread model & builder for book layout
-│   │   ├── PDFSpreadPageView.swift         # Spread page view (single or two-page spread)
-│   │   ├── PDFThumbnailItemCell.swift      # Asynchronous thumbnail card with active ring
-│   │   └── PDFThumbnailScrubberView.swift  # Embedded PDFThumbnailView wrapper
-│   │
-│   ├── Settings/                           # App preferences and storage management
-│   │   └── AppSettingsView.swift           # Settings form, cache manager, about section
-│   │
-│   └── VideoPlayer/                        # Video player & streaming engine (Video Player 2.0)
-│       ├── AirPlayButtonView.swift         # Native AVRoutePickerView wrapper
-│       ├── CustomVideoPlayerCoordinator.swift# AVPlayerViewController / PiP coordinator
-│       ├── CustomVideoPlayerView.swift     # UIViewRepresentable video canvas
-│       ├── ExtendedPlayerEngine.swift      # MobileVLCKit engine for open containers & codecs
-│       ├── NativePlayerEngine.swift        # AVFoundation AVPlayer engine implementation
-│       ├── PlayerUIView.swift              # Custom AVPlayerLayer hosting view
-│       ├── ResourceLoadingTaskTracker.swift# Actor-isolated task tracker for range requests
-│       ├── SMBResourceLoaderDelegate.swift # Custom AVAsset byte-range streaming delegate
-│       ├── SMBStreamingServerActor.swift   # Pure Swift 6 HTTP range server for LibVLC streaming
-│       ├── VLCPlayerCanvasCoordinator.swift# MobileVLCKit canvas lifecycle coordinator
-│       ├── VLCPlayerCanvasRepresentable.swift# UIViewRepresentable LibVLC render surface
-│       ├── VideoDetailView.swift           # Lightweight host container & keyboard shortcut binder
-│       ├── VideoEngineKind.swift           # Playback engine kind enum (.native vs .extended)
-│       ├── VideoPlaybackRate.swift         # Playback speed enum (0.5x – 2.0x)
-│       ├── VideoPlaybackState.swift        # Explicit Sendable playback state machine enum
-│       ├── VideoPlayerBottomBarView.swift  # Unified liquid glass deck hosting title, metadata & timeline scrubber
-│       ├── VideoPlayerCanvasView.swift     # Video canvas host with swipe & tap gesture recognizers
-│       ├── VideoPlayerCenterControlsView.swift # Buffering spinner, retry, and center play/pause
-│       ├── VideoPlayerController.swift     # Observable MainActor playback engine coordinator
-│       ├── VideoPlayerEngineProtocol.swift # Unified engine protocol contract for native & extended players
-│       ├── VideoPlayerHUDView.swift        # Auto-hiding HUD overlay container
-│       ├── VideoPlayerToastBannerView.swift# Resume & save glassmorphic toast pills
-│       ├── VideoPlayerTopBarView.swift     # Responsive top HUD toolbar (close, volume, action tools)
-│       ├── VideoSeekCoordinator.swift      # Scrubbing & seeking pipeline coordinator
-│       ├── VideoSubtitleDelegate.swift     # Sendable subtitle text delegate
-│       ├── VideoThumbnailLimiter.swift     # Actor-based concurrency throttle for video frames
-│       ├── VideoTimelineBar.swift          # Interactive scrubber & duration bar
-│       ├── VideoTrackManager.swift         # Audio & subtitle track selector
-│       ├── VideoTrackOption.swift          # Audio / subtitle track model
-│       └── VideoVolumeBar.swift            # Custom interactive volume control
+├── fichier.xcodeproj/
+│   ├── project.pbxproj                             # Project configuration (fichier, fichierTests, FichierTV, FichierTVTests)
+│   ├── project.xcworkspace/xcshareddata/swiftpm/
+│   │   └── Package.resolved                        # Pinned AMSMB2 & VLCKit (4.0.0-a25) dependencies
+│   └── xcshareddata/xcschemes/                     # Shared Xcode schemes (fichier, fichierTests, FichierTV)
 │
-├── Core/                                   # Shared services, models & actors
-│   ├── Logging/
-│   │   └── AppLog.swift                    # Centralized os.Logger categories
+├── fichier/                                        # iOS & iPadOS application target (107 Swift files)
+│   ├── MyApp.swift                                 # Application entry point (@main)
+│   ├── Assets.xcassets/                            # Accent colors and asset catalog
+│   ├── fichier.icon/                               # Modern layered Xcode app icon
+│   ├── strings.xcstrings                           # App String Catalog localization
+│   ├── fichier-InfoPlist.xcstrings                 # Localized Info.plist privacy strings
 │   │
-│   ├── Networking/                         # Protocol engine and credential storage
-│   │   ├── SMBClientActor.swift            # Thread-safe actor wrapping libsmb2 operations
-│   │   ├── SMBHostDiscovery.swift          # NWBrowser Bonjour mDNS scanner
-│   │   └── SMBKeychain.swift               # Apple Keychain wrapper for SMB credentials
+│   ├── Features/                                   # Vertical feature modules (80 files)
+│   │   ├── Connection/                             # Storage location management & discovery (7 files)
+│   │   │   ├── DiscoveredHost.swift                # Discovered Bonjour host model
+│   │   │   ├── RootSMBView.swift                   # SplitView / Root host switcher
+│   │   │   ├── SavedFolderLocation.swift           # Bookmark for local/iCloud folders
+│   │   │   ├── SavedSMBConnection.swift            # Saved connection metadata model
+│   │   │   ├── SMBConnectWithDiscoveryView.swift   # Bonjour discovery list & credential form
+│   │   │   ├── StorageLocation.swift               # Unified location model (SMB, Local, iCloud, Photos)
+│   │   │   └── StorageLocationKind.swift           # Location kind enum
+│   │   │
+│   │   ├── Sidebar/                                # Hierarchical folder tree navigation (4 files)
+│   │   │   ├── FolderTreeContentView.swift         # Content column folder navigator
+│   │   │   ├── FolderTreeNodeView.swift            # Recursive tree node component
+│   │   │   ├── LocationsSidebarView.swift          # Unified locations sidebar list
+│   │   │   └── SidebarFolderTreeView.swift         # Sidebar container
+│   │   │
+│   │   ├── Gallery/                                # Media browsing, grid, list & filtering (15 files)
+│   │   │   ├── GridSize.swift                      # Small, Medium, Large grid layout enum
+│   │   │   ├── MediaActivityShareSheet.swift       # UIActivityViewController wrapper
+│   │   │   ├── MediaFilter.swift                   # All, Photos, Videos, Documents, Favorites enum
+│   │   │   ├── MediaGridEmptyStateView.swift       # Loading, error & empty gallery state view
+│   │   │   ├── MediaGridModeView.swift             # Adaptive grid layout with folder shelf
+│   │   │   ├── MediaGridView.swift                 # Main media gallery view & toolbars
+│   │   │   ├── MediaListModeView.swift             # Vertical list layout container
+│   │   │   ├── MediaListRowCell.swift              # List row item with metadata
+│   │   │   ├── MediaSelectionBottomBar.swift       # Floating multi-selection action bar
+│   │   │   ├── MediaThumbnailCell.swift            # Grid thumbnail cell wrapper
+│   │   │   ├── MediaThumbnailView.swift            # Reusable thumbnail loader & badges
+│   │   │   ├── SortOption.swift                    # Name, Date, Size sort enum
+│   │   │   ├── VideoFormatStyle.swift              # Video format capsule styling & color registry
+│   │   │   ├── VideoProgressRing.swift             # Circular playback progress badge
+│   │   │   └── ViewMode.swift                      # Grid vs List enum
+│   │   │
+│   │   ├── PhotoViewer/                            # Fullscreen image viewer, gestures & EXIF (10 files)
+│   │   │   ├── PictureDetailView.swift             # Fullscreen pager & unified HUD
+│   │   │   ├── PictureEXIFData.swift               # Parsed EXIF property model
+│   │   │   ├── PictureInfoSheet.swift              # Modal EXIF sheet
+│   │   │   ├── PictureViewerBottomBarView.swift    # Liquid glass bottom action toolbar
+│   │   │   ├── PictureViewerTopBarView.swift       # Top bar with close button & file info capsule
+│   │   │   ├── SlideDirection.swift                # Transition direction enum
+│   │   │   ├── SlideshowTransitionStyle.swift      # Slide, Dissolve, Ken Burns transition enum
+│   │   │   ├── ZoomableImageCoordinator.swift      # UIScrollViewDelegate handling double-tap & zoom
+│   │   │   ├── ZoomableImageView.swift             # UIViewRepresentable wrapping UIScrollView
+│   │   │   └── ZoomablePicturePageView.swift       # Single-image container with tap handlers
+│   │   │
+│   │   ├── PDFViewer/                              # Native PDF Document Viewing (12 files)
+│   │   │   ├── PDFDetailView.swift                 # Fullscreen document viewer HUD & progress
+│   │   │   ├── PDFKitCoordinator.swift             # Delegate & notification coordinator for PDFView
+│   │   │   ├── PDFKitRepresentedView.swift         # UIViewRepresentable hosting PDFView
+│   │   │   ├── PDFLeadingThumbnailSidebarView.swift# Floating vertical thumbnail sidebar
+│   │   │   ├── PDFPageCanvasRepresentable.swift    # UIViewRepresentable wrapper for vector canvas
+│   │   │   ├── PDFPageCanvasView.swift             # CoreGraphics vector PDF page rendering view
+│   │   │   ├── PDFReadingMode.swift                # Reading mode enum (continuous, book, twoUp)
+│   │   │   ├── PDFSpread.swift                     # Page spread model & builder for book layout
+│   │   │   ├── PDFSpreadPageView.swift             # Spread page view (single or two-page spread)
+│   │   │   ├── PDFThumbnailItemCell.swift          # Asynchronous thumbnail card with active ring
+│   │   │   ├── PDFThumbnailLimiter.swift           # SMB socket throttle for PDF thumbnails
+│   │   │   └── PDFThumbnailScrubberView.swift      # Embedded PDFThumbnailView wrapper
+│   │   │
+│   │   ├── Settings/                               # App preferences & cache management (1 file)
+│   │   │   └── AppSettingsView.swift               # Settings form, cache manager & about info
+│   │   │
+│   │   └── VideoPlayer/                            # Video player & streaming engine (31 files)
+│   │       ├── AirPlayButtonView.swift             # Native AVRoutePickerView wrapper
+│   │       ├── CustomVideoPlayerCoordinator.swift  # AVPlayerViewController / PiP coordinator
+│   │       ├── CustomVideoPlayerView.swift         # UIViewRepresentable video canvas
+│   │       ├── ExtendedPlayerEngine.swift          # VLCKit engine for open containers & codecs
+│   │       ├── NativePlayerEngine.swift            # AVFoundation AVPlayer engine implementation
+│   │       ├── PlayerUIView.swift                  # Custom AVPlayerLayer hosting view
+│   │       ├── ResourceLoadingTaskTracker.swift    # Actor-isolated task tracker for range requests
+│   │       ├── SMBResourceLoaderDelegate.swift     # Custom AVAsset byte-range streaming delegate
+│   │       ├── SMBStreamError.swift                # Typed SMB range streaming error enum
+│   │       ├── SMBStreamingServerActor.swift       # Pure Swift 6 HTTP range server for LibVLC
+│   │       ├── VLCPlayerCanvasCoordinator.swift    # VLCKit canvas lifecycle coordinator
+│   │       ├── VLCPlayerCanvasRepresentable.swift  # UIViewRepresentable LibVLC render surface
+│   │       ├── VideoDetailView.swift               # Host container & keyboard shortcut binder
+│   │       ├── VideoEngineKind.swift               # Playback engine kind enum (.native vs .extended)
+│   │       ├── VideoPlaybackRate.swift             # Playback speed enum (0.5x – 2.0x)
+│   │       ├── VideoPlaybackState.swift            # Explicit Sendable playback state machine
+│   │       ├── VideoPlayerBottomBarView.swift      # Liquid glass deck with title & scrubber
+│   │       ├── VideoPlayerCanvasView.swift         # Video canvas host with swipe/tap gestures
+│   │       ├── VideoPlayerCenterControlsView.swift # Buffering spinner, retry & play/pause
+│   │       ├── VideoPlayerController.swift         # Observable MainActor playback coordinator
+│   │       ├── VideoPlayerEngineProtocol.swift     # Unified engine contract (AVPlayer / VLCKit)
+│   │       ├── VideoPlayerHUDView.swift            # Auto-hiding HUD overlay container
+│   │       ├── VideoPlayerToastBannerView.swift    # Resume & save glassmorphic toast pills
+│   │       ├── VideoPlayerTopBarView.swift         # Top HUD toolbar (close, volume, tools)
+│   │       ├── VideoSeekCoordinator.swift          # Scrubbing & seeking pipeline coordinator
+│   │       ├── VideoSubtitleDelegate.swift         # Sendable subtitle text delegate
+│   │       ├── VideoThumbnailLimiter.swift         # Concurrency throttle for video frames
+│   │       ├── VideoTimelineBar.swift              # Interactive scrubber & duration bar
+│   │       ├── VideoTrackManager.swift             # Audio & subtitle track selector
+│   │       ├── VideoTrackOption.swift              # Audio / subtitle track model
+│   │       └── VideoVolumeBar.swift                # Custom interactive volume control
 │   │
-│   └── Storage/                            # Disk cache, favorites, metadata & models
-│       ├── AnimatedImageDecoder.swift      # ImageIO multi-frame GIF & WebP decoder
-│       ├── FavoritesManager.swift          # UserDefaults-backed favorite items store
-│       ├── ImageMetadataExtractor.swift    # ImageIO CGImageSource EXIF parser
-│       ├── LocalStorageActor.swift         # Sandboxed local & iCloud folder actor
-│       ├── MediaCacheManager.swift         # Persistent disk cache & file manager
-│       ├── MediaItem.swift                 # Immutable file/folder representation
-│       ├── PhotoLibraryActor.swift         # Apple Photos Library reader actor
-│       ├── PhotoLibrarySaver.swift         # PHPhotoLibrary export helper
-│       ├── PictureEXIFBox.swift            # Sendable EXIF container box
-│       ├── StorageLocationManager.swift    # Unified Observable UI state manager & prefetch coordinator
-│       ├── SupportedMediaTypes.swift       # Centralized 31 media format definitions
-│       ├── ThreadSafeMemoryCache.swift     # Generic Sendable NSCache wrapper
-│       ├── VideoPlaybackRecord.swift       # Persisted playback progress model
-│       ├── VideoPlaybackStatus.swift       # Playback status enum (unplayed, inProgress, finished)
-│       └── VideoPlaybackStore.swift        # Persistent playback position store
+│   └── Core/                                       # Shared iOS services, models & actors (26 files)
+│       ├── Logging/                                # Platform colors, haptics & logging (3 files)
+│       │   ├── AppColor.swift                      # Cross-platform adaptive color palette
+│       │   ├── AppHapticFeedback.swift             # Cross-platform UIFeedbackGenerator bridge
+│       │   └── AppLog.swift                        # Centralized os.Logger categories
+│       │
+│       ├── Networking/                             # Protocol engine & credential storage (3 files)
+│       │   ├── SMBClientActor.swift                # Thread-safe actor wrapping libsmb2 operations
+│       │   ├── SMBHostDiscovery.swift              # NWBrowser Bonjour mDNS scanner
+│       │   └── SMBKeychain.swift                   # Actor-isolated Apple Keychain wrapper
+│       │
+│       └── Storage/                                # Disk cache, favorites, metadata & stores (20 files)
+│           ├── AnimatedImageDecoder.swift          # ImageIO multi-frame GIF & WebP decoder
+│           ├── FavoritesManager.swift              # UserDefaults-backed favorite items store
+│           ├── FolderNavigationCoordinator.swift   # Tree path normalization & parent derivation
+│           ├── ImageMetadataExtractor.swift        # ImageIO CGImageSource EXIF parser
+│           ├── LocalStorageActor.swift             # Sandboxed local & iCloud folder actor
+│           ├── MediaCacheManager.swift             # Persistent disk cache & thumbnail helper
+│           ├── MediaDiskCacheActor.swift           # Serialized disk cache mutation & eviction actor
+│           ├── MediaItem.swift                     # Immutable file/folder representation
+│           ├── PhotoLibraryActor.swift             # Apple Photos Library reader actor
+│           ├── PhotoLibrarySaver.swift             # PHPhotoLibrary export helper
+│           ├── PictureEXIFBox.swift                # Sendable EXIF container box
+│           ├── StorageLocationManager.swift        # Unified Observable state & prefetch coordinator
+│           ├── StorageLocationPersistenceStore.swift # UserDefaults & bookmark persistence store
+│           ├── SupportedMediaTypes.swift           # 53 media/document extension definitions
+│           ├── ThreadSafeMemoryCache.swift         # Generic Sendable NSCache wrapper
+│           ├── VLCMediaThumbnailerActor.swift      # Serialized VLCKit keyframe extractor actor
+│           ├── VLCMediaThumbnailerSession.swift    # VLCMediaThumbnailer delegate bridge
+│           ├── VideoPlaybackRecord.swift           # Persisted playback progress model
+│           ├── VideoPlaybackStatus.swift           # Unplayed, inProgress, finished status enum
+│           └── VideoPlaybackStore.swift            # Persistent playback position store
 │
-└── Tests/                                  # Unit test suites
-    ├── MediaCacheManagerTests.swift        # Cache key, dimension, and eviction tests
-    ├── MediaItemTests.swift                # Equatable, child mutation, and path component tests
-    ├── PDFKitCoordinatorTests.swift        # PDF navigation, coordinator, and observer tests
-    ├── PDFReadingModeTests.swift           # Reading mode cases, properties, and identifier tests
-    ├── PDFSpreadTests.swift                # Spread builder and cover layout tests
-    ├── PDFThumbnailSidebarTests.swift      # Thumbnail sidebar model and callback tests
-    ├── StorageLocationManagerTests.swift   # Root detection, parent derivation & path hygiene tests
-    ├── SupportedMediaTypesTests.swift      # File extension and format detection tests
-    ├── VideoPlaybackStateTests.swift       # Playback state enum, equality, and transition tests
-    └── VideoSeekCoordinatorTests.swift     # Seek generation, tolerance, and scrub lifecycle tests
+├── fichierTests/                                   # iOS/iPadOS unit tests (21 files, 109 tests)
+│   ├── FolderNavigationCoordinatorTests.swift
+│   ├── MediaCacheManagerTests.swift
+│   ├── MediaDiskCacheActorTests.swift
+│   ├── MediaItemTests.swift
+│   ├── PDFKitCoordinatorTests.swift
+│   ├── PDFReadingModeTests.swift
+│   ├── PDFSpreadTests.swift
+│   ├── PDFThumbnailLimiterTests.swift
+│   ├── PDFThumbnailSidebarTests.swift
+│   ├── SMBKeychainTests.swift
+│   ├── SMBStreamingServerRangeTests.swift
+│   ├── StorageLocationManagerTests.swift
+│   ├── StorageLocationPersistenceStoreTests.swift
+│   ├── SupportedMediaTypesTests.swift
+│   ├── VLCMediaThumbnailerActorTests.swift
+│   ├── VideoFormatStyleTests.swift
+│   ├── VideoPlaybackStateTests.swift
+│   ├── VideoPlaylistNavigationTests.swift
+│   ├── VideoSeekCoordinatorTests.swift
+│   ├── VideoThumbnailLimiterTests.swift
+│   └── VideoTrackManagerTests.swift
+│
+├── FichierTV/                                      # Apple TV (tvOS) application target (61 Swift files)
+│   ├── Assets.xcassets/                            # AccentColor & layered App Icon / Top Shelf assets
+│   ├── App/
+│   │   └── FichierTVApp.swift                      # tvOS application entry point (@main)
+│   ├── Navigation/                                 # Stack routing & viewer pagination (3 files)
+│   │   ├── TVNavigationDestination.swift           # Hashable NavigationStack destination enum
+│   │   ├── TVRootSection.swift                     # Top bar section enum (.photos, .shares)
+│   │   └── TVViewerPaginationContext.swift         # Lookahead source pagination context
+│   └── Views/
+│       ├── Browser/                                # Folder/album browser & list/grid cells (9 files)
+│       │   ├── TVBrowserDestinationView.swift      # Async MediaSource resolver wrapper
+│       │   ├── TVBrowserViewModel.swift            # Paginated fetching & per-source prefs coordinator
+│       │   ├── TVControlButtonStyle.swift          # Focusable pill toolbar button style
+│       │   ├── TVEmptyStateView.swift              # Empty folder / album placeholder
+│       │   ├── TVErrorStateView.swift              # Error display with Retry & Back actions
+│       │   ├── TVMediaBrowserView.swift            # 4-column grid / list browser & sort sheet
+│       │   ├── TVMediaGridItemView.swift           # Focusable .card grid item with badges
+│       │   ├── TVMediaListRowView.swift            # Metadata list row card
+│       │   └── TVThumbnailView.swift               # Async cancelled thumbnail view
+│       ├── Photos/                                 # Root shell & PhotoKit entry (2 files)
+│       │   ├── Root/
+│       │   │   └── TVRootMediaBrowserView.swift    # Top segmented Photos/Shares NavigationStack
+│       │   └── TVPhotosRootView.swift              # PhotoKit authorization & limited-access handler
+│       ├── Shares/                                 # SMB shelf & server configuration (7 files)
+│       │   ├── TVAddServerCardView.swift           # Trailing Add Server shelf card
+│       │   ├── TVServerCardView.swift              # Server card with reachability status pill
+│       │   ├── TVServerFormMode.swift              # Add vs Edit form mode enum
+│       │   ├── TVServerFormView.swift              # SMB server form with Bonjour discovery list
+│       │   ├── TVServerFormViewModel.swift         # Credential validation & discovery coordinator
+│       │   ├── TVSharesRootView.swift              # Horizontal server card shelf & action sheet
+│       │   └── TVSharesViewModel.swift             # Saved servers & reachability probe coordinator
+│       └── Viewer/
+│           ├── TVImageViewerFocusTarget.swift      # Image HUD focus target enum
+│           ├── TVImageViewerOverlayView.swift      # Image viewer focusable HUD controls
+│           ├── TVImageViewerView.swift             # Fullscreen image viewer & transition host
+│           ├── TVImageViewerViewModel.swift        # Paging, lookahead prefetch & slideshow state
+│           ├── TVOverlayButtonStyle.swift          # Focus-scaled circular overlay button style
+│           ├── TVSlideshowSettingsView.swift       # Slideshow interval & animation style sheet
+│           └── Video/                              # tvOS video player, remote seek & HUD (33 files)
+│               ├── TVOverlayPanCaptureUIView.swift # Touchpad UIPanGestureRecognizer bridge
+│               ├── TVOverlayPanCaptureView.swift   # SwiftUI pan capture representable
+│               ├── TVPlayerCanvasView.swift        # AVPlayerLayer UIViewRepresentable
+│               ├── TVPlayerContainerUIView.swift   # Fullscreen AVPlayerLayer container
+│               ├── TVPlayerRemoteCatcherUIView.swift# UIPress timing recognizer for << / >> holds
+│               ├── TVPlayerRemoteCatcherView.swift # Hidden-HUD remote input catcher
+│               ├── TVRemoteCommandCallbacks.swift  # Remote bridge main-actor callback bundle
+│               ├── TVRemoteCommandHandling.swift   # Remote command registration abstraction
+│               ├── TVRemoteSeekCalculator.swift    # Tap/double-tap/hold curves & formatting
+│               ├── TVRemoteSeekHoldState.swift     # Active press-and-hold anchor state
+│               ├── TVRemoteSeekPreview.swift       # Live delta & target timestamp model
+│               ├── TVRemoteSeekSource.swift        # Siri Remote vs hardware command source enum
+│               ├── TVRemoteSeekTapState.swift      # Double-tap pair detection state
+│               ├── TVSeekThumbnailPreviewCardView.swift # Floating 16:9 seek preview frame card
+│               ├── TVSeekThumbnailProviding.swift  # Quantized thumbnail extraction protocol
+│               ├── TVSeekThumbnailRequest.swift    # Quantized thumbnail lookup request
+│               ├── TVSeekThumbnailService.swift    # Actor extracting & caching AV/VLC frames
+│               ├── TVSeekThumbnailState.swift      # Thumbnail card loading/ready UI state
+│               ├── TVSystemRemoteCommandBridge.swift# MPRemoteCommandCenter & NowPlaying bridge
+│               ├── TVTracksMenuView.swift          # Audio & subtitle track picker sheet
+│               ├── TVTransparentFocusButtonStyle.swift# Chrome-free focusable button style
+│               ├── TVVLCCanvasView.swift           # TVVLCPlayerEngine drawable representable
+│               ├── TVVLCRenderUIView.swift         # LibVLC drawable UIView container
+│               ├── TVVideoChaptersSheetView.swift  # Chapters & quick-jump sheet
+│               ├── TVVideoOverlayControlsView.swift# Two-row video HUD (scrubber + buttons)
+│               ├── TVVideoOverlayFocusTarget.swift # Video HUD focus target enum
+│               ├── TVVideoPlayerButtonKind.swift   # Bottom button row enum
+│               ├── TVVideoPlayerFocusRow.swift     # Progress vs buttons row focus enum
+│               ├── TVVideoPlayerView.swift         # Fullscreen tvOS player container & commands
+│               ├── TVVideoPlayerViewModel.swift    # Playback, seeking & thumbnail coordinator
+│               ├── TVVideoQuickJumpOption.swift    # Quick-jump presets (0/25/50/75%, ±10/30m)
+│               ├── TVVideoScrubberView.swift       # Focusable timeline bar with chapter ticks
+│               └── TVVideoSeekPreviewHUDView.swift # Non-focusable live << / >> seek HUD
+│
+└── FichierTVTests/                                 # tvOS unit tests & stubs (25 files, 42 tests)
+    ├── Mocks/                                      # Protocol stubs, mocks & video fixtures (16 files)
+    ├── TVBrowserViewModelTests.swift
+    ├── TVImageViewerViewModelTests.swift
+    ├── TVLongVideoSeekAndThumbnailTests.swift
+    ├── TVOverlayFocusHostTests.swift
+    ├── TVRemoteSeekTests.swift
+    ├── TVServerFormViewModelTests.swift
+    ├── TVSharesViewModelTests.swift
+    ├── TVVideoPlayerViewModelTests.swift
+    └── TVVideoThumbnailHostTests.swift
 ```
 
-### Concurrency Architecture
+### Concurrency Architecture (iOS & iPadOS)
 
 ```mermaid
 flowchart TD
@@ -278,7 +455,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph UI["SwiftUI View Layer (Strict 1 Type = 1 File)"]
-        Host["VideoDetailView<br/>(Slim Container ~140 lines)"]
+        Host["VideoDetailView<br/>(Slim Container)"]
         Canvas["VideoPlayerCanvasView<br/>(AVPlayerLayer & Gestures)"]
         HUD["VideoPlayerHUDView<br/>(Overlay Host & Auto-Hide)"]
         TopBar["VideoPlayerTopBarView<br/>(Title, Close, Menu, PiP, AirPlay)"]
@@ -440,35 +617,61 @@ sequenceDiagram
 ## 📦 Dependencies & Requirements
 
 ### Platform Requirements
-- **iOS 26.0+** / **iPadOS 26.0+** / **macOS (Catalyst) 26.0+** / **visionOS 26.0+**
-- **Swift 6** language mode
+- **`fichier` (iOS & iPadOS)**: Deployment Target **26.6+**
+- **`FichierTV` (tvOS)**: Deployment Target **18.0+**, **Swift 6.0** language mode
+- **`FichierKit` (Local SPM)**: **iOS 18.0+** / **tvOS 18.0+**, `swift-tools-version: 6.2`
 
-### External Dependencies
+### Swift Package Dependencies
+- **FichierKit** (`../library/com.acme.swift.package.FichierKit`, local package):
+  Shared Swift 6 media source abstractions, `AMSMB2Client`, loopback HTTP range server, thumbnail loaders, and `PlayerEngine` implementations powering `FichierTV`.
 - **[AMSMB2](https://github.com/amosavian/AMSMB2.git)** (`>= 4.0.3`):
-  Swift wrapper around `libsmb2`, providing SMB2 and SMB3 client connectivity over TCP port 445. Integrated via **Swift Package Manager (SPM)**.
+  Swift wrapper around `libsmb2`, providing SMB2 and SMB3 client connectivity over TCP port 445.
+- **[VLCKit](https://github.com/videolan/vlckit.git)** (`exact: 4.0.0-a25`):
+  VideoLAN LibVLC framework powering extended container decoding (`ExtendedPlayerEngine`, `TVVLCPlayerEngine`) and keyframe extraction across iOS and tvOS.
 
 ### Apple Native Frameworks
-- `SwiftUI`: User interface, state management, animations.
-- `PDFKit`: `PDFView` and `PDFThumbnailView` for hardware-accelerated document reading and page scrubbing.
-- `Network`: `NWBrowser` for Bonjour zero-configuration network discovery.
-- `AVFoundation` & `AVKit`: `AVPlayer`, `AVPlayerViewController`, `AVAssetResourceLoaderDelegate`, Picture in Picture.
-- `ImageIO` & `UniformTypeIdentifiers`: Fast EXIF parsing, image downsampling, and RAW decoding.
-- `Security`: Keychain Services API for password protection.
-- `Photos`: `PHPhotoLibrary` and `PHAssetResourceManager` for Photos library access and Camera Roll export.
+- `SwiftUI`: User interface, Focus Engine integration, state management, animations.
+- `PDFKit`: `PDFView` and `PDFThumbnailView` for vector document reading and scrubbing (iOS / iPadOS).
+- `Network`: `NWBrowser` for Bonjour SMB discovery and `NWListener` / `NWConnection` for loopback HTTP streaming.
+- `AVFoundation` & `AVKit`: `AVPlayer`, `AVPlayerViewController`, `AVAssetResourceLoaderDelegate`, `AVAssetImageGenerator`, Picture in Picture.
+- `MediaPlayer`: `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` system media remote integration (`FichierTV`).
+- `ImageIO` & `UniformTypeIdentifiers`: Fast EXIF parsing, image downsampling, MIME resolution, and RAW decoding.
+- `Security`: Keychain Services API for credential storage.
+- `Photos`: `PHPhotoLibrary` and `PHAssetResourceManager` for Photos library browsing and Camera Roll export.
 
-### Privacy & Entitlements (`fichier-Info.plist`)
+### Privacy & Entitlements (`fichier-Info.plist` & `FichierTV-Info.plist`)
 - `NSLocalNetworkUsageDescription`: Explains why the app scans the local network for SMB servers.
 - `NSBonjourServices`: Declares Bonjour service discovery for `_smb._tcp`.
-- `NSPhotoLibraryUsageDescription` & `NSPhotoLibraryAddUsageDescription`: Allows browsing and saving pictures to the Photos library.
+- `NSPhotoLibraryUsageDescription`: Allows browsing photos and videos in the Apple Photos Library (`NSPhotoLibraryAddUsageDescription` is also configured in the iOS target build settings for saving photos).
+- `UIBackgroundModes`: `audio` enabled for background and PiP playback continuity.
+- `UTImportedTypeDeclarations`: Declares extended video containers (`mkv`, `webm`, `avi`, `wmv`, `asf`, `flv`, `f4v`).
 
 ---
 
-## 🛠️ Building & Running
+## 🛠️ Configuration, Building & Testing
 
-1. Open the project in **Xcode**:
+### Initial Setup
+1. Optionally create `Configuration/Local.xcconfig` (ignored by git) and set your Apple Developer Team ID (`DEVELOPMENT_TEAM = YOUR_TEAM_ID`), or pass `DEVELOPMENT_TEAM` via your environment.
+2. Open the Xcode project:
    ```bash
    open com.acme.ios.fichier/fichier.xcodeproj
    ```
-2. Allow Xcode to resolve the **AMSMB2** Swift package dependency.
-3. Select your target device (iPhone, iPad, or Simulator) running **iOS 26.0+**.
-4. Press **⌘R** to build and run.
+3. Ensure `../library/com.acme.swift.package.FichierKit` is present alongside `com.acme.ios.fichier` and allow Xcode to resolve **AMSMB2** and **VLCKit**.
+
+### Building & Running Tests
+
+Run **tvOS** unit tests (`FichierTVTests` + `FichierKitTests`, 70 tests total across app and package):
+```bash
+xcodebuild test \
+  -project fichier.xcodeproj \
+  -scheme FichierTV \
+  -destination "platform=tvOS Simulator,name=Apple TV 4K (3rd generation)"
+```
+
+Run **iOS / iPadOS** unit tests (`fichierTests`, 109 tests):
+```bash
+xcodebuild test \
+  -project fichier.xcodeproj \
+  -scheme fichierTests \
+  -destination "platform=iOS Simulator,name=iPhone 16"
+```

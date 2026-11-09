@@ -105,7 +105,7 @@ This document provides a comprehensive catalog of all features and capabilities 
 - **Hybrid Dual-Engine Architecture (`VideoPlayerEngineProtocol`)**:
   - Automatically identifies whether a media file is native to Apple (`.mp4`, `.mov`, `.m4v`) or an extended open format (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, `.rm`).
   - **Native Engine (`NativePlayerEngine`)**: Powered by `AVFoundation` with `AVPlayer` and hardware acceleration for standard Apple-supported codecs (H.264, HEVC, ProRes, AAC, ALAC).
-  - **Extended Engine (`ExtendedPlayerEngine`)**: Powered by VideoLAN `MobileVLCKit` (LibVLC) for wide open-format container and codec compatibility (VP8, VP9, Vorbis, AC-3, E-AC-3, DTS, TrueHD, ASS/SSA subtitles).
+  - **Extended Engine (`ExtendedPlayerEngine`)**: Powered by VideoLAN `VLCKit` (LibVLC) for wide open-format container and codec compatibility (VP8, VP9, Vorbis, AC-3, E-AC-3, DTS, TrueHD, ASS/SSA subtitles).
   - **Unified Canvas (`VideoPlayerCanvasView`)**: Seamlessly switches between `CustomVideoPlayerRepresentable` (AVPlayerLayer) and `VLCPlayerCanvasRepresentable` (UIView drawable) with 0 UI divergence for controls, gestures, scrubbing, and timeline updates.
 - **Pure Swift 6 HTTP Loopback Streaming (`SMBStreamingServerActor`)**:
   - Runs a lightweight loopback HTTP server on `127.0.0.1` powered by Apple's `Network` framework (`NWListener`).
@@ -302,7 +302,7 @@ flowchart TD
   - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: Fast LRU in-memory RAM cache with `@unchecked Sendable` isolation over `NSCache` for immediate scrolling and instantaneous UI updates.
   - **Standardized Master Disk Cache (`MediaCacheManager`)**: Persistent disk cache standardizing on a single 420px master thumbnail dimension (`standardThumbnailDimension`) to eliminate redundant re-encodings across grid sizes, with background FIFO eviction and one-tap manual cache clearing.
 - **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
-  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by MobileVLCKit (`VLCMediaThumbnailer`).
+  - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by VLCKit (`VLCMediaThumbnailer`).
   - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.
   - Seamlessly bridges loopback HTTP streaming (`SMBStreamingServerActor`) to extract keyframes directly from remote SMB shares on demand.
 - **Actor-Isolated SMB Concurrency (`SMBClientActor`)**:
