@@ -7,6 +7,7 @@ import UIKit
 import AVFoundation
 import ImageIO
 import OSLog
+import FichierKit
 
 /// An isolated actor managing access to sandboxed local folders, external USB volumes, and iCloud Drive containers.
 ///

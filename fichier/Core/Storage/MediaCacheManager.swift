@@ -7,6 +7,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import CryptoKit
+import FichierKit
 #if canImport(PDFKit) && !os(tvOS)
 import PDFKit
 #endif
@@ -451,20 +452,23 @@ nonisolated public final class MediaCacheManager: Sendable {
         maxDimension: CGFloat = standardThumbnailDimension,
         preferredTime: CMTime = defaultVideoThumbnailTime
     ) async -> UIImage? {
-        if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+        let initialPosition: Float = preferredTime <= .zero ? 0.0 : 0.05
+        if let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
             from: localURL,
             maxDimension: maxDimension,
-            preferredTime: preferredTime
+            snapshotPosition: initialPosition,
+            timeoutSeconds: 4.0
         ) {
             return thumb
         }
         
         // If a non-zero timestamp was requested and failed, fall back to keyframe zero
         if preferredTime > .zero {
-            if let thumb = await VLCMediaThumbnailerActor.shared.generateThumbnail(
+            if let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
                 from: localURL,
                 maxDimension: maxDimension,
-                preferredTime: .zero
+                snapshotPosition: 0.0,
+                timeoutSeconds: 4.0
             ) {
                 return thumb
             }

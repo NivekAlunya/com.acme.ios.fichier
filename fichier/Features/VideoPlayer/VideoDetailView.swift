@@ -13,8 +13,8 @@ import AVKit
 ///   resources on `.onDisappear` (suppressing audio session deactivation if Picture-in-Picture is active).
 /// - **Live Subtitles**: Overlays real-time subtitle text segments with adaptive bottom padding that animates
 ///   cleanly when bottom HUD toolbars appear or fade.
-/// - **System Notifications**: Listens for `AVPlayerItem.didPlayToEndTimeNotification` to advance playlists,
-///   `AVPlayerItem.failedToPlayToEndTimeNotification` for error recovery, and `scenePhase` background transitions
+/// - **System Notifications**: Listens for `AVPlayerItem.failedToPlayToEndTimeNotification` for error recovery
+///   (while engine `onPlaybackEnded` advances playlists) and `scenePhase` background transitions
 ///   to flush playback progress to `VideoPlaybackStore`.
 /// - **Hardware Keyboard Support**: Complete iPad / Mac shortcuts (`Space`/`K` for play/pause, `J`/`L` for 10s seek,
 ///   Arrow keys for 5s seek, `[`/`]` for playlist navigation, `M` for mute, Up/Down for volume, `F` for favorite, `Esc` to exit).
@@ -111,9 +111,6 @@ public struct VideoDetailView: View {
         }
         .task(id: controller.currentItem.id) {
             controller.setupPlayer(for: controller.currentItem)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { notification in
-            controller.handleItemDidPlayToEndTime(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.failedToPlayToEndTimeNotification)) { notification in
             controller.handleItemFailedToPlayToEndTime(notification)

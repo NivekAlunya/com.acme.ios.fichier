@@ -5,11 +5,12 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+import FichierKit
 @testable import fichier
 
 final class PDFThumbnailLimiterTests: XCTestCase {
     func testPermitAcquisitionAndRelease() async throws {
-        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
+        let limiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
         let result = try await limiter.withPermit {
             42
         }
@@ -17,7 +18,7 @@ final class PDFThumbnailLimiterTests: XCTestCase {
     }
     
     func testReleasesPermitOnTaskCancellationWhileQueued() async {
-        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
+        let limiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
         
         let acquired = expectation(description: "Task 1 acquired permit")
         let task1 = Task {
@@ -59,7 +60,7 @@ final class PDFThumbnailLimiterTests: XCTestCase {
     }
     
     func testPreCancelledTaskThrowsCancellationError() async {
-        let limiter = PDFThumbnailLimiter(maxConcurrent: 1)
+        let limiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             try await limiter.withPermit {

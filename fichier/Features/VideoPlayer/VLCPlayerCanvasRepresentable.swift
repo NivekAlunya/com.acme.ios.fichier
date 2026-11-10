@@ -5,14 +5,15 @@
 
 import SwiftUI
 import UIKit
+import FichierKit
 
-/// SwiftUI wrapper embedding VLCKit's rendering view within the unified video player canvas.
+/// SwiftUI wrapper embedding `FichierKit.TVVLCPlayerEngine`'s rendering view within the unified video player canvas.
 ///
 /// Handles view lifecycle and two-finger gesture forwarding to preserve identical interactions
 /// across both native and extended video backends.
 public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
     /// Active extended player engine.
-    public let engine: ExtendedPlayerEngine
+    public let engine: TVVLCPlayerEngine
     
     /// Callback triggered upon recognizing a single tap.
     public var onSingleTap: (() -> Void)?
@@ -27,7 +28,7 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
     ///   - onSingleTap: Optional single tap gesture callback.
     ///   - onTwoFingerTap: Optional two-finger tap gesture callback.
     public init(
-        engine: ExtendedPlayerEngine,
+        engine: TVVLCPlayerEngine,
         onSingleTap: (() -> Void)? = nil,
         onTwoFingerTap: (() -> Void)? = nil
     ) {
@@ -40,16 +41,7 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
         let container = UIView(frame: .zero)
         container.backgroundColor = .black
         
-        let renderView = engine.renderView
-        renderView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(renderView)
-        
-        NSLayoutConstraint.activate([
-            renderView.topAnchor.constraint(equalTo: container.topAnchor),
-            renderView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            renderView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            renderView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
+        mountRenderView(in: container)
         
         let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(VLCPlayerCanvasCoordinator.handleSingleTap))
         #if !os(tvOS)
@@ -73,11 +65,30 @@ public struct VLCPlayerCanvasRepresentable: UIViewRepresentable {
     }
     
     public func updateUIView(_ uiView: UIView, context: Context) {
+        mountRenderView(in: uiView)
         context.coordinator.onSingleTap = onSingleTap
         context.coordinator.onTwoFingerTap = onTwoFingerTap
     }
     
     public func makeCoordinator() -> VLCPlayerCanvasCoordinator {
         VLCPlayerCanvasCoordinator(onSingleTap: onSingleTap, onTwoFingerTap: onTwoFingerTap)
+    }
+
+    private func mountRenderView(in container: UIView) {
+        let renderView = engine.renderView
+        if renderView.superview !== container {
+            for subview in container.subviews where subview !== renderView {
+                subview.removeFromSuperview()
+            }
+            renderView.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(renderView)
+            NSLayoutConstraint.activate([
+                renderView.topAnchor.constraint(equalTo: container.topAnchor),
+                renderView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                renderView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                renderView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            ])
+        }
+        engine.attachDrawable()
     }
 }

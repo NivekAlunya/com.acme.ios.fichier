@@ -11,7 +11,7 @@ import Foundation
 /// Encapsulates:
 /// - One page (e.g. cover page or trailing single page at the end of an odd-numbered document).
 /// - Two facing pages (e.g. left and right pages of an open book).
-public struct PDFSpread: Identifiable, Hashable, Sendable {
+nonisolated public struct PDFSpread: Identifiable, Hashable, Sendable {
     /// Zero-based spread index within the active document collection.
     public let id: Int
     

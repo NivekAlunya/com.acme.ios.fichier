@@ -103,6 +103,9 @@ struct MediaGridModeView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
                                     }
                                     .buttonStyle(.plain)
+                                    .onAppear {
+                                        manager.loadNextFolderPageIfNeeded(currentItem: subfolder)
+                                    }
                                 }
                             }
                             .padding(.horizontal, 12)
@@ -133,6 +136,9 @@ struct MediaGridModeView: View {
                                         isSelected: selectedItems.contains(pic),
                                         isSelectionMode: isSelectionMode
                                     )
+                                    .onAppear {
+                                        manager.loadNextFolderPageIfNeeded(currentItem: pic)
+                                    }
                                     .onTapGesture {
                                         if isSelectionMode {
                                             onToggleSelection(pic)
@@ -150,7 +156,7 @@ struct MediaGridModeView: View {
                             .padding(.horizontal, 12)
                             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
                         }
-                    } else if !folders.isEmpty {
+                    } else if !folders.isEmpty && !manager.canLoadMorePages && !manager.isLoading && !manager.isLoadingMore && manager.paginationErrorMessage == nil {
                         ContentUnavailableView(
                             String(localized: .Strings.galleryNoPicturesTitle),
                             systemImage: "photo",
@@ -158,6 +164,9 @@ struct MediaGridModeView: View {
                         )
                         .padding(.top, 24)
                     }
+
+                    MediaPaginationFooterView(manager: manager)
+                        .padding(.horizontal, 12)
                 }
                 .padding(.vertical, 12)
             }

@@ -233,7 +233,11 @@ struct MediaGridView: View {
                         }
                     )
                 } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                    VStack(spacing: 12) {
+                        ContentUnavailableView.search(text: searchText)
+                        MediaPaginationFooterView(manager: manager)
+                            .padding(.horizontal, 12)
+                    }
                 } else {
                     Group {
                         switch viewMode {
@@ -548,6 +552,9 @@ struct MediaGridView: View {
         }
         .task {
             await manager.refreshMediaCacheSize()
+        }
+        .task(id: sortOption) {
+            await manager.applySort(key: sortOption.mediaSortKey, order: sortOption.mediaSortOrder)
         }
         .onDisappear {
             batchTask?.cancel()
@@ -900,7 +907,7 @@ struct MediaGridView: View {
             var completedCount = 0
             
             // Use bounded concurrent workers to fetch and prepare shareables while preserving selection order
-            await withTaskGroup(of: (Int, Any?).self) { group in
+            await withTaskGroup(of: (Int, (any Sendable)?).self) { group in
                 let itemQueue = Array(items.enumerated())
                 var queueIndex = 0
                 let maxConcurrent = 3
@@ -914,7 +921,7 @@ struct MediaGridView: View {
                     }
                 }
                 
-                var indexedResults: [(Int, Any)] = []
+                var indexedResults: [(Int, any Sendable)] = []
                 while let (idx, result) = await group.next() {
                     guard !Task.isCancelled else { break }
                     completedCount += 1
@@ -935,7 +942,7 @@ struct MediaGridView: View {
                 }
                 
                 indexedResults.sort { $0.0 < $1.0 }
-                shareables = indexedResults.map { $0.1 }
+                shareables = indexedResults.map { $0.1 as Any }
             }
             
             guard !Task.isCancelled else {
@@ -961,7 +968,7 @@ struct MediaGridView: View {
     ///   - item: The `MediaItem` to prepare for sharing.
     ///   - manager: The `StorageLocationManager` instance used to resolve the media resource.
     /// - Returns: A `UIImage` for photos, a `URL` for videos, or `nil` if preparation failed.
-    private static func prepareSingleItemForShare(_ item: MediaItem, manager: StorageLocationManager) async -> Any? {
+    private static func prepareSingleItemForShare(_ item: MediaItem, manager: StorageLocationManager) async -> (any Sendable)? {
         if item.isVideo {
             return try? await manager.fetchVideoURL(for: item)
         } else {

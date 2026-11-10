@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Full-screen photo inspection and slideshow presentation coordinator.
 ///

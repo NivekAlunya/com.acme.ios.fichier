@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import FichierKit
 
 /// Video playback canvas combining hardware video rendering with full-screen gesture scrubbing.
 ///

@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import FichierKit
 
 /// Canonical model entity representing a file or directory stored across local folders, iCloud Drive, Photos, or remote SMB shares.
 ///

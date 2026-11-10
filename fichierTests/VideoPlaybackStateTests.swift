@@ -5,69 +5,47 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
+import FichierKit
 @testable import fichier
 
 @MainActor
 final class VideoPlaybackStateTests: XCTestCase {
     func testPlaybackStateEquality() {
-        let testItem = MediaItem(
-            locationID: "loc1",
-            name: "test.mp4",
-            rootName: "media",
-            path: "videos/test.mp4",
-            isDirectory: false
-        )
+        XCTAssertEqual(PlayerPlaybackState.idle, PlayerPlaybackState.idle)
+        XCTAssertEqual(PlayerPlaybackState.buffering, PlayerPlaybackState.buffering)
+        XCTAssertEqual(PlayerPlaybackState.playing, PlayerPlaybackState.playing)
+        XCTAssertEqual(PlayerPlaybackState.paused, PlayerPlaybackState.paused)
+        XCTAssertEqual(PlayerPlaybackState.loading, PlayerPlaybackState.loading)
+        XCTAssertEqual(PlayerPlaybackState.failed("error"), PlayerPlaybackState.failed("error"))
         
-        XCTAssertEqual(VideoPlaybackState.idle, VideoPlaybackState.idle)
-        XCTAssertEqual(VideoPlaybackState.buffering, VideoPlaybackState.buffering)
-        XCTAssertEqual(VideoPlaybackState.playing, VideoPlaybackState.playing)
-        XCTAssertEqual(VideoPlaybackState.paused, VideoPlaybackState.paused)
-        XCTAssertEqual(VideoPlaybackState.loading(testItem), VideoPlaybackState.loading(testItem))
-        XCTAssertEqual(VideoPlaybackState.failed("error"), VideoPlaybackState.failed("error"))
-        
-        XCTAssertNotEqual(VideoPlaybackState.idle, VideoPlaybackState.playing)
-        XCTAssertNotEqual(VideoPlaybackState.failed("error 1"), VideoPlaybackState.failed("error 2"))
+        XCTAssertNotEqual(PlayerPlaybackState.idle, PlayerPlaybackState.playing)
+        XCTAssertNotEqual(PlayerPlaybackState.failed("error 1"), PlayerPlaybackState.failed("error 2"))
     }
     
     func testIsPlayingProperty() {
-        XCTAssertTrue(VideoPlaybackState.playing.isPlaying)
-        XCTAssertFalse(VideoPlaybackState.idle.isPlaying)
-        XCTAssertFalse(VideoPlaybackState.buffering.isPlaying)
-        XCTAssertFalse(VideoPlaybackState.paused.isPlaying)
-        XCTAssertFalse(VideoPlaybackState.failed("error").isPlaying)
+        XCTAssertTrue(PlayerPlaybackState.playing.isPlaying)
+        XCTAssertFalse(PlayerPlaybackState.idle.isPlaying)
+        XCTAssertFalse(PlayerPlaybackState.loading.isPlaying)
+        XCTAssertFalse(PlayerPlaybackState.buffering.isPlaying)
+        XCTAssertFalse(PlayerPlaybackState.paused.isPlaying)
+        XCTAssertFalse(PlayerPlaybackState.failed("error").isPlaying)
     }
     
     func testIsBufferingProperty() {
-        let testItem = MediaItem(
-            locationID: "loc1",
-            name: "test.mp4",
-            rootName: "media",
-            path: "videos/test.mp4",
-            isDirectory: false
-        )
+        XCTAssertTrue(PlayerPlaybackState.buffering.isBuffering)
+        XCTAssertTrue(PlayerPlaybackState.loading.isBuffering)
         
-        XCTAssertTrue(VideoPlaybackState.buffering.isBuffering)
-        XCTAssertTrue(VideoPlaybackState.loading(testItem).isBuffering)
-        
-        XCTAssertFalse(VideoPlaybackState.idle.isBuffering)
-        XCTAssertFalse(VideoPlaybackState.playing.isBuffering)
-        XCTAssertFalse(VideoPlaybackState.paused.isBuffering)
-        XCTAssertFalse(VideoPlaybackState.failed("error").isBuffering)
+        XCTAssertFalse(PlayerPlaybackState.idle.isBuffering)
+        XCTAssertFalse(PlayerPlaybackState.playing.isBuffering)
+        XCTAssertFalse(PlayerPlaybackState.paused.isBuffering)
+        XCTAssertFalse(PlayerPlaybackState.failed("error").isBuffering)
     }
     
     func testStateTransitionsSimulation() {
-        let testItem = MediaItem(
-            locationID: "loc1",
-            name: "test.mp4",
-            rootName: "media",
-            path: "videos/test.mp4",
-            isDirectory: false
-        )
-        
-        var state: VideoPlaybackState = .idle
+        var state: PlayerPlaybackState = .idle
         XCTAssertEqual(state, .idle)
         
-        state = .loading(testItem)
+        state = .loading
         XCTAssertTrue(state.isBuffering)
         XCTAssertFalse(state.isPlaying)
         
