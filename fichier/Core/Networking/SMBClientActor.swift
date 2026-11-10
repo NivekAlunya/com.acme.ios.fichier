@@ -235,7 +235,10 @@ actor SMBClientActor {
         clearMemoryCache()
     }
 
-    /// Disconnects a `SMBClientProtocol` instance in an uncancelled task so teardown runs even under task cancellation.
+    /// Disconnects a `SMBClientProtocol` instance inside an unstructured `Task`.
+    ///
+    /// `Task {}` does not inherit cooperative cancellation from the calling task while preserving task-local
+    /// context, ensuring client teardown runs to completion even when triggered from a cancelled caller.
     private nonisolated static func disconnectClient(_ targetClient: (any SMBClientProtocol)?) async {
         guard let targetClient else { return }
         await Task {

@@ -212,8 +212,12 @@ struct StorageLocationSMBConnectionTests {
         await cancelledDisconnectTask.value
 
         #expect(await client.disconnectCalls == 1)
+        #expect(await client.disconnectObservedCancelled == [false])
         #expect(await worker.activeClient() == nil)
         #expect(worker.getCachedThumbnail(forKey: "sample_thumb" as NSString) == nil)
+        await #expect(throws: URLError.self) {
+            _ = try await worker.refreshShares()
+        }
     }
 
     @Test("Replacing SMB session disconnects previous client and cleans up if replacement fails")
@@ -240,6 +244,7 @@ struct StorageLocationSMBConnectionTests {
         let secondShares = try await worker.connectAndListShares(server: server2, password: "pw", connectionID: "c2")
         #expect(secondShares.map(\.name) == ["ShareTwo"])
         #expect(await client1.disconnectCalls == 1)
+        #expect(await client1.disconnectObservedCancelled == [false])
         #expect(await client2.disconnectCalls == 0)
         #expect(await worker.activeClient() != nil)
 
@@ -251,7 +256,75 @@ struct StorageLocationSMBConnectionTests {
         }
 
         #expect(await client2.disconnectCalls == 1)
+        #expect(await client2.disconnectObservedCancelled == [false])
         #expect(await client3.disconnectCalls == 1)
+        #expect(await client3.disconnectObservedCancelled == [false])
+        #expect(await worker.activeClient() == nil)
+    }
+
+    @Test("Pre-cancelled replacement disconnects previous client without creating temporary client or propagating cancellation")
+    func preCancelledReplacementDisconnectsPreviousClient() async throws {
+        let client1 = MockSMBClient(shares: ["ShareOne"])
+        let client2 = MockSMBClient(shares: ["ShareTwo"])
+        let worker = SMBClientActor { server, _ in
+            server.host == "nas1.local" ? client1 : client2
+        }
+        let server1 = SavedSMBConnection(host: "nas1.local", username: "alice", lastConnected: Date())
+        let server2 = SavedSMBConnection(host: "nas2.local", username: "alice", lastConnected: Date())
+
+        _ = try await worker.connectAndListShares(server: server1, password: "pw", connectionID: "c1")
+        worker.cacheThumbnail(UIImage(), forKey: "replace_thumb" as NSString)
+
+        var streamContinuation: AsyncStream<Void>.Continuation?
+        let gateStream = AsyncStream<Void> { continuation in
+            streamContinuation = continuation
+        }
+        let cancelledReplaceTask = Task {
+            for await _ in gateStream { break }
+            _ = try await worker.connectAndListShares(server: server2, password: "pw", connectionID: "c2")
+        }
+        cancelledReplaceTask.cancel()
+        streamContinuation?.finish()
+
+        await #expect(throws: CancellationError.self) {
+            try await cancelledReplaceTask.value
+        }
+
+        #expect(await client1.disconnectCalls == 1)
+        #expect(await client1.disconnectObservedCancelled == [false])
+        #expect(await client2.listSharesCalls == 0)
+        #expect(await client2.disconnectCalls == 0)
+        #expect(await worker.activeClient() == nil)
+        #expect(worker.getCachedThumbnail(forKey: "replace_thumb" as NSString) == nil)
+    }
+
+    @Test("Cancelled in-flight replacement disconnects both previous and temporary clients without observing cancellation inside disconnect")
+    func cancelledInFlightReplacementDisconnectsBothClients() async throws {
+        let client1 = MockSMBClient(shares: ["ShareOne"])
+        let client2 = MockSMBClient(shares: ["ShareTwo"])
+        let worker = SMBClientActor { server, _ in
+            server.host == "nas1.local" ? client1 : client2
+        }
+        let server1 = SavedSMBConnection(host: "nas1.local", username: "alice", lastConnected: Date())
+        let server2 = SavedSMBConnection(host: "nas2.local", username: "alice", lastConnected: Date())
+
+        _ = try await worker.connectAndListShares(server: server1, password: "pw", connectionID: "c1")
+
+        await client2.armSharesGate()
+        let replaceTask = Task {
+            _ = try await worker.connectAndListShares(server: server2, password: "pw", connectionID: "c2")
+        }
+        await client2.waitUntilListSharesStarts()
+        replaceTask.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await replaceTask.value
+        }
+
+        #expect(await client1.disconnectCalls == 1)
+        #expect(await client1.disconnectObservedCancelled == [false])
+        #expect(await client2.disconnectCalls == 1)
+        #expect(await client2.disconnectObservedCancelled == [false])
         #expect(await worker.activeClient() == nil)
     }
 
@@ -277,19 +350,70 @@ struct StorageLocationSMBConnectionTests {
         }
         await client2.waitUntilListSharesStarts()
         #expect(await client1.disconnectCalls == 1)
+        #expect(await client1.disconnectObservedCancelled == [false])
         #expect(manager.isLoading)
 
         connectTask.cancel()
         await client2.releaseSharesGate()
         await connectTask.value
 
+        let client2CancelledFlags = await client2.disconnectObservedCancelled
         #expect(await client2.disconnectCalls >= 1)
+        #expect(!client2CancelledFlags.isEmpty)
+        #expect(client2CancelledFlags.allSatisfy { !$0 })
         #expect(await worker.activeClient() == nil)
         #expect(!manager.isConnected)
         #expect(!manager.isLoading)
         #expect(manager.errorMessage == nil)
         #expect(manager.folderTree.isEmpty)
         #expect(manager.currentConnectionID.isEmpty)
+    }
+
+    @Test("Pre-cancelled StorageLocationManager disconnect tears down client and clears caches without skipping disconnect")
+    func preCancelledManagerDisconnectClearsStateAndDisconnectsClient() async {
+        let (defaults, suiteName, _, store) = makeIsolatedPersistence()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let photoItem = MediaSourceItem(
+            id: "alice@nas|Media::/photo.jpg",
+            name: "photo.jpg",
+            path: "Media/photo.jpg",
+            type: .image,
+            size: 1024,
+            sourceID: "alice@nas",
+            smbShare: "Media",
+            smbPath: "photo.jpg"
+        )
+        let client = MockSMBClient(shares: ["Media"], directoryContents: ["Media": [photoItem]])
+        let worker = SMBClientActor { _, _ in client }
+        let manager = StorageLocationManager(worker: worker, persistenceStore: store)
+
+        await manager.connect(host: "nas", user: "alice", pass: "pw")
+        #expect(manager.isConnected)
+        #expect(manager.pictures.count == 1)
+        worker.cacheThumbnail(UIImage(), forKey: "manager_thumb" as NSString)
+
+        var streamContinuation: AsyncStream<Void>.Continuation?
+        let gateStream = AsyncStream<Void> { continuation in
+            streamContinuation = continuation
+        }
+        let cancelledTask = Task { @MainActor in
+            for await _ in gateStream { break }
+            await manager.disconnect()
+        }
+        cancelledTask.cancel()
+        streamContinuation?.finish()
+        await cancelledTask.value
+
+        #expect(await client.disconnectCalls == 1)
+        #expect(await client.disconnectObservedCancelled == [false])
+        #expect(await worker.activeClient() == nil)
+        #expect(worker.getCachedThumbnail(forKey: "manager_thumb" as NSString) == nil)
+        #expect(!manager.isConnected)
+        #expect(manager.currentLocation == nil)
+        #expect(manager.currentConnectionID.isEmpty)
+        #expect(manager.folderTree.isEmpty)
+        #expect(manager.pictures.isEmpty)
     }
 
     @Test("SMB share enumeration paginates deterministically with bounded page sizes")

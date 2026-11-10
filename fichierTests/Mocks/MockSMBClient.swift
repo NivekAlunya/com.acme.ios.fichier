@@ -25,6 +25,7 @@ actor MockSMBClient: SMBClientProtocol {
     private(set) var listDirectoryPageCalls: [MockSMBDirectoryPageCall] = []
     private(set) var readFileCalls: [String] = []
     private(set) var disconnectCalls: Int = 0
+    private(set) var disconnectObservedCancelled: [Bool] = []
 
     private var isSharesGateArmed = false
     private var hasSharesGateStarted = false
@@ -347,6 +348,10 @@ actor MockSMBClient: SMBClientProtocol {
 
     func disconnect() async {
         disconnectCalls += 1
+        let cancelledAtEntry = Task.isCancelled
+        await Task.yield()
+        let cancelledAfterYield = Task.isCancelled
+        disconnectObservedCancelled.append(cancelledAtEntry || cancelledAfterYield)
     }
 
     func readFileData(share: String, path: String, maxBytes: Int64?) async throws -> Data {
