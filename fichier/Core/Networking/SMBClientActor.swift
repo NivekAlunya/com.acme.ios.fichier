@@ -398,6 +398,8 @@ actor SMBClientActor {
                 collectedFolders.append(folder)
             }
 
+            // FichierKit guarantees folder-first ordering for every page. Once media appears,
+            // all folders in this directory have already been enumerated.
             if !page.pictures.isEmpty {
                 break
             }

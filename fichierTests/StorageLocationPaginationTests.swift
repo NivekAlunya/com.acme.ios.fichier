@@ -345,7 +345,7 @@ struct StorageLocationPaginationTests {
         #expect(!manager.canLoadMorePages)
     }
 
-    @Test("Sidebar tree expansion scanSubfolders stops once media files appear")
+    @Test("Sidebar tree expansion relies on folder-first pages and stops once media files appear")
     func treeExpansionStopsWhenMediaPagesBegin() async {
         var items: [MediaSourceItem] = [
             makeFolderItem(path: "DeepTree/Sub1"),
@@ -374,7 +374,8 @@ struct StorageLocationPaginationTests {
         await manager.loadSubfoldersForTree(at: parent)
 
         let calls = await client.listDirectoryPageCalls
-        // Page 0 has [Sub1, Sub2, pic01] -> media encountered immediately, so trailing media pages (4..12) are never requested
+        // FichierKit's folder-first page is [Sub1, Sub2, pic01]. Once media appears,
+        // no later page can contain another folder, so trailing media pages are not requested.
         #expect(calls.count == 1)
         #expect(manager.folderTree.first?.children?.map(\.name) == ["Sub1", "Sub2"])
     }
