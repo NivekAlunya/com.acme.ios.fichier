@@ -232,7 +232,9 @@ actor SMBClientActor {
         activeServer = nil
         currentConnectionID = ""
         activeFolderID = nil
-        clearMemoryCache()
+        thumbnailCache.removeAllObjects()
+        fullImageCache.removeAllObjects()
+        metadataCache.removeAllObjects()
     }
 
     /// Disconnects a `SMBClientProtocol` instance inside an unstructured `Task`.
