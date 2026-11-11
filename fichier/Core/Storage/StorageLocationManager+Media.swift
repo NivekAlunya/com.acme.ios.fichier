@@ -13,6 +13,10 @@ import OSLog
 import FichierKit
 
 /// Thumbnail, streaming, document and cache-maintenance capabilities of `StorageLocationManager`.
+///
+/// Split out of the main file to keep navigation/connection state separate from media I/O. Thumbnail
+/// work is bounded by `videoThumbnailLimiter` / `pdfThumbnailLimiter` and guarded by `expectedFolderID`
+/// so results for a folder the user already left are dropped instead of cached.
 extension StorageLocationManager {
 
     // MARK: - Download Picture / Thumbnail

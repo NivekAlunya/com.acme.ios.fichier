@@ -759,6 +759,10 @@ public final class TVVideoPlayerViewModel {
 
     private func startRemoteSeekHoldPreviewLoop() {
         remoteSeekHoldTask?.cancel()
+        // Remote hold-to-seek preview. The initial 300 ms delay distinguishes a deliberate hold from a
+        // short tap (taps are handled as a fixed jump). The loop then refreshes the preview target at
+        // a fixed tick, growing the step with hold duration, until the press ends or Menu cancels it.
+        // `self` is re-bound on each iteration so the task never keeps the view model alive.
         remoteSeekHoldTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             while !Task.isCancelled {
@@ -862,6 +866,12 @@ public final class TVVideoPlayerViewModel {
         }
     }
 
+    /// Single-flight worker generating seek-preview thumbnails.
+    ///
+    /// Scrubbing can request dozens of thumbnails per second, so requests are coalesced: only the
+    /// newest `latestThumbnailRequest` is processed and older ones are dropped. Times are bucketed
+    /// (`bucketTimestamp`) so nearby positions share one cached frame. Short settle and cooldown
+    /// delays throttle decoding, which is more expensive for extended (VLC) streams over SMB.
     private func runThumbnailWorkerLoop() async {
         let settleNs: UInt64 = activeEngineKind == .extended ? 140_000_000 : 75_000_000
         try? await Task.sleep(nanoseconds: settleNs)
@@ -891,6 +901,8 @@ public final class TVVideoPlayerViewModel {
             }
 
             let decoded = await thumbnailProvider.generateThumbnail(for: request)
+            // Discard the result if the task was cancelled or the player moved to another media item
+            // while decoding, so a stale frame from the previous video never shows up.
             guard !Task.isCancelled, resolvedMediaURL == request.url else {
                 break
             }
@@ -909,6 +921,8 @@ public final class TVVideoPlayerViewModel {
                         isLoading: false
                     )
                 } else if let decoded {
+                    // The user moved on while this frame decoded: show it as a placeholder
+                    // (still `isLoading`) until the frame for the new bucket is ready.
                     seekThumbnailState = TVSeekThumbnailState(
                         targetTime: activeTarget,
                         bucketTime: activeBucket,

@@ -301,6 +301,8 @@ public final class VideoPlayerController {
             )
             self.loaderDelegate = delegate
             
+            // AVAssetResourceLoader requires a GCD queue for delegate callbacks (no async API
+            // exists). The delegate is retained in `loaderDelegate` because the asset only holds it weakly.
             // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(UUID().uuidString)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
