@@ -233,11 +233,7 @@ struct MediaGridView: View {
                         }
                     )
                 } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
-                    VStack(spacing: 12) {
-                        ContentUnavailableView.search(text: searchText)
-                        MediaPaginationFooterView(manager: manager)
-                            .padding(.horizontal, 12)
-                    }
+                    ContentUnavailableView.search(text: searchText)
                 } else {
                     Group {
                         switch viewMode {
@@ -552,9 +548,6 @@ struct MediaGridView: View {
         }
         .task {
             await manager.refreshMediaCacheSize()
-        }
-        .task(id: sortOption) {
-            await manager.applySort(key: sortOption.mediaSortKey, order: sortOption.mediaSortOrder)
         }
         .onDisappear {
             batchTask?.cancel()

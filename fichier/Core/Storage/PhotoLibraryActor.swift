@@ -17,14 +17,6 @@ import FichierKit
 /// - **iOS Album Presentation**: Retains iOS-specific localized smart album labels and SF Symbol folder icons.
 public actor PhotoLibraryActor {
 
-    // MARK: - Constants
-
-    /// Default bounded page size when fetching PhotoKit album assets.
-    public static let defaultPageSize: Int = 100
-
-    /// Safety cap on total PhotoKit pages iterated by full-album helpers.
-    public static let maxPages: Int = 100
-
     // MARK: - Internal Dependencies
 
     /// Shared `FichierKit` PhotoKit media source handling authorization and asset enumeration.
@@ -86,23 +78,12 @@ public actor PhotoLibraryActor {
 
     // MARK: - Album & Asset Enumeration
 
-    /// Fetches a single bounded page of Photos library albums (at root) or assets within an album.
+    /// Lists all contents within the Photos library scope: returns album folders at the root, or all assets within a chosen album.
     ///
-    /// - Parameters:
-    ///   - folder: The folder scope being inspected.
-    ///   - sortKey: Global sort attribute passed to `PhotosMediaSource`.
-    ///   - sortOrder: Sort direction passed to `PhotosMediaSource`.
-    ///   - page: Zero-based page index.
-    ///   - pageSize: Maximum number of assets to fetch for this page.
-    /// - Returns: A bounded `PhotoLibraryPage` containing subfolders/media and the next page index if more remain.
-    /// - Throws: `CancellationError` if cancelled, or `NSError` if Photos permission is denied.
-    public func listContentsPage(
-        at folder: MediaItem,
-        sortBy sortKey: MediaSortKey = .date,
-        order sortOrder: MediaSortOrder = .descending,
-        page: Int = 0,
-        pageSize: Int = PhotoLibraryActor.defaultPageSize
-    ) async throws -> PhotoLibraryPage {
+    /// - Parameter folder: The folder scope being inspected.
+    /// - Returns: A tuple of subfolder albums and media items.
+    /// - Throws: `NSError` if permission is revoked, or `CancellationError` if cancelled.
+    public func listContents(at folder: MediaItem) async throws -> (subfolders: [MediaItem], media: [MediaItem]) {
         try Task.checkCancellation()
         let authorized = await checkOrRequestAuthorization()
         guard authorized else {
@@ -115,68 +96,25 @@ public actor PhotoLibraryActor {
         try Task.checkCancellation()
 
         if folder.path.isEmpty {
-            return PhotoLibraryPage(subfolders: loadAlbums(), media: [], nextPage: nil)
-        }
-
-        let boundedPageSize = max(1, pageSize)
-        let targetPage = max(0, page)
-        let sourceItems = try await mediaSource.fetchItems(
-            in: folder.asMediaSourceItem,
-            sortBy: sortKey,
-            order: sortOrder,
-            page: targetPage,
-            pageSize: boundedPageSize
-        )
-        try Task.checkCancellation()
-
-        let media = sourceItems.map { sourceItem in
-            MediaItem(
-                sourceItem: sourceItem,
-                locationID: StorageLocation.photosLocationID,
-                rootName: folder.name
-            )
-        }
-        let nextPage = media.count >= boundedPageSize ? targetPage + 1 : nil
-        return PhotoLibraryPage(subfolders: [], media: media, nextPage: nextPage)
-    }
-
-    /// Lists contents within the Photos library scope using bounded incremental fetches.
-    ///
-    /// - Parameter folder: The folder scope being inspected.
-    /// - Returns: A tuple of subfolder albums and media items (capped at `Self.maxPages`).
-    /// - Throws: `NSError` if permission is revoked, or `CancellationError` if cancelled.
-    public func listContents(at folder: MediaItem) async throws -> (subfolders: [MediaItem], media: [MediaItem]) {
-        let rootPage = try await listContentsPage(
-            at: folder,
-            sortBy: .date,
-            order: .descending,
-            page: 0,
-            pageSize: Self.defaultPageSize
-        )
-        if folder.path.isEmpty {
-            return (rootPage.subfolders, rootPage.media)
-        }
-
-        var collectedMedia = rootPage.media
-        var seenIDs = Set(collectedMedia.map(\.id))
-        var nextPage = rootPage.nextPage
-
-        for _ in 1..<Self.maxPages {
-            guard let pageIndex = nextPage else { break }
-            let page = try await listContentsPage(
-                at: folder,
+            return (loadAlbums(), [])
+        } else {
+            let sourceItems = try await mediaSource.fetchItems(
+                in: folder.asMediaSourceItem,
                 sortBy: .date,
                 order: .descending,
-                page: pageIndex,
-                pageSize: Self.defaultPageSize
+                page: 0,
+                pageSize: Int.max
             )
-            for item in page.media where seenIDs.insert(item.id).inserted {
-                collectedMedia.append(item)
+            try Task.checkCancellation()
+            let media = sourceItems.map { sourceItem in
+                MediaItem(
+                    sourceItem: sourceItem,
+                    locationID: StorageLocation.photosLocationID,
+                    rootName: folder.name
+                )
             }
-            nextPage = page.nextPage
+            return ([], media)
         }
-
-        return ([], collectedMedia)
     }
 
     /// Helper computing estimated or exact asset counts for an album collection.

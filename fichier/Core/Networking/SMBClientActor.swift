@@ -25,19 +25,13 @@ import FichierKit
 ///   multi-megabyte full-file downloads.
 actor SMBClientActor {
 
-    // MARK: - Pagination Constants
+    // MARK: - Share Enumeration Constants
 
     /// Default bounded page size when enumerating top-level SMB shares.
     static let defaultSharePageSize: Int = 50
 
     /// Maximum number of share pages fetched in one pass to prevent infinite cursor loops.
     static let maxSharePages: Int = 20
-
-    /// Default bounded page size for SMB folder contents.
-    static let defaultFolderPageSize: Int = 100
-
-    /// Maximum number of subfolder pages scanned during sidebar tree expansion.
-    static let maxSubfolderPages: Int = 50
 
     // MARK: - State Properties
 
@@ -90,6 +84,11 @@ actor SMBClientActor {
     /// Exposes the currently connected `SMBClientProtocol` instance for shared package streaming delegates.
     func activeClient() -> (any SMBClientProtocol)? {
         client
+    }
+
+    /// Exposes the active SMB server connection metadata for streaming options and credentials lookup.
+    func activeServerConnection() -> SavedSMBConnection? {
+        activeServer
     }
 
     // MARK: - Active Directory Scope
@@ -286,29 +285,17 @@ actor SMBClientActor {
 
     // MARK: - Directory Enumeration
 
-    /// Scans a single bounded page of directory entries within a share via `FichierKit`.
+    /// Scans a directory within a specific share via `FichierKit` and segregates entries into subfolders and supported media files.
     ///
     /// - Parameters:
     ///   - shareName: The name of the share volume.
     ///   - path: The directory path relative to the share root.
-    ///   - cursor: Opaque continuation cursor from a previous `SMBFolderPage`, or `nil` for the first page.
-    ///   - pageSize: Maximum number of items requested for this page.
-    ///   - sortKey: Global sort key forwarded to `FichierKit`.
-    ///   - sortOrder: Global sort direction forwarded to `FichierKit`.
-    /// - Returns: A bounded `SMBFolderPage` containing folder-first items and continuation metadata.
-    ///
-    /// FichierKit bounds the results exposed to the app, but AMSMB2's public API
-    /// materializes one complete directory snapshot before paging. This is required
-    /// for deterministic global sorting because SMB2 does not provide server-side
-    /// sorted cursors or incremental enumeration through the supported API.
-    func scanFolderPage(
+    /// - Returns: A tuple containing sorted subfolders and media items.
+    /// - Throws: `CancellationError` if cancelled, or `SMBError` / `URLError` on network failure.
+    func scanFolder(
         shareName: String,
-        at path: String,
-        cursor: String? = nil,
-        pageSize: Int = SMBClientActor.defaultFolderPageSize,
-        sortBy sortKey: MediaSortKey = .name,
-        order sortOrder: MediaSortOrder = .ascending
-    ) async throws -> SMBFolderPage {
+        at path: String
+    ) async throws -> (folders: [MediaItem], pictures: [MediaItem]) {
         try Task.checkCancellation()
         let expectedGeneration = sessionGeneration
         guard let client, let activeServer else {
@@ -327,14 +314,13 @@ actor SMBClientActor {
             smbPath: cleanRelativePath
         )
 
-        let boundedPageSize = max(1, pageSize)
         let sharesSource = SharesMediaSource(server: activeServer, client: client)
-        let directoryPage = try await sharesSource.fetchDirectoryPage(
+        let sourceItems = try await sharesSource.fetchItems(
             in: folderSourceItem,
-            sortBy: sortKey,
-            order: sortOrder,
-            cursor: cursor,
-            pageSize: boundedPageSize
+            sortBy: .name,
+            order: .ascending,
+            page: 0,
+            pageSize: Int.max
         )
 
         try Task.checkCancellation()
@@ -345,7 +331,7 @@ actor SMBClientActor {
         var folders: [MediaItem] = []
         var pictures: [MediaItem] = []
 
-        for sourceItem in directoryPage.items {
+        for sourceItem in sourceItems {
             if Task.isCancelled { throw CancellationError() }
             let mapped = MediaItem(
                 sourceItem: sourceItem,
@@ -359,61 +345,7 @@ actor SMBClientActor {
             }
         }
 
-        return SMBFolderPage(
-            folders: folders,
-            pictures: pictures,
-            nextCursor: directoryPage.nextCursor,
-            totalCount: directoryPage.totalCount
-        )
-    }
-
-    /// Scans immediate subfolders within a directory for sidebar tree expansion without loading trailing media pages.
-    ///
-    /// - Parameters:
-    ///   - shareName: The name of the share volume.
-    ///   - path: The directory path relative to the share root.
-    ///   - pageSize: Bounded page size per request.
-    /// - Returns: Subfolder `MediaItem` entries sorted alphabetically.
-    func scanSubfolders(
-        shareName: String,
-        at path: String,
-        pageSize: Int = SMBClientActor.defaultFolderPageSize
-    ) async throws -> [MediaItem] {
-        let boundedPageSize = max(1, pageSize)
-        var collectedFolders: [MediaItem] = []
-        var seenIDs: Set<String> = []
-        var cursor: String?
-
-        for _ in 0..<Self.maxSubfolderPages {
-            try Task.checkCancellation()
-            let page = try await scanFolderPage(
-                shareName: shareName,
-                at: path,
-                cursor: cursor,
-                pageSize: boundedPageSize,
-                sortBy: .name,
-                order: .ascending
-            )
-            try Task.checkCancellation()
-
-            for folder in page.folders where seenIDs.insert(folder.id).inserted {
-                collectedFolders.append(folder)
-            }
-
-            // FichierKit guarantees folder-first ordering for every page. Once media appears,
-            // all folders in this directory have already been enumerated.
-            if !page.pictures.isEmpty {
-                break
-            }
-            guard let nextCursor = page.nextCursor,
-                  nextCursor != cursor,
-                  !page.folders.isEmpty else {
-                break
-            }
-            cursor = nextCursor
-        }
-
-        return collectedFolders
+        return (folders, pictures)
     }
 
     // MARK: - Thumbnail Retrieval & Downsampling

@@ -14,7 +14,8 @@ import UIKit
 /// 3. **Slideshow Preferences**: Transition animation style (`.slide`, `.dissolve`, etc.) and cycling duration.
 /// 4. **Gallery Defaults**: Preferred view mode (`.grid` vs `.list`), grid density (`GridSize`), and sort order.
 /// 5. **PDF Reader Defaults**: Default page layout reading mode (`PDFReadingMode`).
-/// 6. **About**: Application version, build number, and SMB protocol support details.
+/// 6. **Diagnostics**: Share the most recent crash report captured by `CrashReporting` (a placeholder is shown when none exists).
+/// 7. **About**: Application version, build number, and SMB protocol support details.
 struct AppSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -35,6 +36,9 @@ struct AppSettingsView: View {
     @State private var cacheSizeString: String = "…"
     @State private var isShowingClearConfirmation = false
     @State private var isClearingCache = false
+    
+    // Diagnostics State
+    @State private var latestCrashReportURL: URL?
     
     var body: some View {
         NavigationStack {
@@ -146,7 +150,25 @@ struct AppSettingsView: View {
                 }
                 #endif
                 
-                // 6. About & Version Information
+                // 6. Diagnostics (crash report sharing; Wappn is debug-only, see `CrashReporting`)
+                #if DEBUG
+                Section {
+                    if let latestCrashReportURL {
+                        ShareLink(item: latestCrashReportURL) {
+                            Label(.Strings.settingsButtonShareCrashReport, systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Text(.Strings.settingsCrashReportNone)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text(.Strings.settingsSectionDiagnostics)
+                } footer: {
+                    Text(.Strings.settingsCrashReportFooter)
+                }
+                #endif
+                
+                // 7. About & Version Information
                 Section(.Strings.settingsSectionAbout) {
                     LabeledContent(.Strings.settingsAppName, value: "Fichier")
                     LabeledContent(.Strings.settingsVersion, value: appVersionString)
@@ -168,6 +190,11 @@ struct AppSettingsView: View {
             .task {
                 cacheSizeString = await MediaCacheManager.shared.formattedCacheSize()
             }
+            #if DEBUG
+            .onAppear {
+                latestCrashReportURL = CrashReportStore().latestReportURL()
+            }
+            #endif
         }
     }
     

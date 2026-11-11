@@ -81,65 +81,37 @@ public final class StorageLocationManager {
     
     /// Identifier representing the current connection session, used for cache partitioning.
     public private(set) var currentConnectionID: String = ""
-
-    /// Indicates whether an incremental folder page fetch (`loadNextFolderPage`) is currently in flight.
-    public private(set) var isLoadingMore = false
-
-    /// Indicates whether additional folder pages can be fetched for the currently selected folder.
-    public private(set) var canLoadMorePages = false
-
-    /// Retryable error message for incremental folder pagination failures, keeping loaded pages intact.
-    public private(set) var paginationErrorMessage: String?
-
-    /// Global sort key currently applied to backend-paginated folder enumeration.
-    public private(set) var currentSortKey: MediaSortKey = .name
-
-    /// Global sort direction currently applied to backend-paginated folder enumeration.
-    public private(set) var currentSortOrder: MediaSortOrder = .ascending
     
     /// Tracks dynamic thumbnail generation tokens per media item, allowing observing SwiftUI views to react to on-the-fly upgrades.
-    public private(set) var thumbnailVersions: [String: Int] = [:]
+    public internal(set) var thumbnailVersions: [String: Int] = [:]
     
     /// In-flight asynchronous folder scanning task, cancelled when switching folders rapidly.
     private var loadFolderTask: Task<Void, Never>?
 
-    /// In-flight incremental pagination task, cancelled when changing folders, sorting, or disconnecting.
-    private var loadMoreTask: Task<Void, Never>?
-
-    /// Monotonic generation counter rejecting stale folder initial-load or trailing-page commits.
+    /// Monotonic generation counter rejecting stale folder load commits.
     private var folderGeneration: UInt64 = 0
-
-    /// Cursor/page progression state for the currently active folder.
-    private var paginationState: FolderPaginationState?
-
-    /// Deduplication sets ensuring retried or overlapping pages never duplicate `MediaItem.id` values.
-    private var loadedFolderIDs: Set<String> = []
-    private var loadedPictureIDs: Set<String> = []
-
-    /// Bounded page size used for SMB and Photos directory pagination.
-    private let folderPageSize: Int
     
     /// In-memory memory map preserving the last viewed folder per location ID for seamless split-view restoration.
     private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
     
     /// Background actor managing SMB connections, directory scanning, and streaming.
-    private let worker: SMBClientActor
+    let worker: SMBClientActor
     
     /// Nonisolated accessor exposing the worker actor for background streaming operations.
     nonisolated var clientActor: SMBClientActor { worker }
     
     /// Background actor managing local sandbox and security-scoped file system access.
-    private let localWorker: LocalStorageActor
+    let localWorker: LocalStorageActor
     
     /// Background actor managing PhotoKit queries and PHAsset fetching.
-    private let photosWorker: PhotoLibraryActor
+    let photosWorker: PhotoLibraryActor
     
     /// Concurrency limiter preventing socket saturation during parallel video keyframe extraction.
-    private let videoThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 2)
+    let videoThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 2)
     
     #if !os(tvOS)
     /// Concurrency limiter preventing socket saturation during parallel PDF document thumbnail extraction.
-    private let pdfThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
+    let pdfThumbnailLimiter = SMBVideoThumbnailLimiter(maxConcurrent: 1)
     #endif
     
     /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
@@ -165,15 +137,13 @@ public final class StorageLocationManager {
         localWorker: LocalStorageActor = LocalStorageActor(),
         photosWorker: PhotoLibraryActor = PhotoLibraryActor(),
         persistenceStore: StorageLocationPersistenceStore = StorageLocationPersistenceStore(),
-        navigationCoordinator: FolderNavigationCoordinator = FolderNavigationCoordinator(),
-        folderPageSize: Int = SMBClientActor.defaultFolderPageSize
+        navigationCoordinator: FolderNavigationCoordinator = FolderNavigationCoordinator()
     ) {
         self.worker = worker
         self.localWorker = localWorker
         self.photosWorker = photosWorker
         self.persistenceStore = persistenceStore
         self.navigationCoordinator = navigationCoordinator
-        self.folderPageSize = max(1, folderPageSize)
         loadSavedConnections()
         loadSavedFolderLocations()
         setupLifecycleObservers()
@@ -419,17 +389,9 @@ public final class StorageLocationManager {
         folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
-        loadMoreTask?.cancel()
-        loadMoreTask = nil
 
         isLoading = true
-        isLoadingMore = false
-        canLoadMorePages = false
         errorMessage = nil
-        paginationErrorMessage = nil
-        paginationState = nil
-        loadedFolderIDs.removeAll()
-        loadedPictureIDs.removeAll()
         
         let cleanHost = host
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -561,12 +523,12 @@ public final class StorageLocationManager {
         }
     }
     
-    // MARK: - Select Folder & Bounded Folder Pagination
+    // MARK: - Select Folder & Load Both Subfolders + Pictures
     
-    /// Selects a folder item and asynchronously enumerates its first bounded page of child subfolders and media files.
+    /// Selects a folder item and asynchronously enumerates its child subfolders and media files.
     ///
     /// ### Concurrency and Invalidation Strategy
-    /// 1. Advances `folderGeneration` and cancels any ongoing initial-load or trailing-page tasks.
+    /// 1. Advances `folderGeneration` and cancels any ongoing `loadFolderTask` to prioritize the new user action.
     /// 2. Clears the existing `pictures` and `currentFolders` collections to cause obsolete UI
     ///    cells to unmount and drop their active thumbnail generation tasks.
     /// 3. Signals the `worker` actor with the new `activeFolderID` to discard queued thumbnail requests.
@@ -574,257 +536,22 @@ public final class StorageLocationManager {
     ///
     /// - Parameter folder: The folder item to browse.
     public func selectAndLoadFolder(_ folder: MediaItem) async {
-        await loadFolderContents(folder, sortKey: currentSortKey, order: currentSortOrder)
-    }
-
-    /// Updates the active sort configuration and reloads paginated SMB/Photos folders from page 0.
-    public func applySort(key: MediaSortKey, order: MediaSortOrder) async {
-        let sortChanged = key != currentSortKey || order != currentSortOrder
-        currentSortKey = key
-        currentSortOrder = order
-
-        guard let folder = selectedFolder else { return }
-        guard folder.localURL == nil else { return }
-
-        let loadedWithDifferentSort: Bool
-        if let paginationState {
-            loadedWithDifferentSort = paginationState.sortKey != key || paginationState.sortOrder != order
-        } else {
-            loadedWithDifferentSort = sortChanged
-        }
-        guard sortChanged || loadedWithDifferentSort else { return }
-
-        await loadFolderContents(folder, sortKey: key, order: order)
-    }
-
-    /// Loads the next bounded page of items for the currently active folder without disturbing scroll position (`isLoading`).
-    public func loadNextFolderPage() async {
-        guard !Task.isCancelled,
-              !isLoading,
-              !isLoadingMore,
-              canLoadMorePages,
-              let state = paginationState,
-              state.hasMore,
-              let targetFolder = selectedFolder,
-              state.folderID == activeFolderID,
-              state.folderID == targetFolder.id else {
-            return
-        }
-
-        let expectedGeneration = folderGeneration
-        let targetID = targetFolder.id
-        let pageSize = folderPageSize
-
-        isLoadingMore = true
-        paginationErrorMessage = nil
-
-        let task = Task { [weak self, worker, photosWorker, state] in
-            guard let self else { return }
-            var updatedState = state
-
-            do {
-                try Task.checkCancellation()
-
-                switch updatedState.backend {
-                case .smb:
-                    guard let cursor = updatedState.smbCursor else {
-                        guard !Task.isCancelled,
-                              self.folderGeneration == expectedGeneration,
-                              self.activeFolderID == targetID else { return }
-                        updatedState.hasMore = false
-                        self.paginationState = updatedState
-                        self.canLoadMorePages = false
-                        self.isLoadingMore = false
-                        return
-                    }
-
-                    let page = try await worker.scanFolderPage(
-                        shareName: targetFolder.shareName,
-                        at: targetFolder.path,
-                        cursor: cursor,
-                        pageSize: pageSize,
-                        sortBy: updatedState.sortKey,
-                        order: updatedState.sortOrder
-                    )
-                    try Task.checkCancellation()
-
-                    guard !Task.isCancelled,
-                          self.folderGeneration == expectedGeneration,
-                          self.activeFolderID == targetID else {
-                        return
-                    }
-
-                    let newFolders = self.appendUnique(page.folders, into: &self.loadedFolderIDs)
-                    let newPictures = self.appendUnique(page.pictures, into: &self.loadedPictureIDs)
-
-                    if !newFolders.isEmpty {
-                        self.currentFolders.append(contentsOf: newFolders)
-                        self.folderTree = self.updateTreeNodes(
-                            in: self.folderTree,
-                            targetID: targetID,
-                            children: self.currentFolders
-                        )
-                    }
-                    if !newPictures.isEmpty {
-                        self.pictures.append(contentsOf: newPictures)
-                    }
-
-                    if newFolders.isEmpty && newPictures.isEmpty {
-                        updatedState.consecutiveEmptyPages += 1
-                    } else {
-                        updatedState.consecutiveEmptyPages = 0
-                    }
-
-                    let hasMore = page.nextCursor != nil
-                        && page.nextCursor != cursor
-                        && updatedState.consecutiveEmptyPages < 3
-
-                    updatedState.smbCursor = hasMore ? page.nextCursor : nil
-                    updatedState.hasMore = hasMore
-                    self.paginationState = updatedState
-                    self.canLoadMorePages = hasMore
-                    self.isLoadingMore = false
-
-                case .photos:
-                    guard let nextPage = updatedState.nextPhotoPage else {
-                        guard !Task.isCancelled,
-                              self.folderGeneration == expectedGeneration,
-                              self.activeFolderID == targetID else { return }
-                        updatedState.hasMore = false
-                        self.paginationState = updatedState
-                        self.canLoadMorePages = false
-                        self.isLoadingMore = false
-                        return
-                    }
-
-                    let page = try await photosWorker.listContentsPage(
-                        at: targetFolder,
-                        sortBy: updatedState.sortKey,
-                        order: updatedState.sortOrder,
-                        page: nextPage,
-                        pageSize: pageSize
-                    )
-                    try Task.checkCancellation()
-
-                    guard !Task.isCancelled,
-                          self.folderGeneration == expectedGeneration,
-                          self.activeFolderID == targetID else {
-                        return
-                    }
-
-                    let newPictures = self.appendUnique(page.media, into: &self.loadedPictureIDs)
-                    if !newPictures.isEmpty {
-                        self.pictures.append(contentsOf: newPictures)
-                    }
-
-                    if newPictures.isEmpty {
-                        updatedState.consecutiveEmptyPages += 1
-                    } else {
-                        updatedState.consecutiveEmptyPages = 0
-                    }
-
-                    let hasMore = page.nextPage != nil
-                        && page.nextPage != nextPage
-                        && !page.media.isEmpty
-                        && updatedState.consecutiveEmptyPages < 3
-
-                    updatedState.nextPhotoPage = hasMore ? page.nextPage : nil
-                    updatedState.hasMore = hasMore
-                    self.paginationState = updatedState
-                    self.canLoadMorePages = hasMore
-                    self.isLoadingMore = false
-
-                case .local:
-                    guard self.folderGeneration == expectedGeneration,
-                          self.activeFolderID == targetID else { return }
-                    updatedState.hasMore = false
-                    self.paginationState = updatedState
-                    self.canLoadMorePages = false
-                    self.isLoadingMore = false
-                }
-            } catch is CancellationError {
-                if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
-                    self.isLoadingMore = false
-                }
-            } catch {
-                guard !Task.isCancelled,
-                      self.folderGeneration == expectedGeneration,
-                      self.activeFolderID == targetID else {
-                    return
-                }
-                self.paginationErrorMessage = error.localizedDescription
-                self.isLoadingMore = false
-                AppLog.smb.error("Error loading next page for \(targetFolder.shareName, privacy: .private)/\(targetFolder.path, privacy: .private): \(error.localizedDescription)")
-            }
-        }
-
-        loadMoreTask = task
-        await withTaskCancellationHandler {
-            await task.value
-        } onCancel: {
-            task.cancel()
-        }
-        if self.folderGeneration == expectedGeneration {
-            self.loadMoreTask = nil
-        }
-    }
-
-    /// Triggers incremental pagination when a trailing gallery or subfolder item appears on screen.
-    public func loadNextFolderPageIfNeeded(currentItem: MediaItem, thresholdOffset: Int = 8) {
-        guard !isLoading,
-              !isLoadingMore,
-              canLoadMorePages,
-              paginationErrorMessage == nil else {
-            return
-        }
-
-        let offset = max(1, thresholdOffset)
-        let shouldTrigger: Bool
-        if let picIndex = pictures.firstIndex(where: { $0.id == currentItem.id }) {
-            shouldTrigger = picIndex >= max(0, pictures.count - offset)
-        } else if currentItem.isDirectory,
-                  let folderIndex = currentFolders.firstIndex(where: { $0.id == currentItem.id }) {
-            shouldTrigger = pictures.isEmpty && folderIndex >= max(0, currentFolders.count - offset)
-        } else {
-            shouldTrigger = false
-        }
-
-        guard shouldTrigger else { return }
-
-        loadMoreTask = Task { [weak self] in
-            await self?.loadNextFolderPage()
-        }
-    }
-
-    private func loadFolderContents(
-        _ folder: MediaItem,
-        sortKey: MediaSortKey,
-        order: MediaSortOrder
-    ) async {
         // Record this folder as the last active selection for the current location
         if let locID = currentLocation?.id, !locID.isEmpty {
             lastSelectedFolderPerLocation[locID] = folder
         }
 
-        // 1. Advance generation and cancel any ongoing folder/pagination tasks immediately
+        // 1. Advance generation and cancel any ongoing folder scan task immediately
         folderGeneration &+= 1
         let expectedGeneration = folderGeneration
         loadFolderTask?.cancel()
         loadFolderTask = nil
-        loadMoreTask?.cancel()
-        loadMoreTask = nil
 
         // 2. Set newly selected folder and record active folder ID
         selectedFolder = folder
         activeFolderID = folder.id
         isLoading = true
-        isLoadingMore = false
-        canLoadMorePages = false
         errorMessage = nil
-        paginationErrorMessage = nil
-        paginationState = nil
-        loadedFolderIDs.removeAll()
-        loadedPictureIDs.removeAll()
 
         // 3. Immediately clear out previous items so thumbnail views unmount
         // and cancel their ongoing thumbnail tasks in SwiftUI
@@ -850,7 +577,6 @@ public final class StorageLocationManager {
         let targetName = folder.name
         let isLocal = folder.localURL != nil
         let isPhotos = folder.locationID == StorageLocation.photosLocationID
-        let pageSize = self.folderPageSize
 
         let task = Task { [weak self, worker, localWorker, photosWorker] in
             guard let self else { return }
@@ -858,60 +584,19 @@ public final class StorageLocationManager {
                 try Task.checkCancellation()
                 let subfolders: [MediaItem]
                 let foundPictures: [MediaItem]
-                let initialPaginationState: FolderPaginationState
 
                 if isLocal {
                     let (subs, media) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
                     subfolders = subs
                     foundPictures = media
-                    initialPaginationState = FolderPaginationState(
-                        folderID: targetID,
-                        backend: .local,
-                        smbCursor: nil,
-                        nextPhotoPage: nil,
-                        sortKey: sortKey,
-                        sortOrder: order,
-                        hasMore: false
-                    )
                 } else if isPhotos {
-                    let page = try await photosWorker.listContentsPage(
-                        at: folder,
-                        sortBy: sortKey,
-                        order: order,
-                        page: 0,
-                        pageSize: pageSize
-                    )
-                    subfolders = page.subfolders
-                    foundPictures = page.media
-                    initialPaginationState = FolderPaginationState(
-                        folderID: targetID,
-                        backend: .photos,
-                        smbCursor: nil,
-                        nextPhotoPage: page.nextPage,
-                        sortKey: sortKey,
-                        sortOrder: order,
-                        hasMore: page.nextPage != nil
-                    )
+                    let (subs, media) = try await photosWorker.listContents(at: folder)
+                    subfolders = subs
+                    foundPictures = media
                 } else {
-                    let page = try await worker.scanFolderPage(
-                        shareName: targetShare,
-                        at: targetPath,
-                        cursor: nil,
-                        pageSize: pageSize,
-                        sortBy: sortKey,
-                        order: order
-                    )
-                    subfolders = page.folders
-                    foundPictures = page.pictures
-                    initialPaginationState = FolderPaginationState(
-                        folderID: targetID,
-                        backend: .smb,
-                        smbCursor: page.nextCursor,
-                        nextPhotoPage: nil,
-                        sortKey: sortKey,
-                        sortOrder: order,
-                        hasMore: page.nextCursor != nil
-                    )
+                    let (subs, media) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
+                    subfolders = subs
+                    foundPictures = media
                 }
 
                 try Task.checkCancellation()
@@ -922,16 +607,11 @@ public final class StorageLocationManager {
                     return
                 }
 
-                let uniqueSubfolders = self.appendUnique(subfolders, into: &self.loadedFolderIDs)
-                let uniquePictures = self.appendUnique(foundPictures, into: &self.loadedPictureIDs)
-
-                self.currentFolders = uniqueSubfolders
-                self.pictures = uniquePictures
-                self.paginationState = initialPaginationState
-                self.canLoadMorePages = initialPaginationState.hasMore
-                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: uniqueSubfolders)
+                self.currentFolders = subfolders
+                self.pictures = foundPictures
+                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
                 self.isLoading = false
-                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(uniqueSubfolders.count) subfolders, \(uniquePictures.count) items (hasMore: \(initialPaginationState.hasMore))")
+                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) items")
             } catch is CancellationError {
                 // Clean up loading flag only if this folder was not superseded by a newer selection
                 if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
@@ -959,15 +639,6 @@ public final class StorageLocationManager {
             self.loadFolderTask = nil
         }
     }
-
-    private func appendUnique(_ items: [MediaItem], into seenIDs: inout Set<String>) -> [MediaItem] {
-        var appended: [MediaItem] = []
-        appended.reserveCapacity(items.count)
-        for item in items where seenIDs.insert(item.id).inserted {
-            appended.append(item)
-        }
-        return appended
-    }
     
     /// Lazily populates child subfolders in the sidebar tree without altering the active grid selection.
     ///
@@ -982,11 +653,8 @@ public final class StorageLocationManager {
                 let (subs, _) = try await photosWorker.listContents(at: folder)
                 subfolders = subs
             } else {
-                subfolders = try await worker.scanSubfolders(
-                    shareName: folder.shareName,
-                    at: folder.path,
-                    pageSize: folderPageSize
-                )
+                let (subs, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
+                subfolders = subs
             }
             self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
         } catch {
@@ -1046,590 +714,8 @@ public final class StorageLocationManager {
         navigationCoordinator.deriveParentFolder(for: item, in: folderTree)
     }
     
-    // MARK: - Download Picture / Thumbnail
-    
-    /// Downloads or retrieves a cached thumbnail image for a given media item.
-    ///
-    /// ### Multi-Tier Thumbnail Pipeline
-    /// 1. **Tier 1 (RAM)**: Checks `SMBClientActor`'s in-memory `NSCache` for immediate rendering.
-    /// 2. **Backend Delegation**:
-    ///    - Photos Library: Delegated to `PhotoLibraryActor` (`PHCachingImageManager`).
-    ///    - Local Files: Checks persistent disk cache (`MediaCacheManager`), then decodes with downsampling.
-    ///    - SMB Videos: Checks disk cache, then extracts a keyframe over the network via `streamVideoThumbnail`.
-    ///    - SMB Images: Checks disk cache, debounces by 40ms, and queries `SMBClientActor`.
-    /// 3. **Tier 2 (Disk Storage)**: Successfully decoded images are written back to `MediaCacheManager`.
-    ///
-    /// - Parameters:
-    ///   - item: The target media item.
-    ///   - maxDimension: Maximum pixel bounding dimension for downsampling.
-    /// - Returns: A decoded, downsampled `UIImage`, or `nil` if loading failed or was cancelled.
-    public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
-        if Task.isCancelled { return nil }
-        
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
-            return cached
-        }
-        
-        // Photos Library asset thumbnail
-        if item.phAssetIdentifier != nil {
-            if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                return thumb
-            }
-            return nil
-        }
-        
-        // Local or iCloud Drive file thumbnail
-        if item.localURL != nil {
-            // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
-            let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
-            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
-                for: item.shareName,
-                path: subPath,
-                dimension: maxDimension,
-                connectionID: item.connectionID
-            )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-                return diskCached
-            }
-            
-            if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                return thumb
-            }
-            return nil
-        }
-        
-        let currentActive = activeFolderID
-        // Early discard if folder already changed
-        if let current = selectedFolder, item.shareName != current.shareName || !item.path.hasPrefix(current.path) {
-            return nil
-        }
-        
-        // Video thumbnail streaming & caching
-        if item.isVideo {
-            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
-                for: item.shareName,
-                path: "\(item.path)_vidstream_v7",
-                dimension: maxDimension,
-                connectionID: item.connectionID
-            )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-                return diskCached
-            }
-            
-            guard !Task.isCancelled else { return nil }
-            
-            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 12.0s with 0.0s fallback)
-            if MediaCacheManager.shared.hasCachedVideo(for: item) {
-                let localURL = MediaCacheManager.shared.localVideoURL(for: item)
-                if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
-                    from: localURL,
-                    maxDimension: MediaCacheManager.standardThumbnailDimension
-                ) {
-                    worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                    MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                    return thumb
-                }
-            }
-            
-            // 2. Stream video frame on demand via AVAssetResourceLoader (reads front header + moov atom only!)
-            // Debounce briefly so cells flying past during fast scroll are cancelled before hitting SMB
-            try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled else { return nil }
-            
-            if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                return thumb
-            }
-            
-            // 3. If streaming failed or was cancelled due to scrolling, do NOT cache a placeholder
-            // This allows the cell to retry fetching the actual thumbnail when visible
-            return nil
-        }
-        
-        // PDF document thumbnail streaming, fast-path prefix caching, and placeholder generation
-        if item.isPDF {
-            return await fetchPDFThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension)
-        }
-        
-        // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
-        let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: item.connectionID
-        )
-        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey, legacyKey: photoLegacyKey) {
-            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-            return diskCached
-        }
-        
-        // Debounce briefly (40ms for photos) to prevent network thrashing during fast scrolls
-        try? await Task.sleep(for: .milliseconds(40))
-        guard !Task.isCancelled else { return nil }
-        
-        let thumb = await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
-        if let thumb {
-            worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-        }
-        return thumb
-    }
-    
-    // MARK: - Streaming Helpers
-    
-    /// Ensures a media item has a positive byte size populated, querying file attributes if missing.
-    ///
-    /// - Parameter item: The media item to validate.
-    /// - Returns: The verified `MediaItem` with positive size metadata.
-    public func resolveValidItem(for item: MediaItem) async -> MediaItem {
-        guard item.size <= 0 else { return item }
-        let realSize = await fetchFileSize(for: item)
-        return realSize > 0 ? item.withSize(realSize) : item
-    }
-
-    /// Progressive video keyframe extractor over SMB using `FichierKit.SMBAVAssetResourceLoaderDelegate`.
-    ///
-    /// ### Algorithmic Details & Concurrency Control
-    /// 1. Uses `videoThumbnailLimiter.withPermit` to cap simultaneous thumbnail extraction tasks (default max 2),
-    ///    preventing socket congestion on the SMB server.
-    /// 2. Configures `SMBAVAssetResourceLoaderDelegate` with a 256 KB chunk size for efficient range-request header parsing.
-    /// 3. Employs `AVAssetImageGenerator` with tight tolerances targeting a standardized 15.0s timestamp,
-    ///    with fallbacks to `.zero` and 0.5s if the video is very short.
-    /// 4. Races the extraction against a 12-second timeout inside a structured `TaskGroup`, immediately
-    ///    cancelling underlying network requests and CGImage generation upon timeout or external cancellation.
-    ///
-    /// - Parameters:
-    ///   - item: Video media item.
-    ///   - expectedFolderID: Active folder identifier to avoid completing obsolete requests.
-    ///   - maxDimension: Maximum bounding dimension for the thumbnail.
-    /// - Returns: An extracted keyframe image, or `nil`.
-    private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
-        if Task.isCancelled { return nil }
-        
-        return try? await videoThumbnailLimiter.withPermit {
-            guard !Task.isCancelled else { return nil }
-            if let expectedFolderID, await self.activeFolderID != expectedFolderID {
-                return nil
-            }
-            let memoryCacheKey = "\(item.id)_thumb" as NSString
-            let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = self.worker.getCachedThumbnail(forKey: memoryCacheKey) ?? self.worker.getCachedThumbnail(forKey: legacyMemoryKey) {
-                return cached
-            }
-            
-            let validItem = await resolveValidItem(for: item)
-            guard validItem.size > 0 else {
-                return nil
-            }
-            
-            if SupportedMediaTypes.isExtendedVideo(extension: (validItem.name as NSString).pathExtension) {
-                return await streamExtendedVideoThumbnail(for: validItem, maxDimension: maxDimension)
-            }
-            
-            guard let client = await worker.activeClient() else {
-                return nil
-            }
-            
-            let streamURL = SMBAVAssetResourceLoaderDelegate.makeStreamURL(fileName: validItem.name)
-            guard streamURL.scheme == SMBAVAssetResourceLoaderDelegate.scheme else {
-                return nil
-            }
-            
-            return await Self.extractStreamVideoFrame(
-                streamURL: streamURL,
-                uniqueID: UUID().uuidString,
-                client: client,
-                item: validItem
-            )
-        }
-    }
-    
-    private nonisolated static func extractStreamVideoFrame(
-        streamURL: URL,
-        uniqueID: String,
-        client: any SMBClientProtocol,
-        item: MediaItem
-    ) async -> UIImage? {
-        let asset = AVURLAsset(url: streamURL)
-        // Use 256 KB chunk size for thumbnail probing to avoid congesting the SMB socket during concurrent video playback
-        let delegate = SMBAVAssetResourceLoaderDelegate(
-            client: client,
-            share: item.shareName,
-            path: item.smbRelativePath,
-            fileName: item.name,
-            fileSize: item.size,
-            chunkSize: 256 * 1024
-        )
-        // swiftlint:disable:next no_legacy_dispatch_queue
-        let queue = DispatchQueue(label: "com.acme.ios.photos.thumbstream.\(uniqueID)", qos: .userInitiated)
-        asset.resourceLoader.setDelegate(delegate, queue: queue)
-        
-        defer {
-            delegate.cancelAll()
-            asset.cancelLoading()
-            asset.resourceLoader.setDelegate(nil, queue: nil)
-        }
-        
-        let result = await withTaskCancellationHandler {
-            await withTaskGroup(of: UIImage?.self) { group in
-                group.addTask {
-                    let generator = AVAssetImageGenerator(asset: asset)
-                    generator.appliesPreferredTrackTransform = true
-                    let standardDim = MediaCacheManager.standardThumbnailDimension
-                    generator.maximumSize = CGSize(width: standardDim, height: standardDim)
-                    generator.requestedTimeToleranceBefore = MediaCacheManager.defaultVideoThumbnailTolerance
-                    generator.requestedTimeToleranceAfter = MediaCacheManager.defaultVideoThumbnailTolerance
-                    
-                    // 1. Try representative frame first using standardized thumbnail timestamp
-                    do {
-                        let (cgImage, _) = try await generator.image(at: MediaCacheManager.defaultVideoThumbnailTime)
-                        return UIImage(cgImage: cgImage)
-                    } catch {
-                        guard !Task.isCancelled else { return nil }
-                        // 2. Fallback: try .zero or standardized fallback timestamp if video is shorter
-                        generator.requestedTimeToleranceBefore = .positiveInfinity
-                        generator.requestedTimeToleranceAfter = .positiveInfinity
-                        if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: .zero) {
-                            return UIImage(cgImage: cgImage)
-                        }
-                        if !Task.isCancelled, let (cgImage, _) = try? await generator.image(at: MediaCacheManager.fallbackVideoThumbnailTime) {
-                            return UIImage(cgImage: cgImage)
-                        }
-                        return nil
-                    }
-                }
-                
-                group.addTask {
-                    try? await Task.sleep(for: .seconds(12.0))
-                    delegate.cancelAll()
-                    return nil
-                }
-                
-                let first = (await group.next()).flatMap { $0 }
-                group.cancelAll()
-                return first
-            }
-        } onCancel: {
-            delegate.cancelAll()
-        }
-        withExtendedLifetime((delegate, queue)) {}
-        return result
-    }
-    
-    /// Streams an extended video keyframe (MKV, AVI, WebM, etc.) on demand over loopback HTTP via VLCKit.
-    private func streamExtendedVideoThumbnail(
-        for item: MediaItem,
-        maxDimension: CGFloat
-    ) async -> UIImage? {
-        guard !Task.isCancelled,
-              let client = await worker.activeClient() else { return nil }
-        let server = SMBStreamingServer(
-            client: client,
-            share: item.shareName,
-            path: item.smbRelativePath,
-            fileName: item.name,
-            totalSize: item.size
-        )
-        do {
-            let streamURL = try await server.start()
-            
-            let thumb = await VLCVideoThumbnailActor.shared.generateThumbnail(
-                from: streamURL,
-                maxDimension: maxDimension,
-                snapshotPosition: 0.05
-            )
-            
-            let result: UIImage?
-            if let thumb {
-                result = thumb
-            } else {
-                result = await VLCVideoThumbnailActor.shared.generateThumbnail(
-                    from: streamURL,
-                    maxDimension: maxDimension,
-                    snapshotPosition: 0.0
-                )
-            }
-            
-            await server.stop()
-            return result
-        } catch {
-            await server.stop()
-            return nil
-        }
-    }
-    
-    // MARK: - PDF Document Thumbnail Streaming & Placeholders
-    
-    /// Progressive PDF document thumbnail generator with fast-path prefix reading and stylized placeholder fallbacks.
-    ///
-    /// ### Three-Tier Thumbnailing Strategy:
-    /// 1. **Cache / Local Ingestion**: Checks RAM, persistent disk thumbnails, or local document cache.
-    /// 2. **Fast-Path Prefix Read**: Reads the initial 1 MB prefix over SMB. For linearized (web-optimized) PDFs,
-    ///    Page 1 is rendered and cached in ~200ms without transferring the remaining document.
-    /// 3. **Bounded Ingestion or Stylized Cover**:
-    ///    - If the document is $\le 12 \text{ MB}$, downloads via bounded concurrency limiter (max 1 concurrent operation)
-    ///      with a strict 8-second timeout to prevent socket starvation.
-    ///    - If the document exceeds $12 \text{ MB}$, or if download fails/times out, immediately generates an
-    ///      elegant stylized vector PDF cover card with title and file size.
-    ///
-    /// - Parameters:
-    ///   - item: The target PDF `MediaItem`.
-    ///   - expectedFolderID: Active directory token to verify folder consistency.
-    ///   - maxDimension: Maximum thumbnail bounding dimension.
-    /// - Returns: A rendered cover `UIImage`, or `nil` if cancelled.
-    #if !os(tvOS)
-    private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
-        if Task.isCancelled { return nil }
-        
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: item.connectionID
-        )
-        
-        // 1. Check persistent on-disk thumbnail cache
-        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-            return diskCached
-        }
-        
-        // 2. Check if complete document is already cached locally (e.g. previously opened in PDFDetailView)
-        if MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
-            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                return thumb
-            }
-        }
-        
-        // 3. Debounce briefly (100ms) to cancel fast-scrolling cells before touching SMB
-        try? await Task.sleep(for: .milliseconds(100))
-        guard !Task.isCancelled else { return nil }
-        if let expectedFolderID, self.activeFolderID != expectedFolderID {
-            return nil
-        }
-        
-        // 4. Fast-Path Prefix Read (Linearized / Web-Optimized PDFs)
-        if let fastThumb = await worker.fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
-            worker.cacheThumbnail(fastThumb, forKey: memoryCacheKey)
-            MediaCacheManager.shared.saveThumbnailAsync(fastThumb, for: diskKey)
-            return fastThumb
-        }
-        guard !Task.isCancelled else { return nil }
-        
-        // 5. Size Ceiling & Concurrency Limiting:
-        // Only attempt full download during grid browsing for documents <= 12 MB.
-        let maxThumbnailDownloadBytes: Int64 = 12 * 1024 * 1024
-        if item.size > 0 && item.size <= maxThumbnailDownloadBytes {
-            let thumb = try? await pdfThumbnailLimiter.withPermit { () -> UIImage? in
-                guard !Task.isCancelled else { return nil }
-                if let expectedFolderID, await self.activeFolderID != expectedFolderID {
-                    return nil
-                }
-                
-                // Re-check disk cache in case a previous task finished it while waiting
-                if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-                    return diskCached
-                }
-                
-                do {
-                    // Race download against an 8-second timeout using structured concurrency
-                    return try await withThrowingTaskGroup(of: UIImage?.self) { group in
-                        group.addTask {
-                            let localURL = try await self.worker.fetchDocumentURL(for: item)
-                            return MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension)
-                        }
-                        group.addTask {
-                            try await Task.sleep(for: .seconds(8))
-                            return nil
-                        }
-                        let result = (try await group.next()).flatMap { $0 }
-                        group.cancelAll()
-                        return result
-                    }
-                } catch {
-                    return nil
-                }
-            }
-            if let thumb {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                return thumb
-            }
-        }
-        
-        // 6. Documents > 12 MB or without a pre-computed thumbnail return nil.
-        // MediaThumbnailView will render a zero-allocation lightweight SwiftUI vector placeholder.
-        return nil
-    }
-    
-    // MARK: - On-the-Fly Thumbnail Upgrades
-    
-    /// Upgrades or creates the master thumbnail for a PDF document currently opened in the reader.
-    ///
-    /// Extracted directly from Page 1 of the parsed in-memory `PDFDocument`, saving network I/O
-    /// and disk parsing overhead. Persists the rendered thumbnail to both RAM and disk caches,
-    /// and notifies active gallery cells to update immediately.
-    ///
-    /// - Parameters:
-    ///   - item: The target document `MediaItem`.
-    ///   - document: The parsed `PDFDocument` currently displayed in the reader.
-    public func upgradePDFThumbnail(for item: MediaItem, from document: PDFDocument) async {
-        let maxDimension = MediaCacheManager.standardThumbnailDimension
-        let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: item.connectionID
-        )
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        
-        // Render first page directly from in-memory document
-        guard let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: document, maxDimension: maxDimension) else {
-            return
-        }
-        
-        // Persist to disk and RAM
-        MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-        worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-        
-        // Trigger SwiftUI observation update for this item
-        thumbnailVersions[item.id, default: 0] += 1
-    }
-    #else
-    private func fetchPDFThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
-        nil
-    }
-    #endif
-    
-    /// Downloads the full-resolution image for a media item from the active backend.
-    ///
-    /// - Parameter item: The media item to download.
-    /// - Returns: The full-resolution `UIImage`, or `nil` if cancelled or failed.
-    nonisolated public func downloadImage(for item: MediaItem) async -> UIImage? {
-        if Task.isCancelled || item.isVideo { return nil }
-        if item.phAssetIdentifier != nil {
-            return await photosWorker.fetchImage(for: item)
-        }
-        if item.localURL != nil {
-            return await localWorker.fetchImage(for: item)
-        }
-        return await worker.fetchFullImage(for: item)
-    }
-    
-    /// Queries the byte size of a media item from its respective storage backend.
-    ///
-    /// - Parameter item: The media item to inspect.
-    /// - Returns: Size in bytes, or `0` if undetermined.
-    nonisolated public func fetchFileSize(for item: MediaItem) async -> Int64 {
-        if item.phAssetIdentifier != nil {
-            return await photosWorker.fetchFileSize(for: item)
-        }
-        if item.localURL != nil {
-            return await localWorker.fetchFileSize(for: item)
-        }
-        return await worker.fetchFileSize(for: item)
-    }
-    
-    /// Fetches parsed EXIF and camera metadata for an image without decoding pixel buffers.
-    ///
-    /// - Parameter item: The media item to inspect.
-    /// - Returns: Parsed `PictureEXIFData`, or `nil` if unavailable.
-    nonisolated public func fetchMetadata(for item: MediaItem) async -> PictureEXIFData? {
-        if Task.isCancelled { return nil }
-        if item.phAssetIdentifier != nil {
-            return await photosWorker.fetchMetadata(for: item)
-        }
-        if item.localURL != nil {
-            return await localWorker.fetchMetadata(for: item)
-        }
-        return await worker.fetchMetadata(for: item)
-    }
-    
-    // MARK: - Video Support & Disk Cache (Tier 3)
-    
-    /// Fetches a specific byte range of a media file over SMB.
-    ///
-    /// - Parameters:
-    ///   - item: The media item being streamed.
-    ///   - offset: Starting byte position.
-    ///   - length: Requested number of bytes.
-    /// - Returns: The retrieved byte chunk.
-    nonisolated public func fetchMediaRange(for item: MediaItem, offset: Int64, length: Int) async throws -> Data {
-        try await worker.fetchMediaRange(for: item, offset: offset, length: length)
-    }
-    
-    /// Resolves or downloads the playable local or sandbox file URL for a video asset.
-    ///
-    /// - Parameters:
-    ///   - item: Target video media item.
-    ///   - progress: Optional progress reporting callback (`Sendable`).
-    /// - Returns: Local file `URL` ready for AVPlayer playback.
-    public func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        if item.phAssetIdentifier != nil {
-            return try await photosWorker.fetchVideoURL(for: item)
-        }
-        if let localURL = item.localURL {
-            return localURL
-        }
-        return try await worker.fetchVideoURL(for: item, progress: progress)
-    }
-    
-    /// Resolves or downloads the local file URL for a PDF document asset.
-    ///
-    /// - Parameters:
-    ///   - item: Target document media item.
-    ///   - progress: Optional progress reporting callback (`Sendable`).
-    /// - Returns: Local file `URL` ready for PDFKit rendering.
-    public func fetchDocumentURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        if let localURL = item.localURL {
-            return localURL
-        }
-        return try await worker.fetchDocumentURL(for: item, progress: progress)
-    }
-    
     /// Human-readable formatted string indicating total media cache disk usage.
     public var mediaCacheSize: String = "…"
-    
-    /// Queries `MediaCacheManager` and updates `mediaCacheSize` on the `@MainActor`.
-    public func refreshMediaCacheSize() async {
-        mediaCacheSize = await MediaCacheManager.shared.formattedCacheSize()
-    }
-    
-    /// Purges all cached thumbnails and downloads from both RAM and disk caches.
-    public func clearMediaCache() {
-        Task {
-            await MediaCacheManager.shared.clearAllCacheAsync()
-            await worker.clearMemoryCache()
-            await refreshMediaCacheSize()
-        }
-    }
-    
-    /// Clears both memory and persistent disk thumbnail caches for all items in the currently loaded folder.
-    public func invalidateCurrentFolderThumbnails() async {
-        let items = pictures
-        guard !items.isEmpty else { return }
-        
-        await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
-        
-        let ids = items.map(\.id)
-        await worker.removeThumbnailsFromMemory(for: ids)
-        for id in ids {
-            thumbnailVersions[id, default: 0] += 1
-        }
-        
-        await refreshMediaCacheSize()
-    }
     
     // MARK: - Disconnect
     
@@ -1638,21 +724,13 @@ public final class StorageLocationManager {
         folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
-        loadMoreTask?.cancel()
-        loadMoreTask = nil
         activeFolderID = nil
         currentConnectionID = ""
         currentLocation = nil
         
         isConnected = false
         isLoading = false
-        isLoadingMore = false
-        canLoadMorePages = false
         errorMessage = nil
-        paginationErrorMessage = nil
-        paginationState = nil
-        loadedFolderIDs.removeAll()
-        loadedPictureIDs.removeAll()
         folderTree = []
         currentFolders = []
         selectedFolder = nil

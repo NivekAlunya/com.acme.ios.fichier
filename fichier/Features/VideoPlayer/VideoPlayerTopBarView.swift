@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import FichierKit
 
 /// Floating top navigation bar for the video player HUD.
 ///
@@ -48,8 +49,12 @@ public struct VideoPlayerTopBarView: View {
         Group {
             if isCompactPortrait {
                 VStack(spacing: 8) {
-                    HStack {
+                    HStack(spacing: 8) {
                         closeButton
+                        
+                        #if DEBUG
+                        debugEngineBadge
+                        #endif
                         
                         Spacer()
                         
@@ -62,8 +67,14 @@ public struct VideoPlayerTopBarView: View {
                 .padding(.top, 2)
             } else {
                 HStack(spacing: 12) {
-                    closeButton
-                        .padding(.leading, 16)
+                    HStack(spacing: 8) {
+                        closeButton
+                        
+                        #if DEBUG
+                        debugEngineBadge
+                        #endif
+                    }
+                    .padding(.leading, 16)
                     
                     Spacer(minLength: 8)
                     
@@ -100,6 +111,28 @@ public struct VideoPlayerTopBarView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close video player"))
     }
+    
+    #if DEBUG
+    /// Debug-only pill badge indicating whether playback is using `AVPlayer` (Native) or `VLCKit` (VLC).
+    private var debugEngineBadge: some View {
+        let isVLC = controller.engineKind == .extended
+        return Text(isVLC ? "VLC" : "NATIVE")
+            .font(.system(size: 10, weight: .heavy, design: .monospaced))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill((isVLC ? Color.orange : Color.blue).opacity(0.85))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
+                    )
+            )
+            .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+            .accessibilityIdentifier("video_player_debug_engine_badge")
+    }
+    #endif
     
     /// Compact volume slider bar bound to controller volume and mute state.
     private var volumeBar: some View {
@@ -177,6 +210,70 @@ public struct VideoPlayerTopBarView: View {
                 )
                 .shadow(color: .black.opacity(0.4), radius: 8, y: 3)
         )
+    }
+    
+    /// Contextual quick-jump options computed from the current video duration and playback position.
+    private var quickJumpOptions: [VideoQuickJumpOption] {
+        VideoQuickJumpOption.buildOptions(
+            duration: controller.totalDurationSeconds,
+            currentTime: controller.currentPlaybackSeconds
+        )
+    }
+    
+    /// Chapters and quick-jump navigation menu matching the tvOS `Chapters & Jump` experience.
+    private var chaptersAndJumpMenu: some View {
+        let chapters = controller.availableChapters
+        let options = quickJumpOptions
+        let currentTime = controller.currentPlaybackSeconds
+        let duration = controller.totalDurationSeconds
+        
+        return Menu {
+            if !options.isEmpty {
+                Section(String(localized: "Quick Jump", comment: "Section header for quick jump options")) {
+                    ForEach(options) { option in
+                        Button {
+                            controller.jumpToTime(option.targetTime)
+                        } label: {
+                            Text("\(option.label)  (\(VideoQuickJumpOption.formattedTimestamp(option.targetTime)))")
+                        }
+                    }
+                }
+            }
+            
+            if !chapters.isEmpty {
+                Section(String(localized: "Chapters", comment: "Section header for video chapters")) {
+                    ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                        let nextStart = index + 1 < chapters.count ? chapters[index + 1].startTime : duration
+                        let isCurrent = currentTime >= chapter.startTime && (nextStart <= chapter.startTime || currentTime < nextStart)
+                        Button {
+                            controller.jumpToTime(chapter.startTime)
+                        } label: {
+                            HStack {
+                                Text("\(chapter.title)  (\(VideoQuickJumpOption.formattedTimestamp(chapter.startTime)))")
+                                if isCurrent {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: chapters.isEmpty ? "forward.frame.fill" : "list.bullet.rectangle.fill")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(chapters.isEmpty ? Color.white : Color.blue)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(chapters.isEmpty && options.isEmpty)
+        .opacity(chapters.isEmpty && options.isEmpty ? 0.35 : 1.0)
+        .accessibilityLabel(
+            chapters.isEmpty
+                ? String(localized: "Quick Jump", comment: "Accessibility label for quick jump menu")
+                : String(localized: "Chapters & Quick Jump", comment: "Accessibility label for chapters and quick jump menu")
+        )
+        .accessibilityIdentifier("video_player_chapters_jump_menu")
     }
     
     /// Playback options menu configuring Picture-in-Picture, subtitles, audio tracks, and playback rate.
@@ -315,6 +412,8 @@ public struct VideoPlayerTopBarView: View {
             AirPlayButtonView()
                 .frame(width: 30, height: 30)
                 .accessibilityLabel(String(localized: "AirPlay", comment: "Accessibility label for AirPlay"))
+            
+            chaptersAndJumpMenu
             
             playbackOptionsMenu
         }

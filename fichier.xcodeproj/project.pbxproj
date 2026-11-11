@@ -16,6 +16,7 @@
 		D20000000000000000000013 /* AMSMB2 in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000016 /* AMSMB2 */; };
 		D20000000000000000000014 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000016 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		D20000000000000000000113 /* FichierKit in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000112 /* FichierKit */; };
+		D30000000000000000000002 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,6 +100,7 @@
 				D1F1B0FF30910E5200518819 /* AMSMB2 in Frameworks */,
 				D1F1B11230910E5200518819 /* VLCKit in Frameworks */,
 				D10000000000000170000010 /* FichierKit in Frameworks */,
+				D30000000000000000000002 /* Wappn in Frameworks */,
 			);
 		};
 		D10000000000000130000020 /* Frameworks */ = {
@@ -182,6 +184,7 @@
 				D1F1B0FE30910E5200518819 /* AMSMB2 */,
 				D1F1B11130910E5200518819 /* VLCKit */,
 				D10000000000000170000011 /* FichierKit */,
+				D30000000000000000000001 /* Wappn */,
 			);
 			productName = fichier;
 			productReference = 000000000000000000000120 /* fichier.app */;
@@ -307,6 +310,7 @@
 				D1F1B0FD30910E5200518819 /* XCRemoteSwiftPackageReference "AMSMB2" */,
 				D1F1B11030910E5200518819 /* XCRemoteSwiftPackageReference "vlckit" */,
 				D20000000000000000000010 /* XCLocalSwiftPackageReference "../library/com.acme.swift.package.FichierKit" */,
+				D30000000000000000000000 /* XCLocalSwiftPackageReference "../library/com.acme.ios.package.Wappn" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -903,6 +907,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../library/com.acme.swift.package.FichierKit;
 		};
+		D30000000000000000000000 /* XCLocalSwiftPackageReference "../library/com.acme.ios.package.Wappn" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../library/com.acme.ios.package.Wappn;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -959,6 +967,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D20000000000000000000010 /* XCLocalSwiftPackageReference "../library/com.acme.swift.package.FichierKit" */;
 			productName = FichierKit;
+		};
+		D30000000000000000000001 /* Wappn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D30000000000000000000000 /* XCLocalSwiftPackageReference "../library/com.acme.ios.package.Wappn" */;
+			productName = Wappn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

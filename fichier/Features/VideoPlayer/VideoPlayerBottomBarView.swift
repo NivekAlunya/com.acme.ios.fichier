@@ -46,6 +46,7 @@ public struct VideoPlayerBottomBarView: View {
             VideoTimelineBar(
                 currentTime: controller.currentPlaybackSeconds,
                 duration: controller.totalDurationSeconds,
+                chapters: controller.availableChapters,
                 onSeek: { targetSeconds in
                     controller.onTimelineSeek(targetSeconds: targetSeconds)
                 },

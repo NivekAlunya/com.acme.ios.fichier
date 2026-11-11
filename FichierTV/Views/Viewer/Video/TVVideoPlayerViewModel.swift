@@ -31,6 +31,7 @@ public final class TVVideoPlayerViewModel {
     public private(set) var availableSubtitleTracks: [PlayerSubtitleTrack] = []
     public private(set) var selectedSubtitleTrack: PlayerSubtitleTrack?
     public private(set) var availableChapters: [PlayerChapter] = []
+    public private(set) var playbackRate: TVVideoPlaybackRate = .normal
 
     public var showOverlay: Bool = false
     public var activeFocusRow: TVVideoPlayerFocusRow = .buttons
@@ -41,6 +42,7 @@ public final class TVVideoPlayerViewModel {
     public private(set) var errorMessage: String?
     public var isShowingChaptersSheet: Bool = false
     public var isShowingTracksSheet: Bool = false
+    public var isShowingSpeedSheet: Bool = false
     public private(set) var remoteSeekPreview: TVRemoteSeekPreview?
     public private(set) var seekThumbnailState: TVSeekThumbnailState?
 
@@ -61,6 +63,8 @@ public final class TVVideoPlayerViewModel {
     private var thumbnailWorkerTask: Task<Void, Never>?
     private var streamingServer: SMBStreamingServer?
     private var resolvedMediaURL: URL?
+    private var directSMBURL: URL?
+    private var vlcPlaybackOptions: VLCPlaybackOptions?
     private var scrubHoldCounter: Int = 0
     private var hasAttemptedFallback: Bool = false
     private var isRemoteCommandBridgeActive: Bool = false
@@ -97,6 +101,8 @@ public final class TVVideoPlayerViewModel {
             return .chapters
         case .tracks:
             return .tracks
+        case .speed:
+            return .speed
         }
     }
 
@@ -132,6 +138,8 @@ public final class TVVideoPlayerViewModel {
         errorMessage = nil
         hasAttemptedFallback = false
         resolvedMediaURL = nil
+        directSMBURL = nil
+        vlcPlaybackOptions = nil
         availableChapters = []
         isScrubbing = false
         scrubbingTime = nil
@@ -237,6 +245,9 @@ public final class TVVideoPlayerViewModel {
         case .tracks:
             activeFocusRow = .buttons
             activeFocusedButton = .tracks
+        case .speed:
+            activeFocusRow = .buttons
+            activeFocusedButton = .speed
         }
     }
 
@@ -313,6 +324,20 @@ public final class TVVideoPlayerViewModel {
     public func openTracksMenu() {
         autoHideTask?.cancel()
         isShowingTracksSheet = true
+    }
+
+    /// Presents the Playback Speed selection sheet while pausing overlay auto-hide.
+    public func openSpeedMenu() {
+        autoHideTask?.cancel()
+        isShowingSpeedSheet = true
+    }
+
+    /// Updates the playback speed multiplier across both native and extended playback engines.
+    public func selectPlaybackRate(_ rate: TVVideoPlaybackRate) {
+        resetInactivityTimer()
+        playbackRate = rate
+        nativeEngine.playbackRate = rate.rawValue
+        extendedEngine.playbackRate = rate.rawValue
     }
 
     /// Processes directional D-pad input from the Siri Remote.
@@ -734,6 +759,10 @@ public final class TVVideoPlayerViewModel {
 
     private func startRemoteSeekHoldPreviewLoop() {
         remoteSeekHoldTask?.cancel()
+        // Remote hold-to-seek preview. The initial 300 ms delay distinguishes a deliberate hold from a
+        // short tap (taps are handled as a fixed jump). The loop then refreshes the preview target at
+        // a fixed tick, growing the step with hold duration, until the press ends or Menu cancels it.
+        // `self` is re-bound on each iteration so the task never keeps the view model alive.
         remoteSeekHoldTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 300_000_000)
             while !Task.isCancelled {
@@ -796,6 +825,8 @@ public final class TVVideoPlayerViewModel {
 
     private func requestSeekThumbnail(for targetTime: Double) {
         guard let mediaURL = resolvedMediaURL else { return }
+        // Avoid spawning a competing LibVLC SMB session while scrubbing remote extended streams
+        guard !(activeEngineKind == .extended && !mediaURL.isFileURL) else { return }
 
         let safeDuration = duration
         let bucket = TVSeekThumbnailService.bucketTimestamp(targetTime: targetTime, duration: safeDuration)
@@ -835,6 +866,12 @@ public final class TVVideoPlayerViewModel {
         }
     }
 
+    /// Single-flight worker generating seek-preview thumbnails.
+    ///
+    /// Scrubbing can request dozens of thumbnails per second, so requests are coalesced: only the
+    /// newest `latestThumbnailRequest` is processed and older ones are dropped. Times are bucketed
+    /// (`bucketTimestamp`) so nearby positions share one cached frame. Short settle and cooldown
+    /// delays throttle decoding, which is more expensive for extended (VLC) streams over SMB.
     private func runThumbnailWorkerLoop() async {
         let settleNs: UInt64 = activeEngineKind == .extended ? 140_000_000 : 75_000_000
         try? await Task.sleep(nanoseconds: settleNs)
@@ -864,6 +901,8 @@ public final class TVVideoPlayerViewModel {
             }
 
             let decoded = await thumbnailProvider.generateThumbnail(for: request)
+            // Discard the result if the task was cancelled or the player moved to another media item
+            // while decoding, so a stale frame from the previous video never shows up.
             guard !Task.isCancelled, resolvedMediaURL == request.url else {
                 break
             }
@@ -882,6 +921,8 @@ public final class TVVideoPlayerViewModel {
                         isLoading: false
                     )
                 } else if let decoded {
+                    // The user moved on while this frame decoded: show it as a placeholder
+                    // (still `isLoading`) until the frame for the new bucket is ready.
                     seekThumbnailState = TVSeekThumbnailState(
                         targetTime: activeTarget,
                         bucketTime: activeBucket,
@@ -1017,7 +1058,9 @@ public final class TVVideoPlayerViewModel {
         case .chapters:
             activeFocusedButton = forward ? .tracks : .next
         case .tracks:
-            if !forward { activeFocusedButton = .chapters }
+            activeFocusedButton = forward ? .speed : .chapters
+        case .speed:
+            if !forward { activeFocusedButton = .tracks }
         }
     }
 
@@ -1033,6 +1076,8 @@ public final class TVVideoPlayerViewModel {
             openChaptersMenu()
         case .tracks:
             isShowingTracksSheet = true
+        case .speed:
+            openSpeedMenu()
         }
     }
 
@@ -1056,12 +1101,12 @@ public final class TVVideoPlayerViewModel {
 
     public func resetInactivityTimer() {
         autoHideTask?.cancel()
-        guard isPlaying, !isScrubbing, !isShowingTracksSheet, !isShowingChaptersSheet, !isRemoteSeekHolding else { return }
+        guard isPlaying, !isScrubbing, !isShowingTracksSheet, !isShowingChaptersSheet, !isShowingSpeedSheet, !isRemoteSeekHolding else { return }
 
         autoHideTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
             guard !Task.isCancelled, let self else { return }
-            if self.isPlaying && !self.isScrubbing && !self.isShowingTracksSheet && !self.isShowingChaptersSheet && !self.isRemoteSeekHolding {
+            if self.isPlaying && !self.isScrubbing && !self.isShowingTracksSheet && !self.isShowingChaptersSheet && !self.isShowingSpeedSheet && !self.isRemoteSeekHolding {
                 withAnimation(.snappy) {
                     self.showOverlay = false
                 }
@@ -1203,6 +1248,18 @@ public final class TVVideoPlayerViewModel {
         // Section 9: Try the other engine (AVPlayer <-> TVVLCPlayerEngine) before surfacing an error
         let fallbackKind: PlayerEngineKind = (failedKind == .native) ? .extended : .native
         activeEngine.tearDown()
+
+        if fallbackKind == .extended, let directSMBURL {
+            let serverToStop = streamingServer
+            streamingServer = nil
+            Task {
+                await serverToStop?.stop()
+            }
+            resolvedMediaURL = directSMBURL
+            mount(url: directSMBURL, kind: .extended)
+            return
+        }
+
         mount(url: url, kind: fallbackKind)
     }
 
@@ -1212,9 +1269,11 @@ public final class TVVideoPlayerViewModel {
         switch kind {
         case .native:
             nativeEngine.load(url: url)
+            nativeEngine.playbackRate = playbackRate.rawValue
             nativeEngine.play()
         case .extended:
-            extendedEngine.load(url: url)
+            extendedEngine.load(url: url, startPosition: 0, options: vlcPlaybackOptions)
+            extendedEngine.playbackRate = playbackRate.rawValue
             extendedEngine.play()
         }
 
@@ -1292,6 +1351,24 @@ public final class TVVideoPlayerViewModel {
                 return
             }
 
+            let resolvedSMBURL = VLCPlaybackOptions.makeSMBURL(
+                host: sharesSource.server.host,
+                share: share,
+                relativePath: path
+            )
+            self.directSMBURL = resolvedSMBURL
+            self.vlcPlaybackOptions = VLCPlaybackOptions(
+                username: sharesSource.server.username,
+                password: sharesSource.password
+            )
+
+            if preferredKind == .extended, let resolvedSMBURL {
+                self.streamingServer = nil
+                self.resolvedMediaURL = resolvedSMBURL
+                self.mount(url: resolvedSMBURL, kind: .extended)
+                return
+            }
+
             let server = SMBStreamingServer(
                 client: sharesSource.client,
                 share: share,
@@ -1329,6 +1406,8 @@ public final class TVVideoPlayerViewModel {
         clearRemoteSeekState()
         resetCachedSeekThumbnails()
         availableChapters = []
+        directSMBURL = nil
+        vlcPlaybackOptions = nil
         deactivateRemoteCommandBridge()
         mediaLoadTask?.cancel()
         mediaLoadTask = nil

@@ -53,7 +53,7 @@ public struct TVVideoPlayerView: View {
             // Hidden-overlay remote catch target (removed when HUD or error overlay shows so buttons receive Focus Engine focus)
             if !viewModel.showOverlay && viewModel.errorMessage == nil {
                 TVPlayerRemoteCatcherView(
-                    isEnabled: !viewModel.showOverlay && viewModel.errorMessage == nil && !viewModel.isShowingTracksSheet && !viewModel.isShowingChaptersSheet,
+                    isEnabled: !viewModel.showOverlay && viewModel.errorMessage == nil && !viewModel.isShowingTracksSheet && !viewModel.isShowingChaptersSheet && !viewModel.isShowingSpeedSheet,
                     shouldRequestFocus: isPlayerFocused,
                     onSeekPressBegan: { isForward, timestamp in
                         viewModel.beginRemoteSeek(
@@ -119,6 +119,7 @@ public struct TVVideoPlayerView: View {
             if viewModel.showOverlay {
                 TVVideoOverlayControlsView(
                     title: viewModel.currentItem.name,
+                    engineKind: viewModel.activeEngineKind,
                     currentTime: viewModel.currentTime,
                     duration: viewModel.duration,
                     isPlaying: viewModel.isPlaying,
@@ -127,8 +128,10 @@ public struct TVVideoPlayerView: View {
                     chapters: viewModel.availableChapters,
                     seekThumbnailState: viewModel.seekThumbnailState,
                     remoteSeekPreview: viewModel.remoteSeekPreview,
+                    playbackRate: viewModel.playbackRate,
                     isChaptersSheetPresented: viewModel.isShowingChaptersSheet,
                     isTracksSheetPresented: viewModel.isShowingTracksSheet,
+                    isSpeedSheetPresented: viewModel.isShowingSpeedSheet,
                     initialFocusTarget: viewModel.currentFocusTarget,
                     onFocusChanged: { target in
                         viewModel.syncFocusTarget(target)
@@ -156,7 +159,8 @@ public struct TVVideoPlayerView: View {
                     onTogglePlayPause: { viewModel.togglePlayPause() },
                     onNext: { viewModel.nextVideo() },
                     onOpenChapters: { viewModel.openChaptersMenu() },
-                    onOpenTracks: { viewModel.openTracksMenu() }
+                    onOpenTracks: { viewModel.openTracksMenu() },
+                    onOpenSpeed: { viewModel.openSpeedMenu() }
                 )
                 .transition(reduceMotion ? .identity : .opacity)
             }
@@ -190,6 +194,11 @@ public struct TVVideoPlayerView: View {
                 viewModel.resetInactivityTimer()
             }
         }
+        .onChange(of: viewModel.isShowingSpeedSheet) { _, isPresented in
+            if !isPresented {
+                viewModel.resetInactivityTimer()
+            }
+        }
         .sheet(isPresented: $viewModel.isShowingChaptersSheet) {
             TVVideoChaptersSheetView(
                 chapters: viewModel.availableChapters,
@@ -206,11 +215,23 @@ public struct TVVideoPlayerView: View {
                 selectedAudio: viewModel.selectedAudioTrack,
                 subtitleTracks: viewModel.availableSubtitleTracks,
                 selectedSubtitle: viewModel.selectedSubtitleTrack,
+                playbackRate: viewModel.playbackRate,
                 onSelectAudio: { track in
                     viewModel.selectAudioTrack(track)
                 },
                 onSelectSubtitle: { track in
                     viewModel.selectSubtitleTrack(track)
+                },
+                onSelectPlaybackRate: { rate in
+                    viewModel.selectPlaybackRate(rate)
+                }
+            )
+        }
+        .sheet(isPresented: $viewModel.isShowingSpeedSheet) {
+            TVPlaybackSpeedSheetView(
+                selectedRate: viewModel.playbackRate,
+                onSelectRate: { rate in
+                    viewModel.selectPlaybackRate(rate)
                 }
             )
         }

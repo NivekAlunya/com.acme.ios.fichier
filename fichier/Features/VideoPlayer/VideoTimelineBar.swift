@@ -4,12 +4,14 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Custom interactive timeline scrubber bar component for video playback.
 ///
 /// Features:
 /// - Monospaced elapsed time label on the leading edge.
-/// - Dynamic progress track with interactive dragging knob that enlarges (10pt to 16pt) when scrubbed.
+/// - Dynamic progress track with interactive dragging knob that enlarges (10pt to 16pt) when scrubbed,
+///   plus chapter tick marks along the timeline track.
 /// - Trailing time button toggling between remaining time (`-0:42`) and total duration (`2:15`).
 /// - Full VoiceOver accessibility with adjustable increment/decrement actions.
 public struct VideoTimelineBar: View {
@@ -18,6 +20,9 @@ public struct VideoTimelineBar: View {
     
     /// Total duration of the video in seconds.
     public let duration: Double
+    
+    /// Chapter markers rendered as tick indicators along the progress bar.
+    public let chapters: [PlayerChapter]
     
     /// Final seek commit callback invoked upon releasing the scrubber drag gesture.
     public let onSeek: (Double) -> Void
@@ -37,18 +42,21 @@ public struct VideoTimelineBar: View {
     /// - Parameters:
     ///   - currentTime: Current playback progress in seconds.
     ///   - duration: Total duration in seconds.
+    ///   - chapters: Chapter markers along the timeline.
     ///   - onSeek: Commit seek handler.
     ///   - onScrubbing: Real-time scrub movement handler.
     ///   - onScrubStateChanged: Scrub state transition handler.
     public init(
         currentTime: Double,
         duration: Double,
+        chapters: [PlayerChapter] = [],
         onSeek: @escaping (Double) -> Void,
         onScrubbing: ((Double) -> Void)? = nil,
         onScrubStateChanged: @escaping (Bool) -> Void = { _ in }
     ) {
         self.currentTime = currentTime
         self.duration = duration
+        self.chapters = chapters
         self.onSeek = onSeek
         self.onScrubbing = onScrubbing
         self.onScrubStateChanged = onScrubStateChanged
@@ -91,6 +99,19 @@ public struct VideoTimelineBar: View {
                     Capsule()
                         .fill(Color.white)
                         .frame(width: max(0, width * CGFloat(fraction)), height: isScrubbing ? 6 : 4)
+                    
+                    // Chapter Tick Marks
+                    if duration > 0 && !chapters.isEmpty {
+                        ForEach(chapters) { chapter in
+                            if chapter.startTime > 0 && chapter.startTime < duration {
+                                let tickX = width * CGFloat(chapter.startTime / duration)
+                                Rectangle()
+                                    .fill(Color.black.opacity(0.65))
+                                    .frame(width: 2, height: isScrubbing ? 6 : 4)
+                                    .offset(x: tickX - 1)
+                            }
+                        }
+                    }
                     
                     // Scrubber Knob
                     Circle()

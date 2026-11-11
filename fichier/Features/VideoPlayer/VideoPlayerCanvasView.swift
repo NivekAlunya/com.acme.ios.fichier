@@ -84,13 +84,21 @@ public struct VideoPlayerCanvasView: View {
                 
                 if !controller.seekCoordinator.isScrubbingWithGesture {
                     guard abs(hTranslation) > abs(vTranslation) else { return }
-                    controller.seekCoordinator.startGestureScrubbing(
-                        currentPlaybackSeconds: controller.currentPlaybackSeconds,
-                        isPlaying: controller.playbackState.isPlaying,
-                        engine: engine
-                    )
-                    if controller.seekCoordinator.wasPlayingBeforeScrub {
-                        controller.playbackState = .paused
+                    if controller.engineKind == .extended {
+                        controller.seekCoordinator.startGestureScrubbing(
+                            currentPlaybackSeconds: controller.currentPlaybackSeconds,
+                            isPlaying: false,
+                            engine: nil
+                        )
+                    } else {
+                        controller.seekCoordinator.startGestureScrubbing(
+                            currentPlaybackSeconds: controller.currentPlaybackSeconds,
+                            isPlaying: controller.playbackState.isPlaying,
+                            engine: engine
+                        )
+                        if controller.seekCoordinator.wasPlayingBeforeScrub {
+                            controller.playbackState = .paused
+                        }
                     }
                     controller.cancelAutoHideTimer()
                     withAnimation(.easeInOut(duration: 0.35)) {
@@ -111,13 +119,22 @@ public struct VideoPlayerCanvasView: View {
                 let maxTarget = (controller.totalDurationSeconds.isFinite && !controller.totalDurationSeconds.isNaN && controller.totalDurationSeconds > 0) ? controller.totalDurationSeconds : Double.greatestFiniteMagnitude
                 let target = max(0, min(maxTarget, controller.seekCoordinator.initialScrubTime + delta))
                 controller.currentPlaybackSeconds = target
-                controller.seekCoordinator.requestLiveFrameSeek(to: target, engine: engine)
+                if controller.engineKind == .extended, let extended = controller.extendedEngine {
+                    extended.scrub(to: target)
+                } else {
+                    controller.seekCoordinator.requestLiveFrameSeek(to: target, engine: engine)
+                }
             }
             .onEnded { _ in
                 guard controller.seekCoordinator.isScrubbingWithGesture else { return }
                 controller.seekCoordinator.endGestureScrubbing()
                 guard !controller.seekCoordinator.isScrubbingTimeline else { return }
-                controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
+                if controller.engineKind == .extended, let extended = controller.extendedEngine {
+                    extended.endScrubbing(at: controller.currentPlaybackSeconds)
+                    controller.scheduleControlsAutoHide()
+                } else {
+                    controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
+                }
             }
     }
     #endif

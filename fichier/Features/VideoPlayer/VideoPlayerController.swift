@@ -94,6 +94,9 @@ public final class VideoPlayerController {
     /// Manager handling audio tracks, subtitle streams, and playback speed.
     public let trackManager = VideoTrackManager()
     
+    /// Available chapter markers parsed from the active media item.
+    public private(set) var availableChapters: [PlayerChapter] = []
+    
     /// Coordinator managing timeline scrubbing, live frame seeking, and debounce timers.
     public let seekCoordinator = VideoSeekCoordinator()
     
@@ -235,6 +238,21 @@ public final class VideoPlayerController {
                 self.player = nil
                 self.playbackState = .buffering
                 
+                if let server = await self.manager.clientActor.activeServerConnection(),
+                   let smbURL = VLCPlaybackOptions.makeSMBURL(
+                       host: server.host,
+                       share: validItem.shareName,
+                       relativePath: validItem.smbRelativePath
+                   ) {
+                    let password = await self.manager.password(for: server)
+                    let options = VLCPlaybackOptions(
+                        username: server.username,
+                        password: password
+                    )
+                    self.setupExtendedEngine(with: smbURL, for: validItem, options: options)
+                    return
+                }
+                
                 let server = SMBStreamingServer(
                     client: client,
                     share: validItem.shareName,
@@ -284,6 +302,8 @@ public final class VideoPlayerController {
             )
             self.loaderDelegate = delegate
             
+            // AVAssetResourceLoader requires a GCD queue for delegate callbacks (no async API
+            // exists). The delegate is retained in `loaderDelegate` because the asset only holds it weakly.
             // swiftlint:disable:next no_legacy_dispatch_queue
             let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(UUID().uuidString)", qos: .userInitiated)
             asset.resourceLoader.setDelegate(delegate, queue: queue)
@@ -345,7 +365,11 @@ public final class VideoPlayerController {
     }
     
     /// Configures and mounts the extended `TVVLCPlayerEngine` for open video containers and codecs.
-    private func setupExtendedEngine(with url: URL, for item: MediaItem) {
+    private func setupExtendedEngine(
+        with url: URL,
+        for item: MediaItem,
+        options: VLCPlaybackOptions? = nil
+    ) {
         self.engineKind = .extended
         self.player = nil
         self.trackManager.reset()
@@ -359,11 +383,11 @@ public final class VideoPlayerController {
         extended.isMuted = self.isMuted
         extended.playbackRate = trackManager.playbackRate.rawValue
         
-        extended.load(url: url)
-        let initialDuration: Double? = extended.duration > 0 ? extended.duration : nil
-        self.restorePlaybackPosition(for: item, knownDuration: initialDuration) { savedSeconds in
-            extended.seek(to: savedSeconds, toleranceBefore: 0, toleranceAfter: 0, completion: nil)
+        var startPosition: Double = 0
+        self.restorePlaybackPosition(for: item, knownDuration: nil) { savedSeconds in
+            startPosition = savedSeconds
         }
+        extended.load(url: url, startPosition: startPosition, options: options)
         extended.play()
         if case .failed = extended.playbackState {
             return
@@ -389,6 +413,10 @@ public final class VideoPlayerController {
                 await self?.trackManager.loadTracks(for: playerItem)
             }
         }
+        native.onChaptersChanged = { [weak self, weak native] in
+            guard let self, let native else { return }
+            self.availableChapters = native.availableChapters
+        }
         native.onError = { [weak self] error in
             self?.presentPlaybackError(error.localizedDescription)
         }
@@ -411,6 +439,11 @@ public final class VideoPlayerController {
         extended.onTracksChanged = { [weak self, weak extended] in
             guard let self, let extended else { return }
             self.trackManager.loadTracks(for: extended)
+            self.availableChapters = extended.availableChapters
+        }
+        extended.onChaptersChanged = { [weak self, weak extended] in
+            guard let self, let extended else { return }
+            self.availableChapters = extended.availableChapters
         }
         extended.onError = { [weak self] error in
             self?.presentPlaybackError(error.localizedDescription)
@@ -421,7 +454,8 @@ public final class VideoPlayerController {
     }
     
     private func handleEngineTimeUpdate(_ time: Double, for item: MediaItem) {
-        if !seekCoordinator.isScrubbing && time.isFinite && !time.isNaN {
+        let isExtendedScrubbing = extendedEngine?.isScrubbing ?? false
+        if !seekCoordinator.isScrubbing && !isExtendedScrubbing && time.isFinite && !time.isNaN {
             currentPlaybackSeconds = time
         }
         
@@ -443,7 +477,7 @@ public final class VideoPlayerController {
             scheduleControlsAutoHide()
         }
         
-        if !seekCoordinator.isScrubbing,
+        if !seekCoordinator.isScrubbing && !isExtendedScrubbing,
            time.isFinite && !time.isNaN,
            totalDurationSeconds.isFinite && !totalDurationSeconds.isNaN && totalDurationSeconds > 0,
            time >= 2.0 {
@@ -601,10 +635,56 @@ public final class VideoPlayerController {
         finishSeeking(at: targetSeconds, resumePlaying: resumePlaying)
     }
     
+    /// Jumps directly to an absolute timestamp (e.g., from a chapter marker or quick-jump preset).
+    ///
+    /// - Parameter targetSeconds: Target timestamp in seconds.
+    public func jumpToTime(_ targetSeconds: Double) {
+        let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
+        let clamped: Double
+        if dur.isFinite, !dur.isNaN, dur > 0 {
+            clamped = max(0, min(dur, targetSeconds))
+        } else {
+            clamped = max(0, targetSeconds)
+        }
+        didRestorePlaybackPosition = false
+        restoredFromSeconds = nil
+        currentPlaybackSeconds = clamped
+        
+        if engineKind == .extended, let extendedEngine {
+            extendedEngine.seek(to: clamped, precision: .fast)
+        } else {
+            let isPlayerPlaying = player != nil && player?.timeControlStatus != .paused
+            let resume = (engine?.isPlaying ?? isPlayerPlaying) || playbackState.isPlaying
+            finishSeeking(at: clamped, resumePlaying: resume)
+        }
+        
+        if let item = currentlyLoadedItem,
+           clamped >= 2.0,
+           dur.isFinite, !dur.isNaN, dur > 0 {
+            VideoPlaybackStore.shared.savePosition(clamped, duration: dur, for: item)
+        }
+        withAnimation {
+            showControls = true
+        }
+        scheduleControlsAutoHide()
+    }
+    
     /// Jumps forward or backward relative to the current playback position.
     ///
     /// - Parameter deltaSeconds: Offset in seconds (e.g. +10 or -10).
     public func seekRelative(_ deltaSeconds: Double) {
+        if engineKind == .extended, let extendedEngine {
+            didRestorePlaybackPosition = false
+            restoredFromSeconds = nil
+            extendedEngine.jump(by: deltaSeconds)
+            currentPlaybackSeconds = extendedEngine.currentTime
+            withAnimation {
+                showControls = true
+            }
+            scheduleControlsAutoHide()
+            return
+        }
+
         let current = currentPlaybackSeconds
         let dur = totalDurationSeconds > 0 ? totalDurationSeconds : (player?.currentItem?.duration.seconds ?? 0)
         let maxLimit = dur > 0 ? dur : max(current + deltaSeconds, 0)
@@ -623,6 +703,16 @@ public final class VideoPlayerController {
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
         currentPlaybackSeconds = targetSeconds
+
+        if engineKind == .extended, let extendedEngine {
+            extendedEngine.endScrubbing(at: targetSeconds)
+            if resumePlaying && !extendedEngine.isPlaying {
+                extendedEngine.play()
+                playbackState = .playing
+            }
+            scheduleControlsAutoHide()
+            return
+        }
         
         if resumePlaying {
             playbackState = .buffering
@@ -682,12 +772,24 @@ public final class VideoPlayerController {
     
     /// Callback from timeline scrubber when the user finishes dragging.
     public func onTimelineSeek(targetSeconds: Double) {
+        if engineKind == .extended, let extendedEngine {
+            didRestorePlaybackPosition = false
+            restoredFromSeconds = nil
+            currentPlaybackSeconds = targetSeconds
+            extendedEngine.endScrubbing(at: targetSeconds)
+            scheduleControlsAutoHide()
+            return
+        }
         finishSeeking(at: targetSeconds, resumePlaying: seekCoordinator.wasPlayingBeforeScrub)
     }
     
     /// Callback from timeline scrubber as the user actively drags their finger.
     public func onTimelineScrubbing(targetSeconds: Double) {
         currentPlaybackSeconds = targetSeconds
+        if engineKind == .extended, let extendedEngine {
+            extendedEngine.scrub(to: targetSeconds)
+            return
+        }
         if let engine {
             seekCoordinator.requestLiveFrameSeek(to: targetSeconds, engine: engine)
         } else {
@@ -697,6 +799,17 @@ public final class VideoPlayerController {
     
     /// Callback tracking changes in timeline scrubbing active state.
     public func onTimelineScrubStateChanged(isScrubbing: Bool) {
+        if engineKind == .extended, let extendedEngine {
+            if isScrubbing {
+                hideControlsTask?.cancel()
+            } else {
+                if extendedEngine.isScrubbing {
+                    extendedEngine.endScrubbing(at: currentPlaybackSeconds)
+                }
+                scheduleControlsAutoHide()
+            }
+            return
+        }
         if isScrubbing {
             guard !seekCoordinator.isScrubbingTimeline else { return }
             seekCoordinator.startTimelineScrubbing(
@@ -940,6 +1053,7 @@ public final class VideoPlayerController {
         resumeBannerTask?.cancel()
         resumeBannerTask = nil
         resumedToastMessage = nil
+        availableChapters = []
         trackManager.reset()
         
         hideControlsTask?.cancel()
