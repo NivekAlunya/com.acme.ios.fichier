@@ -238,15 +238,16 @@ public final class VideoPlayerController {
                 self.player = nil
                 self.playbackState = .buffering
                 
-                if let credentials = await self.manager.clientActor.activeSMBCredentials(),
+                if let server = await self.manager.clientActor.activeServerConnection(),
                    let smbURL = VLCPlaybackOptions.makeSMBURL(
-                       host: credentials.server.host,
+                       host: server.host,
                        share: validItem.shareName,
                        relativePath: validItem.smbRelativePath
                    ) {
+                    let password = await self.manager.password(for: server)
                     let options = VLCPlaybackOptions(
-                        username: credentials.server.username,
-                        password: credentials.password
+                        username: server.username,
+                        password: password
                     )
                     self.setupExtendedEngine(with: smbURL, for: validItem, options: options)
                     return

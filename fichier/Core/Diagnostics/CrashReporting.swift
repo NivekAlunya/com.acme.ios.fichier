@@ -56,7 +56,25 @@ nonisolated enum CrashReporting {
 
     #if DEBUG
 
-    /// Builds the shareable text for a crash.
+    /// Regular expression detecting credentials embedded in URI schemes (e.g. `smb://user:password@host` or `http://user:password@host`).
+    private static let credentialURIRegex: NSRegularExpression = {
+        // Matches <scheme>://<user>:<password>@ and replaces with <scheme>://<user>:***@
+        let pattern = #"([a-zA-Z][a-zA-Z0-9+.-]*://[^:\s/@]+):([^@\s/]+)@"#
+        return (try? NSRegularExpression(pattern: pattern)) ?? NSRegularExpression()
+    }()
+
+    /// Sanitizes plain-text strings by masking embedded user passwords in URIs.
+    static func redactCredentials(in text: String) -> String {
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return credentialURIRegex.stringByReplacingMatches(
+            in: text,
+            options: [],
+            range: range,
+            withTemplate: "$1:***@"
+        )
+    }
+
+    /// Builds the shareable text for a crash, with all embedded credentials redacted.
     ///
     /// - Parameters:
     ///   - crash: Crash details decoded by Wappn.
@@ -69,7 +87,7 @@ nonisolated enum CrashReporting {
         let crashTimeKnown = crash.timestamp.timeIntervalSince1970 > 86_400
         let crashTime = crashTimeKnown ? crash.timestamp.formatted(.iso8601) : "unknown (before next launch)"
 
-        return """
+        let rawReport = """
         Fichier crash report
         Build: \(build)
         Crash time: \(crashTime)
@@ -77,6 +95,7 @@ nonisolated enum CrashReporting {
 
         \(crash.description)
         """
+        return redactCredentials(in: rawReport)
     }
     #endif
 }

@@ -52,10 +52,13 @@ nonisolated struct CrashReportStore: Sendable {
             .iso8601.year().month().day().time(includingFractionalSeconds: false).timeSeparator(.omitted)
         )
         var url = directoryURL.appending(path: "\(Self.filePrefix)\(stamp).\(Self.fileExtension)")
-        // Two crashes within the same second must not overwrite each other. "_" sorts after ".", keeping newest-first order.
+        // Two crashes within the same second must not overwrite each other.
+        // Suffixes are formatted with 3-digit zero-padding (_001, _002, ...) so lexicographical
+        // descending sorting preserves true chronological order across single and multi-digit collision numbers.
         var suffix = 1
         while FileManager.default.fileExists(atPath: url.path) {
-            url = directoryURL.appending(path: "\(Self.filePrefix)\(stamp)_\(suffix).\(Self.fileExtension)")
+            let suffixString = String(format: "%03d", suffix)
+            url = directoryURL.appending(path: "\(Self.filePrefix)\(stamp)_\(suffixString).\(Self.fileExtension)")
             suffix += 1
         }
 

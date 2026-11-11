@@ -40,6 +40,23 @@ struct CrashReportStoreTests {
         #expect(try String(contentsOf: second, encoding: .utf8) == "second")
     }
 
+    @Test("Multi-digit same-second crash suffixes maintain true chronological ordering")
+    func multiDigitSuffixOrdering() throws {
+        let store = makeStore(max: 20)
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+
+        var createdURLs: [URL] = []
+        for index in 0...12 {
+            let url = try store.archive("crash_\(index)", date: date)
+            createdURLs.append(url)
+        }
+
+        // The 13th file created (suffix 12 / _012) must be the latest
+        let latest = try #require(store.latestReportURL())
+        #expect(latest == createdURLs.last)
+        #expect(try String(contentsOf: latest, encoding: .utf8) == "crash_12")
+    }
+
     @Test("Old reports are pruned beyond the retention limit")
     func pruning() throws {
         let store = makeStore(max: 2)
@@ -51,5 +68,18 @@ struct CrashReportStoreTests {
         #expect(files.count == 2)
         let latest = try #require(store.latestReportURL())
         #expect(try String(contentsOf: latest, encoding: .utf8) == "r3")
+    }
+
+    @Test("Credentials embedded in crash URI strings are redacted")
+    func credentialRedaction() {
+        let textWithSMB = "Fatal error connecting to smb://john_doe:SuperSecret123@192.168.1.100/Media/file.mkv"
+        let redactedSMB = CrashReporting.redactCredentials(in: textWithSMB)
+        #expect(!redactedSMB.contains("SuperSecret123"))
+        #expect(redactedSMB.contains("smb://john_doe:***@192.168.1.100/Media/file.mkv"))
+
+        let textWithHTTP = "Failed request at http://admin:p%40ssword!@127.0.0.1:8080/stream"
+        let redactedHTTP = CrashReporting.redactCredentials(in: textWithHTTP)
+        #expect(!redactedHTTP.contains("p%40ssword!"))
+        #expect(redactedHTTP.contains("http://admin:***@127.0.0.1:8080/stream"))
     }
 }

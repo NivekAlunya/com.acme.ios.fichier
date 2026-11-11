@@ -44,9 +44,6 @@ actor SMBClientActor {
     /// Active server connection metadata for constructing `SharesMediaSource` requests.
     private var activeServer: SavedSMBConnection?
 
-    /// Active SMB account password for constructing direct `VLCMedia` options.
-    private var activePassword: String = ""
-
     /// The unique identifier of the currently connected saved server configuration.
     private var currentConnectionID: String = ""
 
@@ -89,10 +86,9 @@ actor SMBClientActor {
         client
     }
 
-    /// Exposes the active SMB server connection metadata and password for direct LibVLC `smb://` playback.
-    func activeSMBCredentials() -> (server: SavedSMBConnection, password: String)? {
-        guard let activeServer else { return nil }
-        return (activeServer, activePassword)
+    /// Exposes the active SMB server connection metadata for streaming options and credentials lookup.
+    func activeServerConnection() -> SavedSMBConnection? {
+        activeServer
     }
 
     // MARK: - Active Directory Scope
@@ -176,7 +172,6 @@ actor SMBClientActor {
 
             self.client = newClient
             self.activeServer = server
-            self.activePassword = password
             self.currentConnectionID = resolvedConnectionID
 
             return sourceItems.map { sourceItem in
@@ -234,7 +229,6 @@ actor SMBClientActor {
     private func clearSessionState() {
         client = nil
         activeServer = nil
-        activePassword = ""
         currentConnectionID = ""
         activeFolderID = nil
         thumbnailCache.removeAllObjects()
