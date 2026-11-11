@@ -58,9 +58,14 @@ nonisolated enum CrashReporting {
 
     /// Regular expression detecting credentials embedded in URI schemes (e.g. `smb://user:password@host` or `http://user:password@host`).
     private static let credentialURIRegex: NSRegularExpression = {
-        // Matches <scheme>://<user>:<password>@ and replaces with <scheme>://<user>:***@
         let pattern = #"([a-zA-Z][a-zA-Z0-9+.-]*://[^:\s/@]+):([^@\s/]+)@"#
-        return (try? NSRegularExpression(pattern: pattern)) ?? NSRegularExpression()
+        do {
+            return try NSRegularExpression(pattern: pattern)
+        } catch {
+            assertionFailure("Invalid credential redaction regex: \(error)")
+            // Fall back to a regex that matches nothing rather than the empty string
+            return (try? NSRegularExpression(pattern: "$^")) ?? NSRegularExpression()
+        }
     }()
 
     /// Sanitizes plain-text strings by masking embedded user passwords in URIs.

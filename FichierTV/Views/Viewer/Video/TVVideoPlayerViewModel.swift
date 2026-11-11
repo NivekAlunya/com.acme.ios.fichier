@@ -1268,12 +1268,12 @@ public final class TVVideoPlayerViewModel {
 
         switch kind {
         case .native:
-            nativeEngine.playbackRate = playbackRate.rawValue
             nativeEngine.load(url: url)
+            nativeEngine.playbackRate = playbackRate.rawValue
             nativeEngine.play()
         case .extended:
-            extendedEngine.playbackRate = playbackRate.rawValue
             extendedEngine.load(url: url, startPosition: 0, options: vlcPlaybackOptions)
+            extendedEngine.playbackRate = playbackRate.rawValue
             extendedEngine.play()
         }
 
