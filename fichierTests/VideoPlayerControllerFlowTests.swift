@@ -70,6 +70,32 @@ struct VideoPlayerControllerFlowTests {
         #expect(controller.currentlyLoadedItem == nil)
     }
 
+    @Test("Direct SMB URL construction failure for extended format transitions to failed state")
+    func directSMBURLFailureTransitionsToFailedState() async {
+        let manager = StorageLocationManager()
+        // Path with invalid/empty share structure
+        let invalidItem = makeVideoItem(name: "trailer.mkv", path: "///")
+        let controller = VideoPlayerController(manager: manager, videos: [invalidItem], initialItem: invalidItem)
+
+        controller.setupPlayer(for: invalidItem)
+
+        for _ in 0..<50 {
+            if case .failed = controller.playbackState {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        if case .failed(let message) = controller.playbackState {
+            #expect(!message.isEmpty)
+            #expect(controller.errorMessage == message)
+        } else {
+            Issue.record("Expected playbackState to transition to .failed when direct SMB URL cannot be created")
+        }
+
+        controller.tearDownPlayer(deactivateAudioSession: false)
+    }
+
     @Test("Playback error handling redacts IPv4 addresses and SMB credentials")
     func errorSanitizationRedactsSensitiveHostAndCredentials() {
         let tempVideoURL = FileManager.default.temporaryDirectory

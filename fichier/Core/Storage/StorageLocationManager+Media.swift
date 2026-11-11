@@ -206,8 +206,17 @@ extension StorageLocationManager {
                 return nil
             }
             
+            let activeServer = await self.clientActor.activeServerConnection()
+            let serverPassword = if let activeServer {
+                await self.password(for: activeServer)
+            } else {
+                ""
+            }
+
             return await SMBVideoThumbnailLoader.extractSMBFrame(
                 client: client,
+                server: activeServer,
+                password: serverPassword,
                 share: validItem.shareName,
                 path: validItem.smbRelativePath,
                 fileName: validItem.name,

@@ -61,7 +61,6 @@ public final class TVVideoPlayerViewModel {
     private var remoteSeekHoldTask: Task<Void, Never>?
     private var remoteSeekPreviewDismissTask: Task<Void, Never>?
     private var thumbnailWorkerTask: Task<Void, Never>?
-    private var streamingServer: SMBStreamingServer?
     private var resolvedMediaURL: URL?
     private var directSMBURL: URL?
     private var vlcPlaybackOptions: VLCPlaybackOptions?
@@ -158,23 +157,14 @@ public final class TVVideoPlayerViewModel {
 
         activeEngine.tearDown()
 
-        let serverToStop = streamingServer
-        streamingServer = nil
-
         let item = currentItem
         let initialKind = preferredEngineKind(for: item)
         setActiveEngine(kind: initialKind)
 
         if let localURL = item.localURL {
-            Task {
-                await serverToStop?.stop()
-            }
             resolvedMediaURL = localURL
             mount(url: localURL, kind: initialKind)
         } else if let phID = item.phAssetIdentifier {
-            Task {
-                await serverToStop?.stop()
-            }
             loadPhotoKitVideo(assetIdentifier: phID, itemID: item.id, preferredKind: initialKind)
         } else if let sourceID = item.sourceID,
                   let share = item.smbShare,
@@ -185,14 +175,9 @@ public final class TVVideoPlayerViewModel {
                 path: smbPath,
                 fileName: item.name,
                 totalSize: item.size,
-                itemID: item.id,
-                preferredKind: initialKind,
-                previousServer: serverToStop
+                itemID: item.id
             )
         } else {
-            Task {
-                await serverToStop?.stop()
-            }
             playbackState = .failed("Unable to locate video source for \(item.name).")
             errorMessage = "Unable to locate video source for \(item.name)."
         }
@@ -1250,11 +1235,6 @@ public final class TVVideoPlayerViewModel {
         activeEngine.tearDown()
 
         if fallbackKind == .extended, let directSMBURL {
-            let serverToStop = streamingServer
-            streamingServer = nil
-            Task {
-                await serverToStop?.stop()
-            }
             resolvedMediaURL = directSMBURL
             mount(url: directSMBURL, kind: .extended)
             return
@@ -1336,13 +1316,10 @@ public final class TVVideoPlayerViewModel {
         path: String,
         fileName: String,
         totalSize: Int64,
-        itemID: String,
-        preferredKind: PlayerEngineKind,
-        previousServer: SMBStreamingServer?
+        itemID: String
     ) {
         playbackState = .loading
         mediaLoadTask = Task { [weak self] in
-            await previousServer?.stop()
             guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
 
             guard let sharesSource = await self.resolver.resolve(sourceID: sourceID) as? SharesMediaSource else {
@@ -1351,49 +1328,25 @@ public final class TVVideoPlayerViewModel {
                 return
             }
 
-            let resolvedSMBURL = VLCPlaybackOptions.makeSMBURL(
+            guard let resolvedSMBURL = VLCPlaybackOptions.makeSMBURL(
                 host: sharesSource.server.host,
                 share: share,
                 relativePath: path
-            )
+            ) else {
+                self.playbackState = .failed("Unable to construct direct SMB playback URL.")
+                self.errorMessage = "Unable to construct direct SMB playback URL."
+                return
+            }
+
             self.directSMBURL = resolvedSMBURL
             self.vlcPlaybackOptions = VLCPlaybackOptions(
                 username: sharesSource.server.username,
                 password: sharesSource.password
             )
 
-            if preferredKind == .extended, let resolvedSMBURL {
-                self.streamingServer = nil
-                self.resolvedMediaURL = resolvedSMBURL
-                self.mount(url: resolvedSMBURL, kind: .extended)
-                return
-            }
-
-            let server = SMBStreamingServer(
-                client: sharesSource.client,
-                share: share,
-                path: path,
-                fileName: fileName,
-                totalSize: totalSize
-            )
-
-            do {
-                let streamURL = try await server.start()
-                guard !Task.isCancelled, self.currentItem.id == itemID else {
-                    await server.stop()
-                    return
-                }
-                self.streamingServer = server
-                self.resolvedMediaURL = streamURL
-                self.mount(url: streamURL, kind: preferredKind)
-            } catch is CancellationError {
-                await server.stop()
-            } catch {
-                await server.stop()
-                guard !Task.isCancelled, self.currentItem.id == itemID else { return }
-                self.playbackState = .failed(error.localizedDescription)
-                self.errorMessage = error.localizedDescription
-            }
+            guard !Task.isCancelled, self.currentItem.id == itemID else { return }
+            self.resolvedMediaURL = resolvedSMBURL
+            self.mount(url: resolvedSMBURL, kind: .extended)
         }
     }
 
@@ -1418,11 +1371,5 @@ public final class TVVideoPlayerViewModel {
         nativeEngine.tearDown()
         extendedEngine.tearDown()
         syncState(from: activeEngine)
-
-        let serverToStop = streamingServer
-        streamingServer = nil
-        Task {
-            await serverToStop?.stop()
-        }
     }
 }
