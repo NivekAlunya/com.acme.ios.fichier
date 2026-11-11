@@ -9,6 +9,7 @@ import FichierKit
 /// Two-row tvOS video player HUD overlay with focusable scrubber bar and playback buttons.
 public struct TVVideoOverlayControlsView: View {
     public let title: String
+    public let engineKind: PlayerEngineKind
     public let currentTime: Double
     public let duration: Double
     public let isPlaying: Bool
@@ -17,8 +18,10 @@ public struct TVVideoOverlayControlsView: View {
     public let chapters: [PlayerChapter]
     public let seekThumbnailState: TVSeekThumbnailState?
     public let remoteSeekPreview: TVRemoteSeekPreview?
+    public let playbackRate: TVVideoPlaybackRate
     public let isChaptersSheetPresented: Bool
     public let isTracksSheetPresented: Bool
+    public let isSpeedSheetPresented: Bool
     public let initialFocusTarget: TVVideoOverlayFocusTarget
     public let onFocusChanged: (TVVideoOverlayFocusTarget?) -> Void
     public let onScrubStep: (Bool) -> Void
@@ -31,11 +34,13 @@ public struct TVVideoOverlayControlsView: View {
     public let onNext: () -> Void
     public let onOpenChapters: () -> Void
     public let onOpenTracks: () -> Void
+    public let onOpenSpeed: () -> Void
 
     @FocusState private var focusedTarget: TVVideoOverlayFocusTarget?
 
     public init(
         title: String,
+        engineKind: PlayerEngineKind = .native,
         currentTime: Double,
         duration: Double,
         isPlaying: Bool,
@@ -44,8 +49,10 @@ public struct TVVideoOverlayControlsView: View {
         chapters: [PlayerChapter] = [],
         seekThumbnailState: TVSeekThumbnailState? = nil,
         remoteSeekPreview: TVRemoteSeekPreview? = nil,
+        playbackRate: TVVideoPlaybackRate = .normal,
         isChaptersSheetPresented: Bool = false,
         isTracksSheetPresented: Bool,
+        isSpeedSheetPresented: Bool = false,
         initialFocusTarget: TVVideoOverlayFocusTarget = .playPause,
         onFocusChanged: @escaping (TVVideoOverlayFocusTarget?) -> Void,
         onScrubStep: @escaping (Bool) -> Void,
@@ -57,9 +64,11 @@ public struct TVVideoOverlayControlsView: View {
         onTogglePlayPause: @escaping () -> Void,
         onNext: @escaping () -> Void,
         onOpenChapters: @escaping () -> Void = {},
-        onOpenTracks: @escaping () -> Void
+        onOpenTracks: @escaping () -> Void,
+        onOpenSpeed: @escaping () -> Void = {}
     ) {
         self.title = title
+        self.engineKind = engineKind
         self.currentTime = currentTime
         self.duration = duration
         self.isPlaying = isPlaying
@@ -68,8 +77,10 @@ public struct TVVideoOverlayControlsView: View {
         self.chapters = chapters
         self.seekThumbnailState = seekThumbnailState
         self.remoteSeekPreview = remoteSeekPreview
+        self.playbackRate = playbackRate
         self.isChaptersSheetPresented = isChaptersSheetPresented
         self.isTracksSheetPresented = isTracksSheetPresented
+        self.isSpeedSheetPresented = isSpeedSheetPresented
         self.initialFocusTarget = initialFocusTarget
         self.onFocusChanged = onFocusChanged
         self.onScrubStep = onScrubStep
@@ -82,12 +93,13 @@ public struct TVVideoOverlayControlsView: View {
         self.onNext = onNext
         self.onOpenChapters = onOpenChapters
         self.onOpenTracks = onOpenTracks
+        self.onOpenSpeed = onOpenSpeed
     }
 
     public var body: some View {
         ZStack {
             TVOverlayPanCaptureView(
-                isEnabled: focusedTarget == .progress && !isTracksSheetPresented && !isChaptersSheetPresented,
+                isEnabled: focusedTarget == .progress && !isTracksSheetPresented && !isChaptersSheetPresented && !isSpeedSheetPresented,
                 onPanChanged: onSwipeScrubChanged,
                 onPanEnded: onSwipeScrubEnded,
                 onPanCancelled: onSwipeScrubCancelled
@@ -139,6 +151,11 @@ public struct TVVideoOverlayControlsView: View {
                 focusedTarget = .tracks
             }
         }
+        .onChange(of: isSpeedSheetPresented) { _, isPresented in
+            if !isPresented && focusedTarget == nil {
+                focusedTarget = .speed
+            }
+        }
         .background(
             LinearGradient(
                 colors: [
@@ -156,13 +173,31 @@ public struct TVVideoOverlayControlsView: View {
 
     @ViewBuilder
     private var topBar: some View {
-        HStack {
+        HStack(spacing: 16) {
             Text(title)
                 .font(.title3)
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(.white)
+
+            #if DEBUG
+            let isVLC = engineKind == .extended
+            Text(isVLC ? "VLC" : "NATIVE")
+                .font(.system(size: 16, weight: .heavy, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill((isVLC ? Color.orange : Color.blue).opacity(0.85))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                        )
+                )
+                .accessibilityIdentifier("tv_video_player_debug_engine_badge")
+            #endif
 
             Spacer()
         }
@@ -256,6 +291,17 @@ public struct TVVideoOverlayControlsView: View {
             .focused($focusedTarget, equals: .tracks)
             .accessibilityLabel("Audio and subtitle tracks")
             .accessibilityIdentifier("video_tracks_button")
+
+            Button(action: onOpenSpeed) {
+                Label(
+                    playbackRate == .normal ? "Speed" : playbackRate.displayName,
+                    systemImage: "speedometer"
+                )
+            }
+            .buttonStyle(TVOverlayButtonStyle())
+            .focused($focusedTarget, equals: .speed)
+            .accessibilityLabel("Playback speed \(playbackRate.displayName)")
+            .accessibilityIdentifier("video_speed_button")
         }
     }
 }
