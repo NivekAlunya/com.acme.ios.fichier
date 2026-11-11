@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent notification capsules rendered beneath the top bar in the video player HUD.
 ///
@@ -21,12 +22,16 @@ public struct VideoPlayerToastBannerView: View {
         self.controller = controller
     }
     
+    private var engineTintColor: Color {
+        controller.engineKind == .extended ? .orange : .blue
+    }
+    
     public var body: some View {
         VStack(spacing: 8) {
             if let resumeMessage = controller.resumedToastMessage {
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.counterclockwise.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(engineTintColor)
                     Text(resumeMessage)
                         .font(.subheadline.bold())
                         .foregroundColor(.white)
@@ -38,7 +43,7 @@ public struct VideoPlayerToastBannerView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
-                            .background(Capsule().fill(Color.blue))
+                            .background(Capsule().fill(engineTintColor))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(String(localized: "Restart from beginning", comment: "Accessibility label to restart playback from start"))

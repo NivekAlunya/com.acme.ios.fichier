@@ -259,20 +259,14 @@ public struct VideoPlayerTopBarView: View {
                 }
             }
         } label: {
-            Image(systemName: chapters.isEmpty ? "forward.frame.fill" : "list.bullet.rectangle.fill")
+            Image(systemName: "list.bullet.rectangle.fill")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(chapters.isEmpty ? Color.white : Color.blue)
+                .foregroundStyle(Color.white)
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(chapters.isEmpty && options.isEmpty)
-        .opacity(chapters.isEmpty && options.isEmpty ? 0.35 : 1.0)
-        .accessibilityLabel(
-            chapters.isEmpty
-                ? String(localized: "Quick Jump", comment: "Accessibility label for quick jump menu")
-                : String(localized: "Chapters & Quick Jump", comment: "Accessibility label for chapters and quick jump menu")
-        )
+        .accessibilityLabel(String(localized: "Chapters & Quick Jump", comment: "Accessibility label for chapters and quick jump menu"))
         .accessibilityIdentifier("video_player_chapters_jump_menu")
     }
     
@@ -347,7 +341,7 @@ public struct VideoPlayerTopBarView: View {
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(controller.trackManager.isSubtitlesEnabled || controller.trackManager.playbackRate != .normal ? Color.blue : Color.white)
+                .foregroundStyle(Color.white)
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
@@ -413,7 +407,9 @@ public struct VideoPlayerTopBarView: View {
                 .frame(width: 30, height: 30)
                 .accessibilityLabel(String(localized: "AirPlay", comment: "Accessibility label for AirPlay"))
             
-            chaptersAndJumpMenu
+            if !controller.availableChapters.isEmpty || !quickJumpOptions.isEmpty {
+                chaptersAndJumpMenu
+            }
             
             playbackOptionsMenu
         }

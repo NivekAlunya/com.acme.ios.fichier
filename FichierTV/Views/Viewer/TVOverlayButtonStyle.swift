@@ -7,11 +7,20 @@ import SwiftUI
 
 /// Custom tvOS button style for viewer overlay controls, providing scale and fill upon focus.
 public struct TVOverlayButtonStyle: ButtonStyle {
+    public let focusedFillColor: Color
+    public let focusedForegroundColor: Color
+
     @Environment(\.isFocused) private var isFocused
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init() {}
+    public init(
+        focusedFillColor: Color = .white,
+        focusedForegroundColor: Color = .black
+    ) {
+        self.focusedFillColor = focusedFillColor
+        self.focusedForegroundColor = focusedForegroundColor
+    }
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -20,12 +29,12 @@ public struct TVOverlayButtonStyle: ButtonStyle {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(isFocused ? Color.white : Color.black.opacity(0.45))
+                    .fill(isFocused ? focusedFillColor : Color.black.opacity(0.45))
             )
-            .foregroundStyle(isFocused ? Color.black : Color.white)
+            .foregroundStyle(isFocused ? focusedForegroundColor : Color.white)
             .opacity(isEnabled ? 1.0 : 0.45)
             .scaleEffect(isFocused && !reduceMotion ? 1.12 : 1.0)
             .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: isFocused)
-            .shadow(color: isFocused ? Color.white.opacity(0.3) : Color.clear, radius: 10, y: 4)
+            .shadow(color: isFocused ? focusedFillColor.opacity(0.4) : Color.clear, radius: 10, y: 4)
     }
 }

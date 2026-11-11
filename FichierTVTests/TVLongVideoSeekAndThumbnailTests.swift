@@ -301,10 +301,10 @@ struct TVLongVideoSeekAndThumbnailTests {
             }
         }
 
-        // 5 buttons (Previous, Play/Pause, Next, Chapters, Tracks) + 1 scrubber = 6 focusable items;
+        // 6 buttons (Previous, Play/Pause, Next, Chapters, Tracks, Speed) + 1 scrubber = 7 focusable items;
         // floating thumbnail card and pan capture must NOT add any focusable elements.
         let focusCount = countFocusableItems(in: overlayController.view, bounds: window.bounds)
-        #expect(focusCount == 6)
+        #expect(focusCount == 7)
 
         // Verify hidden-overlay seek preview with thumbnail card still leaves catcher as the ONLY focusable item
         let previewController = UIHostingController(
@@ -318,11 +318,10 @@ struct TVLongVideoSeekAndThumbnailTests {
                     onRevealOverlay: {}
                 )
                 TVVideoSeekPreviewHUDView(
-                    title: "Epic.mkv",
+                    engineKind: .extended,
                     duration: 7200,
                     preview: TVRemoteSeekPreview(targetTime: 1800, deltaSeconds: 900, isHolding: true),
-                    chapters: sampleChapters,
-                    seekThumbnailState: thumbState
+                    chapters: sampleChapters
                 )
             }
         )

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent bottom bar for the video player HUD.
 ///
@@ -47,6 +48,7 @@ public struct VideoPlayerBottomBarView: View {
                 currentTime: controller.currentPlaybackSeconds,
                 duration: controller.totalDurationSeconds,
                 chapters: controller.availableChapters,
+                tintColor: controller.engineKind == .extended ? .orange : .blue,
                 onSeek: { targetSeconds in
                     controller.onTimelineSeek(targetSeconds: targetSeconds)
                 },
