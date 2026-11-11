@@ -175,8 +175,7 @@ public final class TVVideoPlayerViewModel {
                 path: smbPath,
                 fileName: item.name,
                 totalSize: item.size,
-                itemID: item.id,
-                preferredKind: initialKind
+                itemID: item.id
             )
         } else {
             playbackState = .failed("Unable to locate video source for \(item.name).")
@@ -1317,8 +1316,7 @@ public final class TVVideoPlayerViewModel {
         path: String,
         fileName: String,
         totalSize: Int64,
-        itemID: String,
-        preferredKind: PlayerEngineKind
+        itemID: String
     ) {
         playbackState = .loading
         mediaLoadTask = Task { [weak self] in

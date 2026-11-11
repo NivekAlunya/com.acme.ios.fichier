@@ -208,7 +208,7 @@ extension StorageLocationManager {
             
             let activeServer = await self.clientActor.activeServerConnection()
             let serverPassword = if let activeServer {
-                await self.password(for: activeServer) ?? ""
+                await self.password(for: activeServer)
             } else {
                 ""
             }

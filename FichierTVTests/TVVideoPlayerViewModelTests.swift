@@ -156,4 +156,42 @@ struct TVVideoPlayerViewModelTests {
 
         viewModel.tearDown()
     }
+
+    @Test("Transitions to failed state when SMB server resolution fails")
+    @MainActor
+    func testSMBServerResolutionFailureTransitionsToFailedState() async {
+        let smbVideo = MediaSourceItem(
+            id: "smb-1",
+            name: "movie.mkv",
+            path: "movie.mkv",
+            type: .video,
+            sourceID: "missing-server-id",
+            smbShare: "Movies",
+            smbPath: "movie.mkv"
+        )
+
+        let viewModel = TVVideoPlayerViewModel(
+            initialItem: smbVideo,
+            videos: [smbVideo],
+            playbackStore: StubVideoPlaybackStore(),
+            resolver: StubMediaSourceResolver()
+        )
+        defer { viewModel.tearDown() }
+
+        viewModel.loadMedia()
+
+        for _ in 0..<50 {
+            if case .failed = viewModel.playbackState {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        if case .failed(let message) = viewModel.playbackState {
+            #expect(!message.isEmpty)
+            #expect(viewModel.errorMessage == message)
+        } else {
+            Issue.record("Expected playbackState to transition to .failed for unresolved SMB source")
+        }
+    }
 }
