@@ -14,6 +14,12 @@ import FichierKit
 @Observable
 @MainActor
 public final class TVVideoPlayerViewModel {
+    // swiftlint:disable:next no_legacy_dispatch_queue
+    private static let smbResourceLoaderQueue = DispatchQueue(
+        label: "com.acme.ios.fichier.tv.videoloader",
+        qos: .userInitiated
+    )
+
     public let videos: [MediaSourceItem]
     public private(set) var currentIndex: Int
 
@@ -1358,6 +1364,8 @@ public final class TVVideoPlayerViewModel {
             let preferredKind = self.preferredEngineKind(for: item)
 
             if preferredKind == .native && totalSize > 0 {
+                self.smbResourceLoaderDelegate?.cancelAll()
+
                 let streamURL = SMBAVAssetResourceLoaderDelegate.makeStreamURL(fileName: fileName)
                 let delegate = SMBAVAssetResourceLoaderDelegate(
                     client: sharesSource.client,
@@ -1370,9 +1378,7 @@ public final class TVVideoPlayerViewModel {
                 self.smbResourceLoaderDelegate = delegate
 
                 let asset = AVURLAsset(url: streamURL)
-                // swiftlint:disable:next no_legacy_dispatch_queue
-                let queue = DispatchQueue(label: "com.acme.ios.fichier.tv.videoloader.\(UUID().uuidString)", qos: .userInitiated)
-                asset.resourceLoader.setDelegate(delegate, queue: queue)
+                asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
 
                 let playerItem = AVPlayerItem(asset: asset)
                 playerItem.preferredForwardBufferDuration = 2.0

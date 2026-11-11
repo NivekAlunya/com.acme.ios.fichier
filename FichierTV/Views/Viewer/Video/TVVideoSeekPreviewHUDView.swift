@@ -10,27 +10,21 @@ import SwiftUI
 /// Non-focusable floating seek preview HUD displayed during `<<`/`>>` remote taps and holds
 /// so Focus Engine focus remains uninterrupted on `TVPlayerRemoteCatcherView`.
 public struct TVVideoSeekPreviewHUDView: View {
-    public let title: String
     public let engineKind: PlayerEngineKind
     public let duration: Double
     public let preview: TVRemoteSeekPreview
     public let chapters: [PlayerChapter]
-    public let seekThumbnailState: TVSeekThumbnailState?
 
     public init(
-        title: String,
         engineKind: PlayerEngineKind = .native,
         duration: Double,
         preview: TVRemoteSeekPreview,
-        chapters: [PlayerChapter] = [],
-        seekThumbnailState: TVSeekThumbnailState? = nil
+        chapters: [PlayerChapter] = []
     ) {
-        self.title = title
         self.engineKind = engineKind
         self.duration = duration
         self.preview = preview
         self.chapters = chapters
-        self.seekThumbnailState = seekThumbnailState
     }
 
     private var formattedDelta: String {

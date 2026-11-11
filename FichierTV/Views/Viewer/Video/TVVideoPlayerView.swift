@@ -86,12 +86,10 @@ public struct TVVideoPlayerView: View {
             // Live non-focusable seek preview pill + bar + thumbnail card during `<<`/`>>` remote taps and holds
             if !viewModel.showOverlay, viewModel.errorMessage == nil, let preview = viewModel.remoteSeekPreview {
                 TVVideoSeekPreviewHUDView(
-                    title: viewModel.currentItem.name,
                     engineKind: viewModel.activeEngineKind,
                     duration: viewModel.duration,
                     preview: preview,
-                    chapters: viewModel.availableChapters,
-                    seekThumbnailState: viewModel.seekThumbnailState
+                    chapters: viewModel.availableChapters
                 )
                 .transition(reduceMotion ? .identity : .opacity)
             }

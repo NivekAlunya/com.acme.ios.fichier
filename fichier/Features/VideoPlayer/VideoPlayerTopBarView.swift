@@ -407,7 +407,7 @@ public struct VideoPlayerTopBarView: View {
                 .frame(width: 30, height: 30)
                 .accessibilityLabel(String(localized: "AirPlay", comment: "Accessibility label for AirPlay"))
             
-            if !controller.availableChapters.isEmpty {
+            if !controller.availableChapters.isEmpty || !quickJumpOptions.isEmpty {
                 chaptersAndJumpMenu
             }
             

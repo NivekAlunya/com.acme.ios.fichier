@@ -318,11 +318,10 @@ struct TVLongVideoSeekAndThumbnailTests {
                     onRevealOverlay: {}
                 )
                 TVVideoSeekPreviewHUDView(
-                    title: "Epic.mkv",
+                    engineKind: .extended,
                     duration: 7200,
                     preview: TVRemoteSeekPreview(targetTime: 1800, deltaSeconds: 900, isHolding: true),
-                    chapters: sampleChapters,
-                    seekThumbnailState: thumbState
+                    chapters: sampleChapters
                 )
             }
         )
