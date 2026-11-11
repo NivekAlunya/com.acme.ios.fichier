@@ -15,7 +15,7 @@ import FichierKit
 /// ### Core Responsibilities
 /// - **Asset Initialization & Streaming**: Plays local and cached files directly, or configures on-demand SMB
 ///   streaming using custom `smbstream://` URLs handled by `FichierKit.SMBAVAssetResourceLoaderDelegate` or
-///   loopback HTTP byte-range streaming via `FichierKit.SMBStreamingServer`.
+///   direct authenticated `smb://` URLs via `TVVLCPlayerEngine` and `VLCPlaybackOptions`.
 /// - **Playback State Machine**: Tracks state transitions across `.idle`, `.loading`, `.buffering`, `.playing`,
 ///   `.paused`, and `.failed` through `FichierKit` engine callbacks.
 /// - **Progress Preservation**: Automatically restores saved playback timestamps from `VideoPlaybackStore`
@@ -54,9 +54,6 @@ public final class VideoPlayerController {
     
     /// Underlying extended VLCKit engine if active.
     public private(set) var extendedEngine: TVVLCPlayerEngine?
-    
-    /// Local loopback HTTP streaming server serving byte-range queries over SMB.
-    private var smbStreamingServer: SMBStreamingServer?
     
     /// Current AVURLAsset reference configured for custom resource loading.
     private var currentAsset: AVURLAsset?
@@ -252,30 +249,9 @@ public final class VideoPlayerController {
                     self.setupExtendedEngine(with: smbURL, for: validItem, options: options)
                     return
                 }
-                
-                let server = SMBStreamingServer(
-                    client: client,
-                    share: validItem.shareName,
-                    path: validItem.smbRelativePath,
-                    fileName: validItem.name,
-                    totalSize: validItem.size
-                )
-                self.smbStreamingServer = server
-                
-                do {
-                    let streamURL = try await server.start()
-                    guard !Task.isCancelled else {
-                        await server.stop()
-                        return
-                    }
-                    self.setupExtendedEngine(with: streamURL, for: validItem)
-                } catch is CancellationError {
-                    await server.stop()
-                } catch {
-                    await server.stop()
-                    guard !Task.isCancelled else { return }
-                    self.presentPlaybackError(error.localizedDescription)
-                }
+
+                guard !Task.isCancelled else { return }
+                self.presentPlaybackError("Unable to construct direct SMB playback URL for extended video format.")
                 return
             }
             
@@ -1067,11 +1043,6 @@ public final class VideoPlayerController {
         loaderDelegate = nil
         currentAsset?.resourceLoader.setDelegate(nil, queue: nil)
         currentAsset = nil
-        
-        Task { [server = smbStreamingServer] in
-            await server?.stop()
-        }
-        smbStreamingServer = nil
         
         clearCallbacks(for: extendedEngine)
         extendedEngine?.tearDown()
