@@ -11,6 +11,7 @@ import SwiftUI
 /// so Focus Engine focus remains uninterrupted on `TVPlayerRemoteCatcherView`.
 public struct TVVideoSeekPreviewHUDView: View {
     public let title: String
+    public let engineKind: PlayerEngineKind
     public let duration: Double
     public let preview: TVRemoteSeekPreview
     public let chapters: [PlayerChapter]
@@ -18,12 +19,14 @@ public struct TVVideoSeekPreviewHUDView: View {
 
     public init(
         title: String,
+        engineKind: PlayerEngineKind = .native,
         duration: Double,
         preview: TVRemoteSeekPreview,
         chapters: [PlayerChapter] = [],
         seekThumbnailState: TVSeekThumbnailState? = nil
     ) {
         self.title = title
+        self.engineKind = engineKind
         self.duration = duration
         self.preview = preview
         self.chapters = chapters
@@ -43,48 +46,12 @@ public struct TVVideoSeekPreviewHUDView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                if let seekThumbnailState {
-                    TVSeekThumbnailPreviewCardView(
-                        thumbnailState: seekThumbnailState,
-                        duration: duration,
-                        detailLabel: formattedDelta
-                    )
-                }
-
-                HStack(spacing: 12) {
-                    Text(title)
-                        .font(.callout)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .foregroundStyle(.white.opacity(0.85))
-
-                    Spacer()
-
-                    HStack(spacing: 10) {
-                        Image(systemName: preview.isForward ? "forward.fill" : "backward.fill")
-                            .font(.title3)
-                            .foregroundStyle(.orange)
-
-                        Text("\(formattedDelta) • \(formattedTargetTime)")
-                            .font(.title3.weight(.bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(Color.orange.opacity(0.65), lineWidth: 1.5)
-                    )
-                    .shadow(radius: 8)
-                }
-
                 TVVideoScrubberView(
                     currentTime: preview.targetTime,
                     duration: duration,
                     scrubbingTime: preview.targetTime,
                     isFocused: true,
+                    tintColor: engineKind == .extended ? .orange : .blue,
                     chapters: chapters,
                     showsPreviewBubble: false
                 )

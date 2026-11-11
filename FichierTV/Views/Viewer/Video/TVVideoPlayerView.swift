@@ -87,6 +87,7 @@ public struct TVVideoPlayerView: View {
             if !viewModel.showOverlay, viewModel.errorMessage == nil, let preview = viewModel.remoteSeekPreview {
                 TVVideoSeekPreviewHUDView(
                     title: viewModel.currentItem.name,
+                    engineKind: viewModel.activeEngineKind,
                     duration: viewModel.duration,
                     preview: preview,
                     chapters: viewModel.availableChapters,

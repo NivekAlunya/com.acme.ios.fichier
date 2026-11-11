@@ -203,6 +203,10 @@ public struct TVVideoOverlayControlsView: View {
         }
     }
 
+    private var engineTintColor: Color {
+        engineKind == .extended ? .orange : .blue
+    }
+
     @ViewBuilder
     private var progressRow: some View {
         let effectiveScrubTime = scrubbingTime ?? remoteSeekPreview?.targetTime
@@ -220,6 +224,7 @@ public struct TVVideoOverlayControlsView: View {
                 duration: duration,
                 scrubbingTime: effectiveScrubTime,
                 isFocused: focusedTarget == .progress,
+                tintColor: engineTintColor,
                 chapters: chapters,
                 seekThumbnailState: seekThumbnailState,
                 previewBubbleLabel: remotePreviewLabel
@@ -245,11 +250,16 @@ public struct TVVideoOverlayControlsView: View {
 
     @ViewBuilder
     private var buttonsRow: some View {
+        let buttonStyle = TVOverlayButtonStyle(
+            focusedFillColor: engineTintColor,
+            focusedForegroundColor: .white
+        )
+
         HStack(spacing: 32) {
             Button(action: onPrevious) {
                 Label("Previous", systemImage: "backward.end.fill")
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .previous)
             .accessibilityLabel("Previous video")
             .accessibilityIdentifier("video_previous_button")
@@ -260,7 +270,7 @@ public struct TVVideoOverlayControlsView: View {
                     systemImage: isPlaying ? "pause.fill" : "play.fill"
                 )
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .playPause)
             .accessibilityLabel(isPlaying ? "Pause video" : "Play video")
             .accessibilityIdentifier("video_play_pause_button")
@@ -268,7 +278,7 @@ public struct TVVideoOverlayControlsView: View {
             Button(action: onNext) {
                 Label("Next", systemImage: "forward.end.fill")
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .next)
             .accessibilityLabel("Next video")
             .accessibilityIdentifier("video_next_button")
@@ -279,7 +289,7 @@ public struct TVVideoOverlayControlsView: View {
                     systemImage: chapters.isEmpty ? "forward.frame.fill" : "list.bullet.rectangle.fill"
                 )
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .chapters)
             .accessibilityLabel("Chapters and quick jump")
             .accessibilityIdentifier("video_chapters_button")
@@ -287,7 +297,7 @@ public struct TVVideoOverlayControlsView: View {
             Button(action: onOpenTracks) {
                 Label("Tracks", systemImage: "captions.bubble.fill")
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .tracks)
             .accessibilityLabel("Audio and subtitle tracks")
             .accessibilityIdentifier("video_tracks_button")
@@ -298,7 +308,7 @@ public struct TVVideoOverlayControlsView: View {
                     systemImage: "speedometer"
                 )
             }
-            .buttonStyle(TVOverlayButtonStyle())
+            .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .speed)
             .accessibilityLabel("Playback speed \(playbackRate.displayName)")
             .accessibilityIdentifier("video_speed_button")

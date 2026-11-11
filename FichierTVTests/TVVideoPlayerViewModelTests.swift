@@ -178,7 +178,7 @@ struct TVVideoPlayerViewModelTests {
         )
         defer { viewModel.tearDown() }
 
-        viewModel.loadMedia()
+        viewModel.loadCurrentVideo()
 
         for _ in 0..<50 {
             if case .failed = viewModel.playbackState {

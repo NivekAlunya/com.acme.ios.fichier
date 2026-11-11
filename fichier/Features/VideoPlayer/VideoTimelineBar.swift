@@ -24,6 +24,9 @@ public struct VideoTimelineBar: View {
     /// Chapter markers rendered as tick indicators along the progress bar.
     public let chapters: [PlayerChapter]
     
+    /// Accent tint color for elapsed progress and active seek knob.
+    public let tintColor: Color
+    
     /// Final seek commit callback invoked upon releasing the scrubber drag gesture.
     public let onSeek: (Double) -> Void
     
@@ -43,6 +46,7 @@ public struct VideoTimelineBar: View {
     ///   - currentTime: Current playback progress in seconds.
     ///   - duration: Total duration in seconds.
     ///   - chapters: Chapter markers along the timeline.
+    ///   - tintColor: Accent tint color for elapsed progress (defaults to `.blue`).
     ///   - onSeek: Commit seek handler.
     ///   - onScrubbing: Real-time scrub movement handler.
     ///   - onScrubStateChanged: Scrub state transition handler.
@@ -50,6 +54,7 @@ public struct VideoTimelineBar: View {
         currentTime: Double,
         duration: Double,
         chapters: [PlayerChapter] = [],
+        tintColor: Color = .blue,
         onSeek: @escaping (Double) -> Void,
         onScrubbing: ((Double) -> Void)? = nil,
         onScrubStateChanged: @escaping (Bool) -> Void = { _ in }
@@ -57,6 +62,7 @@ public struct VideoTimelineBar: View {
         self.currentTime = currentTime
         self.duration = duration
         self.chapters = chapters
+        self.tintColor = tintColor
         self.onSeek = onSeek
         self.onScrubbing = onScrubbing
         self.onScrubStateChanged = onScrubStateChanged
@@ -97,7 +103,7 @@ public struct VideoTimelineBar: View {
                     
                     // Active Played Progress
                     Capsule()
-                        .fill(Color.white)
+                        .fill(tintColor)
                         .frame(width: max(0, width * CGFloat(fraction)), height: isScrubbing ? 6 : 4)
                     
                     // Chapter Tick Marks

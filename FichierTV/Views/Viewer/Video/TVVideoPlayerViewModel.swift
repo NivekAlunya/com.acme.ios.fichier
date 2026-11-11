@@ -64,6 +64,7 @@ public final class TVVideoPlayerViewModel {
     private var resolvedMediaURL: URL?
     private var directSMBURL: URL?
     private var vlcPlaybackOptions: VLCPlaybackOptions?
+    private var smbResourceLoaderDelegate: SMBAVAssetResourceLoaderDelegate?
     private var scrubHoldCounter: Int = 0
     private var hasAttemptedFallback: Bool = false
     private var isRemoteCommandBridgeActive: Bool = false
@@ -154,6 +155,9 @@ public final class TVVideoPlayerViewModel {
         progressPersistenceTask = nil
         autoHideTask?.cancel()
         autoHideTask = nil
+
+        smbResourceLoaderDelegate?.cancelAll()
+        smbResourceLoaderDelegate = nil
 
         activeEngine.tearDown()
 
@@ -1243,12 +1247,16 @@ public final class TVVideoPlayerViewModel {
         mount(url: url, kind: fallbackKind)
     }
 
-    private func mount(url: URL, kind: PlayerEngineKind) {
+    private func mount(url: URL, kind: PlayerEngineKind, playerItem: AVPlayerItem? = nil) {
         setActiveEngine(kind: kind)
 
         switch kind {
         case .native:
-            nativeEngine.load(url: url)
+            if let playerItem {
+                nativeEngine.load(playerItem: playerItem)
+            } else {
+                nativeEngine.load(url: url)
+            }
             nativeEngine.playbackRate = playbackRate.rawValue
             nativeEngine.play()
         case .extended:
@@ -1345,8 +1353,35 @@ public final class TVVideoPlayerViewModel {
             )
 
             guard !Task.isCancelled, self.currentItem.id == itemID else { return }
-            self.resolvedMediaURL = resolvedSMBURL
-            self.mount(url: resolvedSMBURL, kind: .extended)
+
+            let item = self.currentItem
+            let preferredKind = self.preferredEngineKind(for: item)
+
+            if preferredKind == .native && totalSize > 0 {
+                let streamURL = SMBAVAssetResourceLoaderDelegate.makeStreamURL(fileName: fileName)
+                let delegate = SMBAVAssetResourceLoaderDelegate(
+                    client: sharesSource.client,
+                    share: share,
+                    path: path,
+                    fileName: fileName,
+                    fileSize: totalSize,
+                    chunkSize: 512 * 1024
+                )
+                self.smbResourceLoaderDelegate = delegate
+
+                let asset = AVURLAsset(url: streamURL)
+                // swiftlint:disable:next no_legacy_dispatch_queue
+                let queue = DispatchQueue(label: "com.acme.ios.fichier.tv.videoloader.\(UUID().uuidString)", qos: .userInitiated)
+                asset.resourceLoader.setDelegate(delegate, queue: queue)
+
+                let playerItem = AVPlayerItem(asset: asset)
+                playerItem.preferredForwardBufferDuration = 2.0
+                self.resolvedMediaURL = streamURL
+                self.mount(url: streamURL, kind: .native, playerItem: playerItem)
+            } else {
+                self.resolvedMediaURL = resolvedSMBURL
+                self.mount(url: resolvedSMBURL, kind: .extended)
+            }
         }
     }
 
@@ -1361,6 +1396,8 @@ public final class TVVideoPlayerViewModel {
         availableChapters = []
         directSMBURL = nil
         vlcPlaybackOptions = nil
+        smbResourceLoaderDelegate?.cancelAll()
+        smbResourceLoaderDelegate = nil
         deactivateRemoteCommandBridge()
         mediaLoadTask?.cancel()
         mediaLoadTask = nil

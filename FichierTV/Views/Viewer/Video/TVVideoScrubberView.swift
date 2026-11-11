@@ -12,6 +12,7 @@ public struct TVVideoScrubberView: View {
     public let duration: Double
     public let scrubbingTime: Double?
     public let isFocused: Bool
+    public let tintColor: Color
     public let chapters: [PlayerChapter]
     public let seekThumbnailState: TVSeekThumbnailState?
     public let previewBubbleLabel: String?
@@ -22,6 +23,7 @@ public struct TVVideoScrubberView: View {
         duration: Double,
         scrubbingTime: Double?,
         isFocused: Bool,
+        tintColor: Color = .orange,
         chapters: [PlayerChapter] = [],
         seekThumbnailState: TVSeekThumbnailState? = nil,
         previewBubbleLabel: String? = nil,
@@ -31,6 +33,7 @@ public struct TVVideoScrubberView: View {
         self.duration = duration
         self.scrubbingTime = scrubbingTime
         self.isFocused = isFocused
+        self.tintColor = tintColor
         self.chapters = chapters
         self.seekThumbnailState = seekThumbnailState
         self.previewBubbleLabel = previewBubbleLabel
@@ -79,7 +82,7 @@ public struct TVVideoScrubberView: View {
                     }
 
                     Capsule()
-                        .fill(scrubbingTime != nil ? Color.orange : Color.white)
+                        .fill(scrubbingTime != nil ? tintColor : (isFocused ? tintColor : Color.white))
                         .frame(width: proxy.size.width * progressRatio, height: isFocused ? 14 : 8)
 
                     if isFocused || scrubbingTime != nil {
@@ -98,7 +101,7 @@ public struct TVVideoScrubberView: View {
                 Text(formatTimestamp(displayTime))
                     .font(.caption)
                     .fontWeight(.medium)
-                    .foregroundStyle(scrubbingTime != nil ? .orange : .white)
+                    .foregroundStyle(scrubbingTime != nil ? tintColor : .white)
 
                 Spacer()
 
@@ -125,7 +128,7 @@ public struct TVVideoScrubberView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(.ultraThinMaterial, in: Capsule())
-            .foregroundStyle(.orange)
+            .foregroundStyle(tintColor)
             .shadow(radius: 6)
     }
 
