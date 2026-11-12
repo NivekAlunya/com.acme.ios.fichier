@@ -517,10 +517,10 @@ public final class VideoPlayerController {
     }
     
     #if DEBUG
-    /// Simulates an abrupt SMB network socket disconnect (SIGPIPE) during media playback for crash diagnostics testing.
+    /// Simulates an abrupt crash (SIGABRT) during media playback for diagnostics and crash reporting testing.
     public func simulateSMBDisconnectCrash() {
-        logw("Simulating abrupt SMB disconnect crash (SIGPIPE)...")
-        Darwin.raise(SIGPIPE)
+        logw("Simulating abrupt crash (SIGABRT)...")
+        Darwin.raise(SIGABRT)
     }
     #endif
     
@@ -1176,6 +1176,18 @@ public final class VideoPlayerController {
         
         // If native player item failed due to background socket teardown, re-arm the player
         if let currentItem = player?.currentItem, currentItem.status == .failed {
+            let lastSeconds = player?.currentTime().seconds
+            let targetPosition: Double
+            if let lastSeconds, lastSeconds.isFinite, lastSeconds > 0 {
+                targetPosition = lastSeconds
+            } else {
+                targetPosition = currentPlaybackSeconds
+            }
+            
+            if targetPosition.isFinite && targetPosition > 0 {
+                VideoPlaybackStore.shared.savePosition(targetPosition, duration: totalDurationSeconds, for: current)
+            }
+            
             logw("AVPlayerItem failed while in background for \(current.name); reloading stream...")
             setupPlayer(for: current)
         }

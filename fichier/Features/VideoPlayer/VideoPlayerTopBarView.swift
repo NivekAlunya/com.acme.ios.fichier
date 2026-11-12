@@ -344,7 +344,7 @@ public struct VideoPlayerTopBarView: View {
                 Button(role: .destructive) {
                     controller.simulateSMBDisconnectCrash()
                 } label: {
-                    Label("Simulate SMB Disconnect (SIGPIPE)", systemImage: "bolt.trianglebadge.exclamationmark")
+                    Label("Simulate Crash (SIGABRT)", systemImage: "bolt.trianglebadge.exclamationmark")
                 }
             }
             #endif

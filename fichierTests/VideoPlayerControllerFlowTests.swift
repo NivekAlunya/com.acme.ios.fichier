@@ -217,5 +217,53 @@ struct VideoPlayerControllerFlowTests {
         #expect(controller.engineKind == .native)
         #expect(controller.currentPlaybackSeconds == 0)
     }
+
+    @Test("handleScenePhaseActive preserves position and re-arms stream when current player item failed")
+    func handleScenePhaseActiveRecoversFailedPlayerItem() async {
+        let tempVideoURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fichier_foreground_recovery_test_\(UUID().uuidString).mp4")
+        FileManager.default.createFile(atPath: tempVideoURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: tempVideoURL) }
+
+        let item = MediaItem(
+            locationID: "local",
+            name: tempVideoURL.lastPathComponent,
+            rootName: "Temp",
+            path: tempVideoURL.lastPathComponent,
+            isDirectory: false,
+            localURL: tempVideoURL
+        )
+
+        let manager = StorageLocationManager()
+        let controller = VideoPlayerController(manager: manager, videos: [item], initialItem: item)
+        controller.setupPlayer(for: item)
+        defer { controller.tearDownPlayer(deactivateAudioSession: false) }
+
+        // Setup an explicit failed item to simulate background socket closure
+        let failedURL = URL(fileURLWithPath: "/dev/null/non_existent_stream_\(UUID().uuidString).m3u8")
+        let failedAsset = AVURLAsset(url: failedURL)
+        let failedItem = AVPlayerItem(asset: failedAsset)
+        controller.player?.replaceCurrentItem(with: failedItem)
+
+        // Wait for AVPlayerItem to asynchronously evaluate to .failed status
+        for _ in 0..<50 {
+            if controller.player?.currentItem?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        // Set simulated playback progress and total duration
+        controller.currentPlaybackSeconds = 42.0
+        controller.totalDurationSeconds = 120.0
+
+        // Trigger foreground activation handler
+        controller.handleScenePhaseActive()
+
+        // Position should have been persisted in store
+        let savedPosition = VideoPlaybackStore.shared.position(for: item)
+        #expect(savedPosition == 42.0)
+        #expect(controller.currentlyLoadedItem?.id == item.id)
+    }
 }
 #endif
