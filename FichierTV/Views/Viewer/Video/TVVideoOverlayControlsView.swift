@@ -32,6 +32,7 @@ public struct TVVideoOverlayControlsView: View {
     public let onPrevious: () -> Void
     public let onTogglePlayPause: () -> Void
     public let onNext: () -> Void
+    public let onSwitchEngine: () -> Void
     public let onOpenChapters: () -> Void
     public let onOpenTracks: () -> Void
     public let onOpenSpeed: () -> Void
@@ -63,6 +64,7 @@ public struct TVVideoOverlayControlsView: View {
         onPrevious: @escaping () -> Void,
         onTogglePlayPause: @escaping () -> Void,
         onNext: @escaping () -> Void,
+        onSwitchEngine: @escaping () -> Void = {},
         onOpenChapters: @escaping () -> Void = {},
         onOpenTracks: @escaping () -> Void,
         onOpenSpeed: @escaping () -> Void = {}
@@ -91,6 +93,7 @@ public struct TVVideoOverlayControlsView: View {
         self.onPrevious = onPrevious
         self.onTogglePlayPause = onTogglePlayPause
         self.onNext = onNext
+        self.onSwitchEngine = onSwitchEngine
         self.onOpenChapters = onOpenChapters
         self.onOpenTracks = onOpenTracks
         self.onOpenSpeed = onOpenSpeed
@@ -252,10 +255,11 @@ public struct TVVideoOverlayControlsView: View {
     private var buttonsRow: some View {
         let buttonStyle = TVOverlayButtonStyle(
             focusedFillColor: engineTintColor,
-            focusedForegroundColor: .white
+            focusedForegroundColor: .white,
+            font: .subheadline
         )
 
-        HStack(spacing: 32) {
+        HStack(spacing: 24) {
             Button(action: onPrevious) {
                 Label("Previous", systemImage: "backward.end.fill")
             }
@@ -312,6 +316,17 @@ public struct TVVideoOverlayControlsView: View {
             .focused($focusedTarget, equals: .speed)
             .accessibilityLabel("Playback speed \(playbackRate.displayName)")
             .accessibilityIdentifier("video_speed_button")
+
+            Button(action: onSwitchEngine) {
+                Label(
+                    engineKind == .extended ? "AV" : "VLC",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+            }
+            .buttonStyle(buttonStyle)
+            .focused($focusedTarget, equals: .switchEngine)
+            .accessibilityLabel(engineKind == .extended ? "Switch to Native Player" : "Switch to VLC Player")
+            .accessibilityIdentifier("video_switch_engine_button")
         }
     }
 }

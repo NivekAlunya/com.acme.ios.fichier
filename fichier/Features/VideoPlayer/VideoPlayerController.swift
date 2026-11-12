@@ -162,10 +162,12 @@ public final class VideoPlayerController {
         setupPlayer(for: item)
     }
     
-    /// Initializes player instances, audio session, and resource loaders for a video item.
+    /// Mounts and commences playback for the specified media item using an explicit player engine.
     ///
-    /// - Parameter item: The media item to mount and play.
-    public func setupPlayer(for item: MediaItem) {
+    /// - Parameters:
+    ///   - item: The target media item.
+    ///   - preferredKind: Optional engine kind override (`.native` or `.extended`). If `nil`, standard format detection is used.
+    public func setupPlayer(for item: MediaItem, preferredEngine preferredKind: PlayerEngineKind? = nil) {
         playbackStartTime = Date()
         didRestorePlaybackPosition = false
         restoredFromSeconds = nil
@@ -188,7 +190,7 @@ public final class VideoPlayerController {
         }
         
         let ext = (item.name as NSString).pathExtension
-        let isExtended = SupportedMediaTypes.isExtendedVideo(extension: ext)
+        let isExtended = preferredKind.map { $0 == .extended } ?? SupportedMediaTypes.isExtendedVideo(extension: ext)
         
         // 1. If local file or cached locally, play immediately from file
         if let localURL = item.localURL ?? (MediaCacheManager.shared.hasCachedVideo(for: item) ? MediaCacheManager.shared.localVideoURL(for: item) : nil) {
@@ -210,7 +212,11 @@ public final class VideoPlayerController {
                     let videoURL = try await manager.fetchVideoURL(for: item)
                     guard !Task.isCancelled else { return }
                     self.shareableVideoURL = videoURL
-                    self.setupNativeEngine(with: AVPlayerItem(url: videoURL), for: item, isRemoteStream: false)
+                    if isExtended {
+                        self.setupExtendedEngine(with: videoURL, for: item)
+                    } else {
+                        self.setupNativeEngine(with: AVPlayerItem(url: videoURL), for: item, isRemoteStream: false)
+                    }
                 } catch is CancellationError {
                     return
                 } catch {
@@ -224,7 +230,7 @@ public final class VideoPlayerController {
             guard !Task.isCancelled else { return }
             
             if isExtended {
-                guard let client = await self.manager.clientActor.activeClient() else {
+                guard await self.manager.clientActor.activeClient() != nil else {
                     let desc = String(localized: .Strings.videoPlayerErrorInvalidStreamUrl)
                     self.errorMessage = desc
                     self.playbackState = .failed(desc)
@@ -288,6 +294,15 @@ public final class VideoPlayerController {
             playerItem.preferredForwardBufferDuration = 2.0
             self.setupNativeEngine(with: playerItem, for: validItem, isRemoteStream: true)
         }
+    }
+    
+    /// Switches between Native (`AVPlayerEngine`) and VLC (`TVVLCPlayerEngine`) playback backends,
+    /// starting at the beginning of the video and clearing any saved resume progress.
+    public func switchEngine() {
+        let targetItem = currentlyLoadedItem ?? currentItem
+        VideoPlaybackStore.shared.clearPosition(for: targetItem)
+        let nextKind: PlayerEngineKind = (engineKind == .native) ? .extended : .native
+        setupPlayer(for: targetItem, preferredEngine: nextKind)
     }
     
     /// Configures and mounts the native `AVPlayerEngine` for system-supported media items.

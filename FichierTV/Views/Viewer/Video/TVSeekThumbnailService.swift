@@ -75,7 +75,8 @@ public actor TVSeekThumbnailService: TVSeekThumbnailProviding {
                     url: request.url,
                     targetTime: bucket,
                     duration: request.duration,
-                    maxDimension: request.maxDimension
+                    maxDimension: request.maxDimension,
+                    options: request.vlcOptions
                 )
             } else {
                 decoded = nil
@@ -86,7 +87,8 @@ public actor TVSeekThumbnailService: TVSeekThumbnailProviding {
                 url: request.url,
                 targetTime: bucket,
                 duration: request.duration,
-                maxDimension: request.maxDimension
+                maxDimension: request.maxDimension,
+                options: request.vlcOptions
             )
         }
 
@@ -98,6 +100,10 @@ public actor TVSeekThumbnailService: TVSeekThumbnailProviding {
         cache.setObject(decoded, forKey: key as NSString, cost: max(1, cost))
         cachedKeysByAsset[request.assetKey, default: []].insert(key)
         return decoded
+    }
+
+    public func registerAsset(_ asset: AVURLAsset, forAssetKey assetKey: String) async {
+        cachedAssets[assetKey] = (asset.url, asset)
     }
 
     public func invalidateAsset(forAssetKey assetKey: String) async {
@@ -165,7 +171,8 @@ public actor TVSeekThumbnailService: TVSeekThumbnailProviding {
         url: URL,
         targetTime: Double,
         duration: Double,
-        maxDimension: CGFloat
+        maxDimension: CGFloat,
+        options: VLCPlaybackOptions? = nil
     ) async -> UIImage? {
         guard !Task.isCancelled else { return nil }
         let ratio = (duration.isFinite && duration > 0) ? Float(min(0.95, max(0.0, targetTime / duration))) : 0.05
@@ -174,7 +181,8 @@ public actor TVSeekThumbnailService: TVSeekThumbnailProviding {
             maxDimension: maxDimension,
             snapshotPosition: ratio,
             timeoutSeconds: 5.5,
-            snapshotTimeSeconds: targetTime
+            snapshotTimeSeconds: targetTime,
+            options: options
         )
     }
 }

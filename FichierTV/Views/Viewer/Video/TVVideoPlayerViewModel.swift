@@ -103,6 +103,8 @@ public final class TVVideoPlayerViewModel {
             return .playPause
         case .next:
             return .next
+        case .switchEngine:
+            return .switchEngine
         case .chapters:
             return .chapters
         case .tracks:
@@ -140,7 +142,9 @@ public final class TVVideoPlayerViewModel {
     }
 
     /// Mounts and commences playback for the current video item (local, PhotoKit, or SMB stream).
-    public func loadCurrentVideo() {
+    ///
+    /// - Parameter preferredEngine: Optional engine kind override (`.native` or `.extended`).
+    public func loadCurrentVideo(preferredEngine: PlayerEngineKind? = nil) {
         errorMessage = nil
         hasAttemptedFallback = false
         resolvedMediaURL = nil
@@ -168,7 +172,7 @@ public final class TVVideoPlayerViewModel {
         activeEngine.tearDown()
 
         let item = currentItem
-        let initialKind = preferredEngineKind(for: item)
+        let initialKind = preferredEngine ?? preferredEngineKind(for: item)
         setActiveEngine(kind: initialKind)
 
         if let localURL = item.localURL {
@@ -185,11 +189,25 @@ public final class TVVideoPlayerViewModel {
                 path: smbPath,
                 fileName: item.name,
                 totalSize: item.size,
-                itemID: item.id
+                itemID: item.id,
+                preferredKind: initialKind
             )
         } else {
             playbackState = .failed("Unable to locate video source for \(item.name).")
             errorMessage = "Unable to locate video source for \(item.name)."
+        }
+    }
+
+    /// Switches between native AVPlayer and extended VLC playback engines, starting from the beginning
+    /// of the video and clearing saved resume progress.
+    public func switchEngine() {
+        let nextKind: PlayerEngineKind = (activeEngineKind == .native) ? .extended : .native
+        let itemID = currentItem.id
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.playbackStore.clearPlaybackPosition(for: itemID)
+            guard !Task.isCancelled, self.currentItem.id == itemID else { return }
+            self.loadCurrentVideo(preferredEngine: nextKind)
         }
     }
 
@@ -234,6 +252,9 @@ public final class TVVideoPlayerViewModel {
         case .next:
             activeFocusRow = .buttons
             activeFocusedButton = .next
+        case .switchEngine:
+            activeFocusRow = .buttons
+            activeFocusedButton = .switchEngine
         case .chapters:
             activeFocusRow = .buttons
             activeFocusedButton = .chapters
@@ -549,7 +570,6 @@ public final class TVVideoPlayerViewModel {
         activeRemoteSeekHold = nil
         remoteSeekHoldTask?.cancel()
         remoteSeekHoldTask = nil
-        cancelSeekThumbnails(clearState: true)
 
         let baseAnchorTime = effectiveSeekBaseTime(at: eventTime)
         performRemoteTapSkip(
@@ -682,13 +702,12 @@ public final class TVVideoPlayerViewModel {
         baseAnchorTime: Double,
         timestamp: TimeInterval
     ) {
-        cancelSeekThumbnails(clearState: true)
         let sign: Double = isForward ? 1.0 : -1.0
 
         if let previousTap = lastRemoteSeekTap,
-           previousTap.isForward == isForward,
-           previousTap.tapCountInPair == 1,
-           (timestamp - previousTap.releaseTimestamp) <= TVRemoteSeekCalculator.doubleTapWindow {
+            previousTap.isForward == isForward,
+            previousTap.tapCountInPair == 1,
+            (timestamp - previousTap.releaseTimestamp) <= TVRemoteSeekCalculator.doubleTapWindow {
             let totalTarget = TVRemoteSeekCalculator.clampedTarget(
                 from: previousTap.originTime,
                 signedDelta: sign * TVRemoteSeekCalculator.doubleTapTotalSkipSeconds,
@@ -706,6 +725,7 @@ public final class TVVideoPlayerViewModel {
             presentRemoteSeekPreview(
                 TVRemoteSeekPreview(targetTime: totalTarget, deltaSeconds: appliedDelta, isHolding: false)
             )
+            requestSeekThumbnail(for: totalTarget)
             return
         }
 
@@ -726,6 +746,7 @@ public final class TVVideoPlayerViewModel {
         presentRemoteSeekPreview(
             TVRemoteSeekPreview(targetTime: targetTime, deltaSeconds: appliedDelta, isHolding: false)
         )
+        requestSeekThumbnail(for: targetTime)
     }
 
     private func commitRemoteSeek(to targetTime: Double, at timestamp: TimeInterval) {
@@ -820,18 +841,18 @@ public final class TVVideoPlayerViewModel {
 
     private func requestSeekThumbnail(for targetTime: Double) {
         guard let mediaURL = resolvedMediaURL else { return }
-        // Avoid spawning a competing LibVLC SMB session while scrubbing remote extended streams
-        guard !(activeEngineKind == .extended && !mediaURL.isFileURL) else { return }
 
+        let targetURL = directSMBURL ?? mediaURL
         let safeDuration = duration
         let bucket = TVSeekThumbnailService.bucketTimestamp(targetTime: targetTime, duration: safeDuration)
         let bucketKey = Int(bucket.rounded())
         let request = TVSeekThumbnailRequest(
-            url: mediaURL,
+            url: targetURL,
             assetKey: currentItem.id,
             targetTime: targetTime,
             duration: safeDuration,
-            engineKind: activeEngineKind
+            engineKind: activeEngineKind,
+            vlcOptions: vlcPlaybackOptions
         )
 
         latestThumbnailRequest = request
@@ -898,7 +919,8 @@ public final class TVVideoPlayerViewModel {
             let decoded = await thumbnailProvider.generateThumbnail(for: request)
             // Discard the result if the task was cancelled or the player moved to another media item
             // while decoding, so a stale frame from the previous video never shows up.
-            guard !Task.isCancelled, resolvedMediaURL == request.url else {
+            let activeTargetURL = directSMBURL ?? resolvedMediaURL
+            guard !Task.isCancelled, activeTargetURL == request.url else {
                 break
             }
 
@@ -945,7 +967,7 @@ public final class TVVideoPlayerViewModel {
         if isScrubbing, let scrubbingTime {
             return scrubbingTime
         }
-        if let preview = remoteSeekPreview, preview.isHolding {
+        if let preview = remoteSeekPreview {
             return preview.targetTime
         }
         return nil
@@ -1055,7 +1077,9 @@ public final class TVVideoPlayerViewModel {
         case .tracks:
             activeFocusedButton = forward ? .speed : .chapters
         case .speed:
-            if !forward { activeFocusedButton = .tracks }
+            activeFocusedButton = forward ? .switchEngine : .tracks
+        case .switchEngine:
+            if !forward { activeFocusedButton = .speed }
         }
     }
 
@@ -1067,6 +1091,8 @@ public final class TVVideoPlayerViewModel {
             togglePlayPause()
         case .next:
             nextVideo()
+        case .switchEngine:
+            switchEngine()
         case .chapters:
             openChaptersMenu()
         case .tracks:
@@ -1330,7 +1356,8 @@ public final class TVVideoPlayerViewModel {
         path: String,
         fileName: String,
         totalSize: Int64,
-        itemID: String
+        itemID: String,
+        preferredKind: PlayerEngineKind
     ) {
         playbackState = .loading
         mediaLoadTask = Task { [weak self] in
@@ -1360,9 +1387,6 @@ public final class TVVideoPlayerViewModel {
 
             guard !Task.isCancelled, self.currentItem.id == itemID else { return }
 
-            let item = self.currentItem
-            let preferredKind = self.preferredEngineKind(for: item)
-
             if preferredKind == .native && totalSize > 0 {
                 self.smbResourceLoaderDelegate?.cancelAll()
 
@@ -1379,6 +1403,10 @@ public final class TVVideoPlayerViewModel {
 
                 let asset = AVURLAsset(url: streamURL)
                 asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
+                Task { [weak self] in
+                    guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
+                    await self.thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
+                }
 
                 let playerItem = AVPlayerItem(asset: asset)
                 playerItem.preferredForwardBufferDuration = 2.0

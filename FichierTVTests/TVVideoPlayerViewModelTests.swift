@@ -141,6 +141,9 @@ struct TVVideoPlayerViewModelTests {
         viewModel.syncFocusTarget(.tracks)
         #expect(viewModel.activeFocusedButton == .tracks)
 
+        viewModel.syncFocusTarget(.switchEngine)
+        #expect(viewModel.activeFocusedButton == .switchEngine)
+
         viewModel.openTracksMenu()
         #expect(viewModel.isShowingTracksSheet)
 
@@ -193,5 +196,54 @@ struct TVVideoPlayerViewModelTests {
         } else {
             Issue.record("Expected playbackState to transition to .failed for unresolved SMB source")
         }
+    }
+
+    @Test("Switching engine toggles between native and extended engines from the beginning")
+    @MainActor
+    func testSwitchEngineTogglesKindAndResetsProgress() async throws {
+        let videoURL = try await TVVideoTestFixtureGenerator.createSampleMP4File()
+        defer { try? FileManager.default.removeItem(at: videoURL) }
+
+        let item = MediaSourceItem(
+            id: "switch-test",
+            name: "sample.mp4",
+            path: "sample.mp4",
+            type: .video,
+            localURL: videoURL
+        )
+
+        let playbackStore = StubVideoPlaybackStore()
+        await playbackStore.savePlaybackPosition(itemID: item.id, time: 42.0, duration: 100.0)
+
+        let viewModel = TVVideoPlayerViewModel(
+            initialItem: item,
+            videos: [item],
+            playbackStore: playbackStore,
+            resolver: StubMediaSourceResolver()
+        )
+        defer { viewModel.tearDown() }
+
+        #expect(viewModel.activeEngineKind == .native)
+
+        viewModel.switchEngine()
+        for _ in 0..<20 {
+            if viewModel.activeEngineKind == .extended {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(viewModel.activeEngineKind == .extended)
+
+        let remainingSaved = await playbackStore.playbackPosition(for: item.id)
+        #expect(remainingSaved == nil)
+
+        viewModel.switchEngine()
+        for _ in 0..<20 {
+            if viewModel.activeEngineKind == .native {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        #expect(viewModel.activeEngineKind == .native)
     }
 }

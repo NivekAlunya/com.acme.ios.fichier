@@ -14,17 +14,20 @@ public struct TVVideoSeekPreviewHUDView: View {
     public let duration: Double
     public let preview: TVRemoteSeekPreview
     public let chapters: [PlayerChapter]
+    public let seekThumbnailState: TVSeekThumbnailState?
 
     public init(
         engineKind: PlayerEngineKind = .native,
         duration: Double,
         preview: TVRemoteSeekPreview,
-        chapters: [PlayerChapter] = []
+        chapters: [PlayerChapter] = [],
+        seekThumbnailState: TVSeekThumbnailState? = nil
     ) {
         self.engineKind = engineKind
         self.duration = duration
         self.preview = preview
         self.chapters = chapters
+        self.seekThumbnailState = seekThumbnailState
     }
 
     private var formattedDelta: String {
@@ -40,6 +43,14 @@ public struct TVVideoSeekPreviewHUDView: View {
             Spacer()
 
             VStack(spacing: 16) {
+                if let seekThumbnailState {
+                    TVSeekThumbnailPreviewCardView(
+                        thumbnailState: seekThumbnailState,
+                        duration: duration,
+                        detailLabel: formattedDelta
+                    )
+                }
+
                 TVVideoScrubberView(
                     currentTime: preview.targetTime,
                     duration: duration,

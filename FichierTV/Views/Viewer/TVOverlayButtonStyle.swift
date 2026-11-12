@@ -9,6 +9,7 @@ import SwiftUI
 public struct TVOverlayButtonStyle: ButtonStyle {
     public let focusedFillColor: Color
     public let focusedForegroundColor: Color
+    public let font: Font
 
     @Environment(\.isFocused) private var isFocused
     @Environment(\.isEnabled) private var isEnabled
@@ -16,15 +17,19 @@ public struct TVOverlayButtonStyle: ButtonStyle {
 
     public init(
         focusedFillColor: Color = .white,
-        focusedForegroundColor: Color = .black
+        focusedForegroundColor: Color = .black,
+        font: Font = .headline
     ) {
         self.focusedFillColor = focusedFillColor
         self.focusedForegroundColor = focusedForegroundColor
+        self.font = font
     }
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(font)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
             .background(
