@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import FichierKit
 @testable import fichier
 
 @Suite("CrashReportStore")

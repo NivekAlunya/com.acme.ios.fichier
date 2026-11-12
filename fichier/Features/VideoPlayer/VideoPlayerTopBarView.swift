@@ -338,6 +338,16 @@ public struct VideoPlayerTopBarView: View {
                     }
                 }
             }
+            
+            #if DEBUG
+            Section("Debug Diagnostics") {
+                Button(role: .destructive) {
+                    controller.simulateSMBDisconnectCrash()
+                } label: {
+                    Label("Simulate SMB Disconnect (SIGPIPE)", systemImage: "bolt.trianglebadge.exclamationmark")
+                }
+            }
+            #endif
         } label: {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .medium))

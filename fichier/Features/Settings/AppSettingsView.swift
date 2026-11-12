@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UIKit
+import FichierKit
 
 /// Modal settings view configuring application-wide preferences, cache storage, and system permissions.
 ///

@@ -5,7 +5,7 @@
 
 import SwiftUI
 import Foundation
-import OSLog
+import Wappn
 
 /// A primary gallery container view responsible for browsing, sorting, filtering, and batch-managing
 /// media items (photos, videos, documents) stored either locally, in iCloud, or on remote SMB network shares.
@@ -872,7 +872,7 @@ struct MediaGridView: View {
             }
             return true
         } catch {
-            AppLog.photos.error("Failed to save \(item.name, privacy: .private): \(error.localizedDescription)")
+            loge("Failed to save \(item.name): \(error.localizedDescription)")
             return false
         }
     }

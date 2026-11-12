@@ -4,14 +4,14 @@
 //
 
 import Foundation
-import OSLog
+import Wappn
 
 /// Actor isolating all on-disk cache mutations, atomic writes, legacy file migrations, and eviction sweeps.
 ///
 /// ### Architecture & Concurrency
 /// - **Actor Isolation**: Guarantees mutually exclusive serial execution for filesystem mutations (writes, moves, removals),
 ///   preventing data corruption and race conditions between background eviction tasks and active file operations.
-/// - **Structured Logging**: Replaces silent error swallowing with structured diagnostics via `AppLog.storage`.
+/// - **Structured Logging**: Replaces silent error swallowing with structured diagnostics via Wappn `log`.
 public actor MediaDiskCacheActor {
     
     /// Global shared disk cache actor.
@@ -50,13 +50,13 @@ public actor MediaDiskCacheActor {
             do {
                 try fileManager.removeItem(at: sourceURL)
             } catch {
-                AppLog.storage.debug("Failed to remove duplicate legacy file at \(sourceURL.lastPathComponent): \(error.localizedDescription)")
+                logd("Failed to remove duplicate legacy file at \(sourceURL.lastPathComponent): \(error.localizedDescription)")
             }
         } else {
             do {
                 try fileManager.moveItem(at: sourceURL, to: destinationURL)
             } catch {
-                AppLog.storage.debug("Failed to migrate file from \(sourceURL.lastPathComponent) to \(destinationURL.lastPathComponent): \(error.localizedDescription)")
+                logd("Failed to migrate file from \(sourceURL.lastPathComponent) to \(destinationURL.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -70,7 +70,7 @@ public actor MediaDiskCacheActor {
             do {
                 try fileManager.removeItem(at: url)
             } catch {
-                AppLog.storage.debug("Failed to remove file at \(url.lastPathComponent): \(error.localizedDescription)")
+                logd("Failed to remove file at \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -98,7 +98,7 @@ public actor MediaDiskCacheActor {
                 do {
                     try fileManager.removeItem(at: fileURL)
                 } catch {
-                    AppLog.storage.debug("Failed to remove part file \(fileURL.lastPathComponent): \(error.localizedDescription)")
+                    logd("Failed to remove part file \(fileURL.lastPathComponent): \(error.localizedDescription)")
                 }
                 continue
             }
@@ -122,7 +122,7 @@ public actor MediaDiskCacheActor {
                 try fileManager.removeItem(at: file.url)
                 totalSize -= file.size
             } catch {
-                AppLog.storage.debug("Failed to evict file \(file.url.lastPathComponent): \(error.localizedDescription)")
+                logd("Failed to evict file \(file.url.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -147,7 +147,7 @@ public actor MediaDiskCacheActor {
                     do {
                         try fileManager.removeItem(at: fileURL)
                     } catch {
-                        AppLog.storage.debug("Failed to remove stale part file \(fileURL.lastPathComponent): \(error.localizedDescription)")
+                        logd("Failed to remove stale part file \(fileURL.lastPathComponent): \(error.localizedDescription)")
                     }
                 }
             }
@@ -186,7 +186,7 @@ public actor MediaDiskCacheActor {
                 do {
                     try fileManager.removeItem(at: dir)
                 } catch {
-                    AppLog.storage.debug("Failed to remove cache directory \(dir.lastPathComponent): \(error.localizedDescription)")
+                    logd("Failed to remove cache directory \(dir.lastPathComponent): \(error.localizedDescription)")
                 }
             } else {
                 if let enumerator = fileManager.enumerator(at: dir, includingPropertiesForKeys: nil) {
@@ -194,7 +194,7 @@ public actor MediaDiskCacheActor {
                         do {
                             try fileManager.removeItem(at: fileURL)
                         } catch {
-                            AppLog.storage.debug("Failed to remove file during clear \(fileURL.lastPathComponent): \(error.localizedDescription)")
+                            logd("Failed to remove file during clear \(fileURL.lastPathComponent): \(error.localizedDescription)")
                         }
                     }
                 }
@@ -202,7 +202,7 @@ public actor MediaDiskCacheActor {
             do {
                 try fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: attributes)
             } catch {
-                AppLog.storage.error("Failed to recreate cache directory \(dir.lastPathComponent): \(error.localizedDescription)")
+                loge("Failed to recreate cache directory \(dir.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }

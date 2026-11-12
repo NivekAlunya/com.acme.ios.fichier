@@ -8,7 +8,7 @@ import UIKit
 import CoreGraphics
 import ImageIO
 import AVFoundation
-import OSLog
+import Wappn
 import FichierKit
 
 /// A serialized network actor responsible for coordinating all low-level SMB2/3 operations.
@@ -427,7 +427,7 @@ actor SMBClientActor {
                         }
                     } catch {
                         if !Task.isCancelled {
-                            AppLog.smb.warning("Fallback PDF thumbnailing failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                            logw("Fallback PDF thumbnailing failed at \(item.shareName)/\(item.path): \(error.localizedDescription)")
                         }
                     }
                 }
@@ -462,7 +462,7 @@ actor SMBClientActor {
             return image
         } catch {
             if !Task.isCancelled {
-                AppLog.smb.error("Failed to load thumbnail at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                loge("Failed to load thumbnail at \(item.shareName)/\(item.path): \(error.localizedDescription)")
             }
             return nil
         }
@@ -512,7 +512,7 @@ actor SMBClientActor {
             }
         } catch {
             if !Task.isCancelled {
-                AppLog.smb.warning("Fast-path prefix read failed at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                logw("Fast-path prefix read failed at \(item.shareName)/\(item.path): \(error.localizedDescription)")
             }
         }
         return nil
@@ -719,7 +719,7 @@ actor SMBClientActor {
             return image
         } catch {
             if !Task.isCancelled {
-                AppLog.smb.error("Failed to load full image at \(item.shareName, privacy: .private)/\(item.path, privacy: .private): \(error.localizedDescription)")
+                loge("Failed to load full image at \(item.shareName)/\(item.path): \(error.localizedDescription)")
             }
             return nil
         }
