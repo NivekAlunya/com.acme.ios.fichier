@@ -89,7 +89,8 @@ public struct TVVideoPlayerView: View {
                     engineKind: viewModel.activeEngineKind,
                     duration: viewModel.duration,
                     preview: preview,
-                    chapters: viewModel.availableChapters
+                    chapters: viewModel.availableChapters,
+                    seekThumbnailState: viewModel.seekThumbnailState
                 )
                 .transition(reduceMotion ? .identity : .opacity)
             }

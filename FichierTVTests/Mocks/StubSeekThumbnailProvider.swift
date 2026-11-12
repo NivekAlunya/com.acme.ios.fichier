@@ -4,6 +4,7 @@
 //
 //
 
+import AVFoundation
 import UIKit
 import FichierKit
 @testable import FichierTV
@@ -11,6 +12,7 @@ import FichierKit
 public actor StubSeekThumbnailProvider: TVSeekThumbnailProviding {
     public private(set) var generatedRequests: [TVSeekThumbnailRequest] = []
     public private(set) var invalidatedKeys: [String] = []
+    public private(set) var registeredAssets: [String: AVURLAsset] = [:]
     private var cachedByKey: [String: UIImage] = [:]
     private let delayNanoseconds: UInt64
     private let stubImage: UIImage
@@ -40,6 +42,10 @@ public actor StubSeekThumbnailProvider: TVSeekThumbnailProviding {
         guard !Task.isCancelled else { return nil }
         cachedByKey[cacheKey(for: request)] = stubImage
         return stubImage
+    }
+
+    public func registerAsset(_ asset: AVURLAsset, forAssetKey assetKey: String) async {
+        registeredAssets[assetKey] = asset
     }
 
     public func invalidateAsset(forAssetKey assetKey: String) async {

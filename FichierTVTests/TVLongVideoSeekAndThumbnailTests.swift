@@ -301,10 +301,10 @@ struct TVLongVideoSeekAndThumbnailTests {
             }
         }
 
-        // 6 buttons (Previous, Play/Pause, Next, Chapters, Tracks, Speed) + 1 scrubber = 7 focusable items;
+        // 7 buttons (Previous, Play/Pause, Next, Chapters, Tracks, Speed, SwitchEngine) + 1 scrubber = 8 focusable items;
         // floating thumbnail card and pan capture must NOT add any focusable elements.
         let focusCount = countFocusableItems(in: overlayController.view, bounds: window.bounds)
-        #expect(focusCount == 7)
+        #expect(focusCount == 8)
 
         // Verify hidden-overlay seek preview with thumbnail card still leaves catcher as the ONLY focusable item
         let previewController = UIHostingController(

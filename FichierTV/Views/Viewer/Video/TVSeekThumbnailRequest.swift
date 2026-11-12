@@ -16,6 +16,7 @@ public struct TVSeekThumbnailRequest: Equatable, Sendable {
     public let duration: Double
     public let engineKind: PlayerEngineKind
     public let maxDimension: CGFloat
+    public let vlcOptions: VLCPlaybackOptions?
 
     public init(
         url: URL,
@@ -23,7 +24,8 @@ public struct TVSeekThumbnailRequest: Equatable, Sendable {
         targetTime: Double,
         duration: Double,
         engineKind: PlayerEngineKind,
-        maxDimension: CGFloat = 360
+        maxDimension: CGFloat = 360,
+        vlcOptions: VLCPlaybackOptions? = nil
     ) {
         self.url = url
         self.assetKey = assetKey
@@ -31,5 +33,6 @@ public struct TVSeekThumbnailRequest: Equatable, Sendable {
         self.duration = duration
         self.engineKind = engineKind
         self.maxDimension = maxDimension
+        self.vlcOptions = vlcOptions
     }
 }
