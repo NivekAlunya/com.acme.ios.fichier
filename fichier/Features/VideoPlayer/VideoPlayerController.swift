@@ -6,7 +6,7 @@
 import SwiftUI
 import AVKit
 import Observation
-import OSLog
+import Wappn
 import FichierKit
 
 /// Master `@Observable` controller isolated to the `@MainActor` driving custom native (`AVPlayerEngine`)
@@ -185,7 +185,7 @@ public final class VideoPlayerController {
                 try session.setCategory(.playback, mode: .moviePlayback)
                 try session.setActive(true)
             } catch {
-                AppLog.player.error("Failed to activate audio session: \(error.localizedDescription)")
+                loge("Failed to activate audio session: \(error.localizedDescription)")
             }
         }
         
@@ -515,6 +515,14 @@ public final class VideoPlayerController {
         errorMessage = localizedDesc
         playbackState = .failed(localizedDesc)
     }
+    
+    #if DEBUG
+    /// Simulates an abrupt crash (SIGABRT) during media playback for diagnostics and crash reporting testing.
+    public func simulateSMBDisconnectCrash() {
+        logw("Simulating abrupt crash (SIGABRT)...")
+        Darwin.raise(SIGABRT)
+    }
+    #endif
     
     /// Restores saved playback position from persistent store if applicable.
     private func restorePlaybackPosition(for item: MediaItem, knownDuration: Double?, seekAction: (Double) -> Void) {
@@ -1160,6 +1168,29 @@ public final class VideoPlayerController {
             }
         }
         VideoPlaybackStore.shared.flush()
+    }
+    
+    /// Checks player health and recovers active SMB streams when the application enters the foreground.
+    public func handleScenePhaseActive() {
+        guard let current = currentlyLoadedItem else { return }
+        
+        // If native player item failed due to background socket teardown, re-arm the player
+        if let currentItem = player?.currentItem, currentItem.status == .failed {
+            let lastSeconds = player?.currentTime().seconds
+            let targetPosition: Double
+            if let lastSeconds, lastSeconds.isFinite, lastSeconds > 0 {
+                targetPosition = lastSeconds
+            } else {
+                targetPosition = currentPlaybackSeconds
+            }
+            
+            if targetPosition.isFinite && targetPosition > 0 {
+                VideoPlaybackStore.shared.savePosition(targetPosition, duration: totalDurationSeconds, for: current)
+            }
+            
+            logw("AVPlayerItem failed while in background for \(current.name); reloading stream...")
+            setupPlayer(for: current)
+        }
     }
     
     // MARK: - Error Sanitization

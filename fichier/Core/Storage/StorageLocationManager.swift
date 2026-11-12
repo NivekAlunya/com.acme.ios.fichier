@@ -10,7 +10,7 @@ import AVFoundation
 #if canImport(PDFKit) && !os(tvOS)
 import PDFKit
 #endif
-import OSLog
+import Wappn
 import FichierKit
 
 /// Centralized state manager and coordinator for all media storage backends in the application.
@@ -611,7 +611,7 @@ public final class StorageLocationManager {
                 self.pictures = foundPictures
                 self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
                 self.isLoading = false
-                AppLog.smb.info("Folder '\(targetShare, privacy: .private)' path '\(targetPath, privacy: .private)': \(subfolders.count) subfolders, \(foundPictures.count) items")
+                logi("Folder '\(targetShare)' path '\(targetPath)': \(subfolders.count) subfolders, \(foundPictures.count) items")
             } catch is CancellationError {
                 // Clean up loading flag only if this folder was not superseded by a newer selection
                 if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
@@ -625,7 +625,7 @@ public final class StorageLocationManager {
                 }
                 self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
                 self.isLoading = false
-                AppLog.smb.error("Error scanning folder \(targetShare, privacy: .private)/\(targetPath, privacy: .private): \(error.localizedDescription)")
+                loge("Error scanning folder \(targetShare)/\(targetPath): \(error.localizedDescription)")
             }
         }
 
@@ -658,7 +658,7 @@ public final class StorageLocationManager {
             }
             self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
         } catch {
-            AppLog.smb.error("Failed to expand tree at \(folder.shareName, privacy: .private)/\(folder.path, privacy: .private): \(error.localizedDescription)")
+            loge("Failed to expand tree at \(folder.shareName)/\(folder.path): \(error.localizedDescription)")
         }
     }
     

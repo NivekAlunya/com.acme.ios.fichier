@@ -17,6 +17,7 @@
 		D20000000000000000000014 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000016 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		D20000000000000000000113 /* FichierKit in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000112 /* FichierKit */; };
 		D30000000000000000000002 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
+		D30000000000000000000003 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +115,7 @@
 			files = (
 				D20000000000000000000012 /* FichierKit in Frameworks */,
 				D20000000000000000000013 /* AMSMB2 in Frameworks */,
+				D30000000000000000000003 /* Wappn in Frameworks */,
 			);
 		};
 		D20000000000000000000105 /* Frameworks */ = {
@@ -232,6 +234,7 @@
 			packageProductDependencies = (
 				D20000000000000000000011 /* FichierKit */,
 				D20000000000000000000016 /* AMSMB2 */,
+				D30000000000000000000001 /* Wappn */,
 			);
 			productName = FichierTV;
 			productReference = D20000000000000000000002 /* FichierTV.app */;

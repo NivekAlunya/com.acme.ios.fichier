@@ -118,6 +118,8 @@ public struct VideoDetailView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 controller.handleScenePhaseBackground()
+            } else if newPhase == .active {
+                controller.handleScenePhaseActive()
             }
         }
         .onDisappear {

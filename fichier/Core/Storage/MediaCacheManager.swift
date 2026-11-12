@@ -7,6 +7,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import CryptoKit
+import Wappn
 import FichierKit
 #if canImport(PDFKit) && !os(tvOS)
 import PDFKit
@@ -211,7 +212,7 @@ nonisolated public final class MediaCacheManager: Sendable {
         do {
             try data.write(to: fileURL, options: .atomic)
         } catch {
-            AppLog.storage.error("Failed to write thumbnail to disk: \(error.localizedDescription)")
+            loge("Failed to write thumbnail to disk: \(error.localizedDescription)")
         }
     }
     
@@ -223,7 +224,7 @@ nonisolated public final class MediaCacheManager: Sendable {
             do {
                 try await diskActor.writeData(data, to: fileURL)
             } catch {
-                AppLog.storage.error("Failed to write thumbnail asynchronously: \(error.localizedDescription)")
+                loge("Failed to write thumbnail asynchronously: \(error.localizedDescription)")
             }
         }
     }

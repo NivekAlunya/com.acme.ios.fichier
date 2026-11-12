@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import OSLog
+import Wappn
 import FichierKit
 
 /// Persistence manager responsible for storing and loading user connections and sandboxed bookmarks.
@@ -52,7 +52,7 @@ public final class StorageLocationPersistenceStore {
             let decoded = try JSONDecoder().decode([SavedSMBConnection].self, from: data)
             return decoded.sorted { $0.lastConnected > $1.lastConnected }
         } catch {
-            AppLog.storage.error("Failed to decode saved SMB connections: \(error.localizedDescription)")
+            loge("Failed to decode saved SMB connections: \(error.localizedDescription)")
             return []
         }
     }
@@ -122,7 +122,7 @@ public final class StorageLocationPersistenceStore {
             let encoded = try JSONEncoder().encode(connections)
             userDefaults.set(encoded, forKey: savedConnectionsKey)
         } catch {
-            AppLog.storage.error("Failed to encode and persist SMB connections: \(error.localizedDescription)")
+            loge("Failed to encode and persist SMB connections: \(error.localizedDescription)")
         }
     }
 
@@ -139,7 +139,7 @@ public final class StorageLocationPersistenceStore {
             let decoded = try JSONDecoder().decode([SavedFolderLocation].self, from: data)
             return decoded.sorted { $0.dateAdded > $1.dateAdded }
         } catch {
-            AppLog.storage.error("Failed to decode saved folder locations: \(error.localizedDescription)")
+            loge("Failed to decode saved folder locations: \(error.localizedDescription)")
             return []
         }
     }
@@ -209,7 +209,7 @@ public final class StorageLocationPersistenceStore {
             let encoded = try JSONEncoder().encode(locations)
             userDefaults.set(encoded, forKey: savedFolderLocationsKey)
         } catch {
-            AppLog.storage.error("Failed to encode and persist folder locations: \(error.localizedDescription)")
+            loge("Failed to encode and persist folder locations: \(error.localizedDescription)")
         }
     }
 }
