@@ -185,5 +185,37 @@ struct VideoPlayerControllerFlowTests {
         #expect(engine.seekCalls[1].seconds == 45.0)
         #expect(engine.seekCalls[1].toleranceBefore == 1.0)
     }
+
+    @Test("switchEngine switches engine kind and starts from beginning")
+    func switchEngineTogglesEngineKind() {
+        let tempVideoURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("fichier_switch_test_\(UUID().uuidString).mp4")
+        FileManager.default.createFile(atPath: tempVideoURL.path, contents: Data())
+        defer { try? FileManager.default.removeItem(at: tempVideoURL) }
+
+        let item = MediaItem(
+            locationID: "local",
+            name: tempVideoURL.lastPathComponent,
+            rootName: "Temp",
+            path: tempVideoURL.lastPathComponent,
+            isDirectory: false,
+            localURL: tempVideoURL
+        )
+
+        let manager = StorageLocationManager()
+        let controller = VideoPlayerController(manager: manager, videos: [item], initialItem: item)
+        controller.setupPlayer(for: item)
+        defer { controller.tearDownPlayer(deactivateAudioSession: false) }
+
+        #expect(controller.engineKind == .native)
+
+        controller.switchEngine()
+        #expect(controller.engineKind == .extended)
+        #expect(controller.currentPlaybackSeconds == 0)
+
+        controller.switchEngine()
+        #expect(controller.engineKind == .native)
+        #expect(controller.currentPlaybackSeconds == 0)
+    }
 }
 #endif

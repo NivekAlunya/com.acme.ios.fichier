@@ -157,6 +157,7 @@ public struct TVVideoPlayerView: View {
                     onPrevious: { viewModel.previousVideo() },
                     onTogglePlayPause: { viewModel.togglePlayPause() },
                     onNext: { viewModel.nextVideo() },
+                    onSwitchEngine: { viewModel.switchEngine() },
                     onOpenChapters: { viewModel.openChaptersMenu() },
                     onOpenTracks: { viewModel.openTracksMenu() },
                     onOpenSpeed: { viewModel.openSpeedMenu() }
@@ -214,15 +215,11 @@ public struct TVVideoPlayerView: View {
                 selectedAudio: viewModel.selectedAudioTrack,
                 subtitleTracks: viewModel.availableSubtitleTracks,
                 selectedSubtitle: viewModel.selectedSubtitleTrack,
-                playbackRate: viewModel.playbackRate,
                 onSelectAudio: { track in
                     viewModel.selectAudioTrack(track)
                 },
                 onSelectSubtitle: { track in
                     viewModel.selectSubtitleTrack(track)
-                },
-                onSelectPlaybackRate: { rate in
-                    viewModel.selectPlaybackRate(rate)
                 }
             )
         }

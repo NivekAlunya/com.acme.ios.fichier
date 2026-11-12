@@ -412,6 +412,29 @@ public struct VideoPlayerTopBarView: View {
             }
             
             playbackOptionsMenu
+            
+            engineSwitchButton
         }
+    }
+    
+    /// Toolbar button switching between native AVPlayer and extended VLCKit playback.
+    private var engineSwitchButton: some View {
+        let isVLC = controller.engineKind == .extended
+        return Button {
+            controller.switchEngine()
+        } label: {
+            Text(isVLC ? "VLC" : "AV")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(isVLC ? Color.orange : Color.blue)
+                .frame(width: 30, height: 30)
+                .background(
+                    Circle()
+                        .fill(Color.white.opacity(0.12))
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isVLC ? String(localized: "Switch to Native Player", comment: "Accessibility label to switch to native AVPlayer") : String(localized: "Switch to VLC Player", comment: "Accessibility label to switch to VLC player"))
+        .accessibilityIdentifier("video_player_switch_engine_button")
     }
 }

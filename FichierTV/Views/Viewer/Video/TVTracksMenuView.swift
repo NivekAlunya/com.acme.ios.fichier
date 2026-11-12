@@ -12,10 +12,8 @@ public struct TVTracksMenuView: View {
     public let selectedAudio: PlayerAudioTrack?
     public let subtitleTracks: [PlayerSubtitleTrack]
     public let selectedSubtitle: PlayerSubtitleTrack?
-    public let playbackRate: TVVideoPlaybackRate
     public let onSelectAudio: (PlayerAudioTrack) -> Void
     public let onSelectSubtitle: (PlayerSubtitleTrack?) -> Void
-    public let onSelectPlaybackRate: (TVVideoPlaybackRate) -> Void
     @Environment(\.dismiss) private var dismiss
 
     public init(
@@ -23,19 +21,15 @@ public struct TVTracksMenuView: View {
         selectedAudio: PlayerAudioTrack?,
         subtitleTracks: [PlayerSubtitleTrack],
         selectedSubtitle: PlayerSubtitleTrack?,
-        playbackRate: TVVideoPlaybackRate = .normal,
         onSelectAudio: @escaping (PlayerAudioTrack) -> Void,
-        onSelectSubtitle: @escaping (PlayerSubtitleTrack?) -> Void,
-        onSelectPlaybackRate: @escaping (TVVideoPlaybackRate) -> Void = { _ in }
+        onSelectSubtitle: @escaping (PlayerSubtitleTrack?) -> Void
     ) {
         self.audioTracks = audioTracks
         self.selectedAudio = selectedAudio
         self.subtitleTracks = subtitleTracks
         self.selectedSubtitle = selectedSubtitle
-        self.playbackRate = playbackRate
         self.onSelectAudio = onSelectAudio
         self.onSelectSubtitle = onSelectSubtitle
-        self.onSelectPlaybackRate = onSelectPlaybackRate
     }
 
     public var body: some View {
@@ -86,23 +80,6 @@ public struct TVTracksMenuView: View {
                                 Text(track.title)
                                 Spacer()
                                 if selectedSubtitle?.id == track.id {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Section("Playback Speed") {
-                    ForEach(TVVideoPlaybackRate.allCases) { rate in
-                        Button {
-                            onSelectPlaybackRate(rate)
-                            dismiss()
-                        } label: {
-                            HStack {
-                                Text(rate.displayName)
-                                Spacer()
-                                if playbackRate == rate {
                                     Image(systemName: "checkmark")
                                 }
                             }
