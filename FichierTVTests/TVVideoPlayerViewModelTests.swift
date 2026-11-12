@@ -226,12 +226,24 @@ struct TVVideoPlayerViewModelTests {
         #expect(viewModel.activeEngineKind == .native)
 
         viewModel.switchEngine()
+        for _ in 0..<20 {
+            if viewModel.activeEngineKind == .extended {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
         #expect(viewModel.activeEngineKind == .extended)
 
         let remainingSaved = await playbackStore.playbackPosition(for: item.id)
         #expect(remainingSaved == nil)
 
         viewModel.switchEngine()
+        for _ in 0..<20 {
+            if viewModel.activeEngineKind == .native {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
         #expect(viewModel.activeEngineKind == .native)
     }
 }

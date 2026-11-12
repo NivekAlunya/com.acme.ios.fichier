@@ -203,10 +203,12 @@ public final class TVVideoPlayerViewModel {
     public func switchEngine() {
         let nextKind: PlayerEngineKind = (activeEngineKind == .native) ? .extended : .native
         let itemID = currentItem.id
-        Task { [playbackStore] in
-            await playbackStore.clearPlaybackPosition(for: itemID)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.playbackStore.clearPlaybackPosition(for: itemID)
+            guard !Task.isCancelled, self.currentItem.id == itemID else { return }
+            self.loadCurrentVideo(preferredEngine: nextKind)
         }
-        loadCurrentVideo(preferredEngine: nextKind)
     }
 
     /// Determines preferred engine before attempting playback.
@@ -1402,7 +1404,8 @@ public final class TVVideoPlayerViewModel {
                 let asset = AVURLAsset(url: streamURL)
                 asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
                 Task { [weak self] in
-                    await self?.thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
+                    guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
+                    await self.thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
                 }
 
                 let playerItem = AVPlayerItem(asset: asset)
