@@ -30,6 +30,17 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Multi-Selection & Batch Actions**: Batch AirDrop / Share Sheet export and batch save to Apple Photos (`MediaSelectionBottomBar`).
 - **Favorites**: Persisted local bookmarking for instant access to starred media (`FavoritesManager`).
 
+### 🌐 Comprehensive Localization & Multi-Target Catalog Architecture
+- **Unified 308-Key String Catalog (`strings.xcstrings`)**: Comprehensive localization covering iOS, iPadOS, and tvOS across **11 languages** (`English`, `French`, `German`, `Spanish`, `Italian`, `Japanese`, `Dutch`, `Polish`, `Portuguese (Portugal)`, `Simplified Chinese`, and `Traditional Chinese`).
+- **Direct Multi-Target Project Membership**: Native Xcode project target membership for `fichier/strings.xcstrings` across both the primary `fichier` target and `FichierTV` (via `PBXResourcesBuildPhase`), avoiding filesystem symlinks and guaranteeing deterministic, parallel-safe `xcstringtool` compilation across all CI/CD environments.
+- **Type-Safe `.Strings.*` Generation**: Automatic compiler-generated `LocalizedStringResource` extensions for type-safe compile-time validation, positional parameter parity (`%@`, `%lld`, `%1$lld of %2$lld`), and zero hardcoded user-facing strings across:
+  - Sidebar and folder navigation (`gallery_navigate_parent_folder`, `gallery_parent_folder`, `sidebar_action_remove_location`).
+  - Security-scoped bookmark and local filesystem errors (`storage_error_locate_folder`, `storage_error_permission_expired`, etc.).
+  - PDF reader options and reading modes (`pdf_reading_mode_single_page`, `pdf_reading_mode_book_view`, etc.).
+  - Video player HUD controls, timeline scrubbing hints, and AirPlay/VLC routing options.
+  - Apple TV (tvOS) grid/list toggles, slideshow sheets, audio/subtitle tracks, and Bonjour SMB discovery flows.
+- **Clean Package Domain Boundary**: FichierKit models, engines, and errors are localized directly within `FichierKit`'s package bundle (`Localizable.xcstrings`), keeping the application catalog focused on host and platform presentation.
+
 ### 📄 PDF & Document Viewer (iOS & iPadOS)
 - **Dual Reading Modes**:
   - **Single Page Continuous Scroll**: Native vertical scrolling with dynamic pinch-to-zoom and double-tap zoom capabilities (`PDFKitRepresentedView`).
