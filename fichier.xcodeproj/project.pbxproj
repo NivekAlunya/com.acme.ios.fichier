@@ -18,6 +18,7 @@
 		D20000000000000000000113 /* FichierKit in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000112 /* FichierKit */; };
 		D30000000000000000000002 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
 		D30000000000000000000003 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
+		D20000000000000000000202 /* strings.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000201 /* strings.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +70,7 @@
 		D20000000000000000000002 /* FichierTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FichierTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20000000000000000000017 /* FichierTV-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "FichierTV-Info.plist"; sourceTree = "<group>"; };
 		D20000000000000000000102 /* FichierTVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FichierTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D20000000000000000000201 /* strings.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = strings.xcstrings; path = fichier/strings.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -130,6 +132,7 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				D20000000000000000000201 /* strings.xcstrings */,
 				D1F1B12130910E5200518820 /* Configuration */,
 				D1F1B0F030910CFF00518819 /* fichier-Info.plist */,
 				D20000000000000000000017 /* FichierTV-Info.plist */,
@@ -342,6 +345,7 @@
 		D20000000000000000000006 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				D20000000000000000000202 /* strings.xcstrings in Resources */,
 			);
 		};
 		D20000000000000000000106 /* Resources */ = {
