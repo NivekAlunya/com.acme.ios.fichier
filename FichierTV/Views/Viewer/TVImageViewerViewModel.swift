@@ -122,7 +122,7 @@ public final class TVImageViewerViewModel {
         self.settingsStore = settingsStore
         self.resolver = resolver
 
-        self.memoryWarningTask = Task { [weak self] in
+        self.memoryWarningTask = Task { @MainActor [weak self] in
             let notifications = NotificationCenter.default.notifications(named: UIApplication.didReceiveMemoryWarningNotification)
             for await _ in notifications {
                 guard let self else { break }

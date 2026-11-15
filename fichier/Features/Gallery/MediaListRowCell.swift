@@ -26,6 +26,17 @@ struct MediaListRowCell: View {
     /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
     @State private var mediaDetail: String? = nil
     
+    /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
+    private var displayedDetail: String? {
+        if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
+            return cached
+        }
+        if item.isVideo, let rec = VideoPlaybackStore.shared.records[item.id], rec.duration > 0 {
+            return MediaFormatHelper.formatDuration(rec.duration)
+        }
+        return mediaDetail
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if isSelectionMode {
@@ -69,9 +80,9 @@ struct MediaListRowCell: View {
                 }
                 HStack(spacing: 6) {
                     Text(item.formattedSize)
-                    if let mediaDetail {
+                    if let detail = displayedDetail {
                         Text("•")
-                        Text(mediaDetail)
+                        Text(detail)
                     }
                 }
                 .font(.caption)
@@ -82,15 +93,8 @@ struct MediaListRowCell: View {
         }
         .contentShape(Rectangle())
         .task(id: item.id) {
-            if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
-                mediaDetail = cached
-            } else if item.isVideo, let rec = VideoPlaybackStore.shared.records[item.id], rec.duration > 0 {
-                let dur = MediaFormatHelper.formatDuration(rec.duration)
-                MediaDetailStore.shared.registerDetail(dur, for: item.id)
-                mediaDetail = dur
-            } else {
-                mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item.asMediaSourceItem)
-            }
+            guard !item.isDirectory, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item.asMediaSourceItem)
         }
     }
 }

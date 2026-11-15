@@ -32,6 +32,8 @@ final class MediaDetailStoreTests: XCTestCase {
         XCTAssertEqual(MediaFormatHelper.formatDuration(165), "02:45")
         XCTAssertEqual(MediaFormatHelper.formatDuration(3600), "1:00:00")
         XCTAssertEqual(MediaFormatHelper.formatDuration(4530), "1:15:30")
+        XCTAssertEqual(MediaFormatHelper.formatDuration(Double.greatestFiniteMagnitude), "")
+        XCTAssertEqual(MediaFormatHelper.formatDuration(Double(Int.max) * 2), "")
     }
 
     func testDimensionsFormatting() {
@@ -102,6 +104,27 @@ final class MediaDetailStoreTests: XCTestCase {
 
         let cached = store.cachedDetail(for: videoItem.id)
         XCTAssertEqual(cached, "02:45")
+    }
+
+    func testConcurrentResolutionDeduplication() async {
+        let store = MediaDetailStore.shared
+        store.clearCache()
+
+        let folderItem = MediaSourceItem(
+            id: "dedup-folder-ios",
+            name: "Folder",
+            path: "Folder",
+            type: .folder
+        )
+
+        async let first = store.resolveDetail(for: folderItem)
+        async let second = store.resolveDetail(for: folderItem)
+        async let third = store.resolveDetail(for: folderItem)
+
+        let (r1, r2, r3) = await (first, second, third)
+        XCTAssertNil(r1)
+        XCTAssertNil(r2)
+        XCTAssertNil(r3)
     }
 }
 #endif

@@ -12,6 +12,10 @@ public struct TVMediaListRowView: View {
 
     @State private var mediaDetail: String? = nil
 
+    private var displayedDetail: String? {
+        MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail
+    }
+
     public init(item: MediaSourceItem) {
         self.item = item
     }
@@ -36,8 +40,8 @@ public struct TVMediaListRowView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if let mediaDetail {
-                        Text(mediaDetail)
+                    if let detail = displayedDetail {
+                        Text(detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -54,11 +58,8 @@ public struct TVMediaListRowView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
         .task(id: item.id) {
-            if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
-                mediaDetail = cached
-            } else {
-                mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item)
-            }
+            guard item.type != .folder, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item)
         }
     }
 
