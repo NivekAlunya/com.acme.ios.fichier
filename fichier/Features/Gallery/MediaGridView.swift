@@ -6,6 +6,7 @@
 import SwiftUI
 import Foundation
 import Wappn
+import FichierKit
 
 /// A primary gallery container view responsible for browsing, sorting, filtering, and batch-managing
 /// media items (photos, videos, documents) stored either locally, in iCloud, or on remote SMB network shares.

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Modal sheet presenting an in-app folder hierarchy for selecting a destination folder.
 struct FolderPickerSheetView: View {
