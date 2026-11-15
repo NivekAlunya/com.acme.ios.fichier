@@ -375,7 +375,11 @@ public actor LocalStorageActor {
         locationID: String
     ) throws -> MediaItem {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !trimmed.contains("/"), !trimmed.contains(":") else {
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
             throw FileOperationError.invalidName(name)
         }
         
@@ -383,7 +387,12 @@ public actor LocalStorageActor {
             throw FileOperationError.missingURL(parentFolder.name)
         }
         
-        let newFolderURL = parentURL.appendingPathComponent(trimmed, isDirectory: true)
+        let standardizedParent = parentURL.standardizedFileURL
+        let newFolderURL = standardizedParent.appendingPathComponent(trimmed, isDirectory: true).standardizedFileURL
+        
+        guard newFolderURL.deletingLastPathComponent().path == standardizedParent.path else {
+            throw FileOperationError.invalidName(name)
+        }
         
         if FileManager.default.fileExists(atPath: newFolderURL.path) {
             throw FileOperationError.itemAlreadyExists(trimmed)
@@ -411,11 +420,19 @@ public actor LocalStorageActor {
     /// - Throws: `FileOperationError` or filesystem errors.
     public func deleteItems(_ items: [MediaItem]) throws {
         let fileManager = FileManager.default
+        // Pre-flight check: ensure all items exist with valid URLs
         for item in items {
             guard let url = item.localURL else {
                 throw FileOperationError.missingURL(item.name)
             }
-            try fileManager.trashItem(at: url, resultingItemURL: nil)
+            guard fileManager.fileExists(atPath: url.path) else {
+                throw FileOperationError.missingURL(item.name)
+            }
+        }
+        for item in items {
+            if let url = item.localURL {
+                try fileManager.trashItem(at: url, resultingItemURL: nil)
+            }
         }
     }
     
@@ -433,6 +450,8 @@ public actor LocalStorageActor {
         let fileManager = FileManager.default
         let standardizedDestPath = destURL.standardizedFileURL.path
         
+        // Pre-flight validation: check all sources and destination collisions before mutating
+        var plannedMoves: [(sourceURL: URL, targetURL: URL)] = []
         for item in items {
             guard let sourceURL = item.localURL else {
                 throw FileOperationError.missingURL(item.name)
@@ -458,19 +477,46 @@ public actor LocalStorageActor {
             if fileManager.fileExists(atPath: targetURL.path) {
                 throw FileOperationError.itemAlreadyExists(sourceURL.lastPathComponent)
             }
-            
-            try fileManager.moveItem(at: sourceURL, to: targetURL)
+            plannedMoves.append((sourceURL, targetURL))
+        }
+        
+        // Execute moves after full validation pass
+        for move in plannedMoves {
+            try fileManager.moveItem(at: move.sourceURL, to: move.targetURL)
         }
     }
     
     /// Recursively lists all subfolders within a local or iCloud folder for destination picking.
+    ///
+    /// Protects against symlink loops and deep hierarchies by enforcing a maximum recursion depth
+    /// and tracking canonical visited filesystem paths.
     ///
     /// - Parameters:
     ///   - folder: The parent folder `MediaItem`.
     ///   - locationID: Owning storage location identifier.
     /// - Returns: An array of subfolder `MediaItem`s with their children recursively populated.
     public func listSubfoldersRecursively(at folder: MediaItem, locationID: String) throws -> [MediaItem] {
-        guard let folderURL = folder.localURL else { return [] }
+        var visitedPaths = Set<String>()
+        if let canonicalPath = folder.localURL?.resolvingSymlinksInPath().standardizedFileURL.path {
+            visitedPaths.insert(canonicalPath)
+        }
+        return try listSubfoldersRecursively(
+            at: folder,
+            locationID: locationID,
+            currentDepth: 0,
+            maxDepth: 10,
+            visitedPaths: &visitedPaths
+        )
+    }
+    
+    private func listSubfoldersRecursively(
+        at folder: MediaItem,
+        locationID: String,
+        currentDepth: Int,
+        maxDepth: Int,
+        visitedPaths: inout Set<String>
+    ) throws -> [MediaItem] {
+        guard currentDepth < maxDepth, let folderURL = folder.localURL else { return [] }
         
         let keys: [URLResourceKey] = [.nameKey, .isDirectoryKey, .contentModificationDateKey]
         let fileManager = FileManager.default
@@ -487,6 +533,10 @@ public actor LocalStorageActor {
             let resourceValues = try? url.resourceValues(forKeys: Set(keys))
             guard resourceValues?.isDirectory == true else { continue }
             
+            let canonicalPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+            guard !visitedPaths.contains(canonicalPath) else { continue }
+            visitedPaths.insert(canonicalPath)
+            
             let name = resourceValues?.name ?? url.lastPathComponent
             let date = resourceValues?.contentModificationDate
             let relativePath = folder.path.isEmpty ? name : "\(folder.path)/\(name)"
@@ -502,7 +552,13 @@ public actor LocalStorageActor {
                 children: nil,
                 localURL: url
             )
-            item.children = try? listSubfoldersRecursively(at: item, locationID: locationID)
+            item.children = try? listSubfoldersRecursively(
+                at: item,
+                locationID: locationID,
+                currentDepth: currentDepth + 1,
+                maxDepth: maxDepth,
+                visitedPaths: &visitedPaths
+            )
             subfolders.append(item)
         }
         

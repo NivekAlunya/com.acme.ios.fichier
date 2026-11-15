@@ -13,7 +13,11 @@ public final class TVPlayerContainerUIView: UIView {
     }
 
     public var playerLayer: AVPlayerLayer {
-        (layer as? AVPlayerLayer) ?? AVPlayerLayer()
+        guard let avPlayerLayer = layer as? AVPlayerLayer else {
+            assertionFailure("TVPlayerContainerUIView layer is not an AVPlayerLayer")
+            return AVPlayerLayer()
+        }
+        return avPlayerLayer
     }
 
     public override init(frame: CGRect) {

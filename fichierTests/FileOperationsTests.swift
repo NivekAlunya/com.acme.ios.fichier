@@ -81,6 +81,32 @@ final class FileOperationsTests: XCTestCase {
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
+        
+        do {
+            _ = try await actor.createFolder(named: "..", in: rootItem, locationID: "test_loc")
+            XCTFail("Expected invalid name error for parent traversal ..")
+        } catch let error as FileOperationError {
+            if case .invalidName = error {
+                // Success
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+        
+        do {
+            _ = try await actor.createFolder(named: ".", in: rootItem, locationID: "test_loc")
+            XCTFail("Expected invalid name error for current directory .")
+        } catch let error as FileOperationError {
+            if case .invalidName = error {
+                // Success
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
     }
     
     func testCreateFolderAlreadyExists() async throws {
