@@ -701,9 +701,11 @@ public final class StorageLocationManager {
     private func collectNodesWithChildren(in nodes: [MediaItem]) -> [MediaItem] {
         var result: [MediaItem] = []
         for node in nodes {
-            if let children = node.children, !children.isEmpty {
+            if let children = node.children {
                 result.append(node)
-                result.append(contentsOf: collectNodesWithChildren(in: children))
+                if !children.isEmpty {
+                    result.append(contentsOf: collectNodesWithChildren(in: children))
+                }
             }
         }
         return result
@@ -735,7 +737,7 @@ public final class StorageLocationManager {
                     }
                     return updatedChild
                 }
-                updated.children = mergedChildren.isEmpty ? nil : mergedChildren
+                updated.children = mergedChildren
             } else if let existingChildren = node.children {
                 updated.children = updateTreeNodes(in: existingChildren, targetID: targetID, children: children)
             }

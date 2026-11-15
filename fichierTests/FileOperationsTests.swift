@@ -454,5 +454,69 @@ final class FileOperationsTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: file1URL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: file2URL.path))
     }
+
+    @MainActor
+    func testRemoveNodesFromTree() {
+        let child1 = MediaItem(locationID: "loc", name: "Child1", rootName: "Root", path: "Child1", isDirectory: true)
+        let child2 = MediaItem(locationID: "loc", name: "Child2", rootName: "Root", path: "Child2", isDirectory: true)
+        let parent = MediaItem(
+            locationID: "loc",
+            name: "Parent",
+            rootName: "Root",
+            path: "",
+            isDirectory: true,
+            children: [child1, child2]
+        )
+        let root = MediaItem(
+            locationID: "loc",
+            name: "Root",
+            rootName: "Root",
+            path: "/",
+            isDirectory: true,
+            children: [parent]
+        )
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: LocalStorageActor())
+
+        // 1. Remove Child1 from nested hierarchy
+        let updatedTree = manager.removeNodesFromTree(in: [root], targetIDs: [child1.id])
+        let remainingChildren = updatedTree.first?.children?.first?.children
+        XCTAssertEqual(remainingChildren?.count, 1)
+        XCTAssertEqual(remainingChildren?.first?.id, child2.id)
+
+        // 2. Remove Root
+        let emptyTree = manager.removeNodesFromTree(in: updatedTree, targetIDs: [root.id])
+        XCTAssertTrue(emptyTree.isEmpty)
+    }
+
+    @MainActor
+    func testUpdateSubfoldersInTreePreservesEmptyArray() {
+        let folder = MediaItem(locationID: "loc", name: "EmptyFolder", rootName: "Root", path: "EmptyFolder", isDirectory: true)
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: LocalStorageActor())
+
+        let updatedTree = manager.updateSubfoldersInTree(in: [folder], targetID: folder.id, children: [])
+        guard let updatedFolder = updatedTree.first else {
+            XCTFail("Missing updated folder")
+            return
+        }
+        XCTAssertNotNil(updatedFolder.children)
+        XCTAssertEqual(updatedFolder.children?.count, 0)
+    }
+
+    func testLocalStorageActorDeleteFallbackOnNonTrashVolume() async throws {
+        let actor = LocalStorageActor()
+        let testFile = tempDirectory.appendingPathComponent("non_trash_test.txt")
+        try Data("test".utf8).write(to: testFile)
+
+        let item = MediaItem(
+            locationID: "loc",
+            name: "non_trash_test.txt",
+            path: "non_trash_test.txt",
+            isDirectory: false,
+            localURL: testFile
+        )
+
+        try await actor.deleteItems([item])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: testFile.path))
+    }
 }
 #endif
