@@ -39,6 +39,7 @@ public final class TVImageViewerViewModel {
     private var imageLoadTask: Task<Void, Never>?
     private var prefetchTask: Task<Void, Never>?
     private var paginationTask: Task<Void, Never>?
+    private var memoryWarningTask: Task<Void, Never>?
 
     private var imageCache: [String: UIImage] = [:]
     private var imageCacheKeys: [String] = []
@@ -120,6 +121,14 @@ public final class TVImageViewerViewModel {
         self.hasMoreSourcePages = paginationContext?.canLoadMore ?? false
         self.settingsStore = settingsStore
         self.resolver = resolver
+
+        self.memoryWarningTask = Task { [weak self] in
+            let notifications = NotificationCenter.default.notifications(named: UIApplication.didReceiveMemoryWarningNotification)
+            for await _ in notifications {
+                guard let self else { break }
+                self.handleMemoryWarning()
+            }
+        }
     }
 
     /// Loads saved interval and transition style preferences.
@@ -339,12 +348,26 @@ public final class TVImageViewerViewModel {
         isTornDown = true
         pendingAdvanceOnPagination = false
         stopSlideshow()
+        memoryWarningTask?.cancel()
+        memoryWarningTask = nil
         imageLoadTask?.cancel()
         prefetchTask?.cancel()
         paginationTask?.cancel()
         paginationTask = nil
         imageCache.removeAll()
         imageCacheKeys.removeAll()
+    }
+
+    /// Purges cached adjacent slide frames when system emits a memory warning.
+    public func handleMemoryWarning() {
+        let currentID = currentItem.id
+        let currentImg = imageCache[currentID]
+        imageCache.removeAll()
+        imageCacheKeys.removeAll()
+        if let currentImg {
+            imageCache[currentID] = currentImg
+            imageCacheKeys.append(currentID)
+        }
     }
 
     // MARK: - Multi-Page Source Lookahead & Image Filtering

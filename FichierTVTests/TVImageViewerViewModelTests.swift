@@ -286,4 +286,23 @@ struct TVImageViewerViewModelTests {
         #expect(viewModel.currentItem.name == "01.jpg")
         #expect(viewModel.items.map(\.name) == ["01.jpg", "02.jpg", "03.jpg"])
     }
+
+    @Test("Memory warning clears cached neighbor frames")
+    @MainActor
+    func testHandleMemoryWarning() {
+        let img1 = MediaSourceItem(id: "i1", name: "01.jpg", path: "01.jpg", type: .image)
+        let img2 = MediaSourceItem(id: "i2", name: "02.jpg", path: "02.jpg", type: .image)
+
+        let viewModel = TVImageViewerViewModel(
+            initialItem: img1,
+            items: [img1, img2],
+            settingsStore: StubSlideshowSettingsStore(),
+            resolver: StubMediaSourceResolver()
+        )
+        defer { viewModel.tearDown() }
+
+        viewModel.handleMemoryWarning()
+        #expect(viewModel.cachedImage(for: "i1") == nil)
+        #expect(viewModel.cachedImage(for: "i2") == nil)
+    }
 }

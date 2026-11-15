@@ -74,6 +74,19 @@ final class MediaDetailStoreTests: XCTestCase {
         XCTAssertNil(detail)
     }
 
+    func testResolvePDFReturnsNil() async {
+        let store = MediaDetailStore.shared
+        let pdfItem = MediaSourceItem(
+            id: "pdf-test",
+            name: "Doc.pdf",
+            path: "Doc.pdf",
+            type: .document
+        )
+
+        let detail = await store.resolveDetail(for: pdfItem)
+        XCTAssertNil(detail)
+    }
+
     func testVideoPlaybackStoreRegistersDurationWithDetailStore() {
         let store = MediaDetailStore.shared
         let videoItem = MediaItem(
