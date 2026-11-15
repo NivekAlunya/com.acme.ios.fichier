@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftUI
 import FichierKit
 
 extension StorageLocationManager {
@@ -46,20 +47,23 @@ extension StorageLocationManager {
     /// - Parameters:
     ///   - name: The name of the new directory to create.
     ///   - targetFolder: Optional parent folder; defaults to `selectedFolder`.
+    /// - Returns: The newly created folder `MediaItem`.
     /// - Throws: `FileOperationError` if the name is invalid, already exists, or the backend is unsupported.
-    public func createFolder(named name: String, in targetFolder: MediaItem? = nil) async throws {
+    @discardableResult
+    public func createFolder(named name: String, in targetFolder: MediaItem? = nil) async throws -> MediaItem {
         guard let current = targetFolder ?? selectedFolder else {
             throw FileOperationError.unsupportedStorage
         }
         
+        let createdFolder: MediaItem
         if current.localURL != nil {
-            _ = try await localWorker.createFolder(
+            createdFolder = try await localWorker.createFolder(
                 named: name,
                 in: current,
                 locationID: current.locationID
             )
         } else if !current.shareName.isEmpty {
-            _ = try await worker.createFolder(
+            createdFolder = try await worker.createFolder(
                 named: name,
                 inShare: current.shareName,
                 atPath: current.path
@@ -74,6 +78,7 @@ extension StorageLocationManager {
         if let reloadTarget = selectedFolder {
             await selectAndLoadFolder(reloadTarget)
         }
+        return createdFolder
     }
     
     // MARK: - Deletion / Move to Trash
@@ -104,11 +109,17 @@ extension StorageLocationManager {
             FavoritesManager.shared.toggleFavorite(item)
         }
         
-        recordMutation()
-        await refreshExpandedTreeBranches()
+        // Remove deleted items in-place from current view to preserve scroll position without full reload
+        let deletedIDs = Set(items.map(\.id))
+        withAnimation(.snappy) {
+            self.pictures.removeAll(where: { deletedIDs.contains($0.id) })
+            self.currentFolders.removeAll(where: { deletedIDs.contains($0.id) })
+        }
         
-        if let current = selectedFolder {
-            await selectAndLoadFolder(current)
+        if items.contains(where: \.isDirectory) {
+            self.folderTree = removeNodesFromTree(in: self.folderTree, targetIDs: deletedIDs)
+            recordMutation()
+            await refreshExpandedTreeBranches()
         }
     }
     
@@ -137,19 +148,28 @@ extension StorageLocationManager {
             throw FileOperationError.unsupportedStorage
         }
         
-        recordMutation()
-        await refreshExpandedTreeBranches()
+        // Remove moved items in-place from current view to preserve scroll position
+        let movedIDs = Set(items.map(\.id))
+        withAnimation(.snappy) {
+            self.pictures.removeAll(where: { movedIDs.contains($0.id) })
+            self.currentFolders.removeAll(where: { movedIDs.contains($0.id) })
+        }
         
-        if let current = selectedFolder {
-            await selectAndLoadFolder(current)
+        if items.contains(where: \.isDirectory) {
+            self.folderTree = removeNodesFromTree(in: self.folderTree, targetIDs: movedIDs)
+            recordMutation()
+            await refreshExpandedTreeBranches()
         }
     }
     
     // MARK: - Folder Picker Hierarchy
     
-    /// Loads a complete directory tree for picking destination folders in the move sheet.
+    /// Loads the root directory tree for picking destination folders in the move sheet.
     ///
-    /// - Returns: An array containing the root directory with populated subfolder children.
+    /// Reuses already loaded subfolder branches from the sidebar tree when available,
+    /// or fetches immediate child directories without recursive traversal to minimize latency.
+    ///
+    /// - Returns: An array containing the root directory with its immediate child folders.
     public func loadFolderPickerTree() async throws -> [MediaItem] {
         guard let location = currentLocation else { return [] }
         switch location.kind {
@@ -158,10 +178,12 @@ extension StorageLocationManager {
                 return []
             }
             var rootWithChildren = rootItem
-            rootWithChildren.children = try await localWorker.listSubfoldersRecursively(
-                at: rootItem,
-                locationID: rootItem.locationID
-            )
+            if let existing = rootItem.children {
+                rootWithChildren.children = existing
+            } else {
+                let immediateSubfolders = try await localWorker.listSubfolders(at: rootItem, locationID: rootItem.locationID)
+                rootWithChildren.children = immediateSubfolders.isEmpty ? [] : immediateSubfolders
+            }
             return [rootWithChildren]
             
         case .smb:
@@ -170,16 +192,30 @@ extension StorageLocationManager {
                 return []
             }
             var rootWithChildren = rootItem
-            rootWithChildren.children = try await worker.listSubfoldersRecursively(
-                inShare: rootItem.shareName,
-                atPath: "",
-                rootName: rootItem.rootName,
-                locationID: rootItem.locationID
-            )
+            if let existing = rootItem.children {
+                rootWithChildren.children = existing
+            } else {
+                let immediateSubfolders = try await worker.listSubfolders(inShare: rootItem.shareName, atPath: "")
+                rootWithChildren.children = immediateSubfolders.isEmpty ? [] : immediateSubfolders
+            }
             return [rootWithChildren]
             
         case .photos:
             return []
+        }
+    }
+    
+    /// Fetches immediate child subfolders for an individual directory node in the destination folder picker.
+    ///
+    /// - Parameter folder: The folder node being expanded by the user.
+    /// - Returns: Discovered immediate child subfolders.
+    public func fetchSubfoldersForPicker(at folder: MediaItem) async throws -> [MediaItem] {
+        if folder.localURL != nil {
+            return try await localWorker.listSubfolders(at: folder, locationID: folder.connectionID)
+        } else if folder.locationID == StorageLocation.photosLocationID {
+            return []
+        } else {
+            return try await worker.listSubfolders(inShare: folder.shareName, atPath: folder.path)
         }
     }
 }

@@ -22,6 +22,9 @@ struct FolderPickerRowView: View {
     /// Whether this folder can be selected as a valid destination.
     let isEnabled: Bool
     
+    /// Whether this folder is actively loading its child subfolders.
+    var isLoading: Bool = false
+    
     /// Action triggered when toggling disclosure chevron.
     let onToggleExpand: () -> Void
     
@@ -35,7 +38,14 @@ struct FolderPickerRowView: View {
                     .frame(width: CGFloat(level) * 16)
             }
             
-            if let children = folder.children, !children.isEmpty {
+            if isLoading {
+                ProgressView()
+                    .scaleEffect(0.65)
+                    .frame(width: 20, height: 20)
+            } else if folder.children?.isEmpty == true {
+                Spacer()
+                    .frame(width: 20)
+            } else {
                 Button {
                     onToggleExpand()
                 } label: {
@@ -45,9 +55,6 @@ struct FolderPickerRowView: View {
                         .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
-            } else {
-                Spacer()
-                    .frame(width: 20)
             }
             
             Button {

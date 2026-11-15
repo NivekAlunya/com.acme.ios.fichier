@@ -357,26 +357,8 @@ struct MediaGridView: View {
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            
-            // Status Toast Banner (e.g. Saved to Photos notification)
-            if let toast = batchStatusToast {
-                VStack {
-                    Spacer().frame(height: 70)
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text(toast)
-                            .font(.subheadline.bold())
-                            .foregroundColor(.white)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(.ultraThinMaterial))
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    Spacer()
-                }
-            }
         }
+        .statusToast(message: $batchStatusToast)
         .searchable(text: $searchText, prompt: .Strings.gallerySearchPrompt)
         .sheet(isPresented: Binding(
             get: { shareSheetItems != nil },

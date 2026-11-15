@@ -743,6 +743,36 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Updates the child subfolders of a specific node within an in-memory tree hierarchy.
+    ///
+    /// - Parameters:
+    ///   - nodes: Current folder tree.
+    ///   - targetID: Identifier of the parent folder being populated.
+    ///   - children: The discovered subfolders.
+    /// - Returns: A new tree with updated children.
+    public func updateSubfoldersInTree(in nodes: [MediaItem], targetID: String, children: [MediaItem]) -> [MediaItem] {
+        updateTreeNodes(in: nodes, targetID: targetID, children: children)
+    }
+    
+    /// Pure functional recursive tree traversal that removes nodes matching the target identifiers.
+    ///
+    /// - Parameters:
+    ///   - nodes: Current folder subtree.
+    ///   - targetIDs: Set of identifiers for folder nodes to remove.
+    /// - Returns: Updated tree without the target nodes.
+    public func removeNodesFromTree(in nodes: [MediaItem], targetIDs: Set<String>) -> [MediaItem] {
+        nodes.compactMap { node in
+            if targetIDs.contains(node.id) {
+                return nil
+            }
+            var updated = node
+            if let children = node.children {
+                updated.children = removeNodesFromTree(in: children, targetIDs: targetIDs)
+            }
+            return updated
+        }
+    }
+    
     // MARK: - Parent Folder Navigation
     
     /// Determines whether a folder represents the top-level root of its storage backend.

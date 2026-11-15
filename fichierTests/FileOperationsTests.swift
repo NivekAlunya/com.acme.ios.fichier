@@ -42,7 +42,8 @@ final class FileOperationsTests: XCTestCase {
         XCTAssertEqual(createdFolder.name, "NewSubfolder")
         XCTAssertTrue(createdFolder.isDirectory)
         XCTAssertEqual(createdFolder.path, "NewSubfolder")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: createdFolder.localURL!.path))
+        let localURL = try XCTUnwrap(createdFolder.localURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: localURL.path))
     }
     
     func testCreateFolderInvalidNames() async {
@@ -351,6 +352,107 @@ final class FileOperationsTests: XCTestCase {
         let removed = await mockClient.removedItems
         XCTAssertEqual(removed.count, 1)
         XCTAssertEqual(removed.first?.path, "NewFolder/photo.jpg")
+    }
+
+    @MainActor
+    func testFolderPickerTreeLazyLoading() async throws {
+        let actor = LocalStorageActor()
+        let rootItem = MediaItem(
+            locationID: "test_loc",
+            name: "TempRoot",
+            rootName: "TempRoot",
+            path: "",
+            isDirectory: true,
+            localURL: tempDirectory
+        )
+
+        // Create subfolder1 and subfolder2
+        let sub1 = try await actor.createFolder(named: "FolderA", in: rootItem, locationID: "test_loc")
+        _ = try await actor.createFolder(named: "FolderB", in: rootItem, locationID: "test_loc")
+        // Create nested subfolder inside FolderA
+        _ = try await actor.createFolder(named: "NestedUnderA", in: sub1, locationID: "test_loc")
+
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: actor)
+        let savedFolder = SavedFolderLocation(
+            name: "TempRoot",
+            bookmarkData: Data(),
+            isICloud: false
+        )
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.folderTree = [rootItem]
+
+        // 1. loadFolderPickerTree only loads immediate children of root (FolderA, FolderB)
+        let pickerTree = try await manager.loadFolderPickerTree()
+        XCTAssertEqual(pickerTree.count, 1)
+        guard let rootInTree = pickerTree.first else {
+            XCTFail("Missing root in picker tree")
+            return
+        }
+        guard let rootChildren = rootInTree.children else {
+            XCTFail("Missing root children")
+            return
+        }
+        XCTAssertEqual(rootChildren.count, 2)
+        let names = rootChildren.map { $0.name }.sorted()
+        XCTAssertEqual(names, ["FolderA", "FolderB"])
+
+        // Direct children have not been deeply crawled (their children are nil)
+        guard let folderA = rootChildren.first(where: { $0.name == "FolderA" }) else {
+            XCTFail("Missing FolderA")
+            return
+        }
+        XCTAssertNil(folderA.children)
+
+        // 2. Fetch subfolders for FolderA on demand
+        let folderASubfolders = try await manager.fetchSubfoldersForPicker(at: folderA)
+        XCTAssertEqual(folderASubfolders.count, 1)
+        XCTAssertEqual(folderASubfolders.first?.name, "NestedUnderA")
+
+        // 3. updateSubfoldersInTree attaches the lazy subfolders cleanly
+        let updatedTree = manager.updateSubfoldersInTree(in: pickerTree, targetID: folderA.id, children: folderASubfolders)
+        let updatedFolderA = updatedTree.first?.children?.first(where: { $0.name == "FolderA" })
+        XCTAssertEqual(updatedFolderA?.children?.count, 1)
+        XCTAssertEqual(updatedFolderA?.children?.first?.name, "NestedUnderA")
+    }
+
+    @MainActor
+    func testDeleteItemsRemovesInPlaceWithoutFullReload() async throws {
+        let actor = LocalStorageActor()
+        let file1URL = tempDirectory.appendingPathComponent("photo1.jpg")
+        let file2URL = tempDirectory.appendingPathComponent("photo2.jpg")
+        try Data("img1".utf8).write(to: file1URL)
+        try Data("img2".utf8).write(to: file2URL)
+
+        let item1 = MediaItem(
+            locationID: "test_loc",
+            name: "photo1.jpg",
+            path: "photo1.jpg",
+            isDirectory: false,
+            localURL: file1URL
+        )
+        let item2 = MediaItem(
+            locationID: "test_loc",
+            name: "photo2.jpg",
+            path: "photo2.jpg",
+            isDirectory: false,
+            localURL: file2URL
+        )
+
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: actor)
+        let savedFolder = SavedFolderLocation(name: "TempRoot", bookmarkData: Data(), isICloud: false)
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.selectedFolder = MediaItem(locationID: "test_loc", name: "TempRoot", path: "", isDirectory: true, localURL: tempDirectory)
+        manager.pictures = [item1, item2]
+
+        // Delete item1
+        try await manager.deleteItems([item1])
+
+        // Assert item1 is removed from manager.pictures without wiping other items
+        XCTAssertEqual(manager.pictures.count, 1)
+        XCTAssertEqual(manager.pictures.first?.id, item2.id)
+        XCTAssertFalse(manager.isLoading)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file1URL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file2URL.path))
     }
 }
 #endif

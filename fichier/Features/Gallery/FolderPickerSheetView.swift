@@ -31,7 +31,10 @@ struct FolderPickerSheetView: View {
     /// Set of expanded folder IDs in the tree.
     @State private var expandedIDs: Set<String> = []
     
-    /// Loading state while scanning the directory tree.
+    /// Set of folder IDs currently loading their subfolders on demand.
+    @State private var loadingNodeIDs: Set<String> = []
+    
+    /// Loading state while scanning the initial directory tree.
     @State private var isLoading = true
     
     /// Tracks presentation of the create folder alert.
@@ -129,17 +132,15 @@ struct FolderPickerSheetView: View {
                                 isSelected: selectedDestination?.id == node.folder.id,
                                 isExpanded: expandedIDs.contains(node.folder.id),
                                 isEnabled: isDestinationValid(node.folder),
+                                isLoading: loadingNodeIDs.contains(node.folder.id),
                                 onToggleExpand: {
-                                    withAnimation(.snappy) {
-                                        if expandedIDs.contains(node.folder.id) {
-                                            expandedIDs.remove(node.folder.id)
-                                        } else {
-                                            expandedIDs.insert(node.folder.id)
-                                        }
-                                    }
+                                    toggleExpand(for: node.folder)
                                 },
                                 onSelect: {
                                     selectedDestination = node.folder
+                                    if !expandedIDs.contains(node.folder.id) {
+                                        toggleExpand(for: node.folder)
+                                    }
                                 }
                             )
                         }
@@ -230,6 +231,40 @@ struct FolderPickerSheetView: View {
         isLoading = false
     }
     
+    /// Toggles folder expansion state, lazily loading its child subfolders on demand if not yet cached.
+    private func toggleExpand(for folder: MediaItem) {
+        if expandedIDs.contains(folder.id) {
+            withAnimation(.snappy) {
+                expandedIDs.remove(folder.id)
+            }
+        } else {
+            if let children = folder.children {
+                if !children.isEmpty {
+                    withAnimation(.snappy) {
+                        expandedIDs.insert(folder.id)
+                    }
+                }
+                return
+            }
+            
+            loadingNodeIDs.insert(folder.id)
+            Task {
+                do {
+                    let subfolders = try await manager.fetchSubfoldersForPicker(at: folder)
+                    folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: folder.id, children: subfolders)
+                    if !subfolders.isEmpty {
+                        withAnimation(.snappy) {
+                            expandedIDs.insert(folder.id)
+                        }
+                    }
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                loadingNodeIDs.remove(folder.id)
+            }
+        }
+    }
+    
     private func createNewFolder() {
         guard let parent = selectedDestination else { return }
         let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,8 +272,13 @@ struct FolderPickerSheetView: View {
         
         Task {
             do {
-                try await manager.createFolder(named: trimmed, in: parent)
-                await loadTree()
+                let created = try await manager.createFolder(named: trimmed, in: parent)
+                let subfolders = try await manager.fetchSubfoldersForPicker(at: parent)
+                folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: parent.id, children: subfolders)
+                withAnimation(.snappy) {
+                    expandedIDs.insert(parent.id)
+                }
+                selectedDestination = created
             } catch {
                 errorMessage = error.localizedDescription
             }

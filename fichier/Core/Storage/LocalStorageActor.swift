@@ -431,7 +431,14 @@ public actor LocalStorageActor {
         }
         for item in items {
             if let url = item.localURL {
-                try fileManager.trashItem(at: url, resultingItemURL: nil)
+                do {
+                    try fileManager.trashItem(at: url, resultingItemURL: nil)
+                } catch let error as CocoaError where error.code == .featureUnsupported {
+                    // Fallback to permanent removal if volume doesn't have a Trash container
+                    try fileManager.removeItem(at: url)
+                } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == 3328 {
+                    try fileManager.removeItem(at: url)
+                }
             }
         }
     }
@@ -489,6 +496,17 @@ public actor LocalStorageActor {
         }
     }
     
+    /// Lists immediate child subfolders within a local or iCloud directory.
+    ///
+    /// - Parameters:
+    ///   - folder: The parent folder `MediaItem`.
+    ///   - locationID: Owning storage location identifier.
+    /// - Returns: An array of immediate subfolder `MediaItem`s.
+    public func listSubfolders(at folder: MediaItem, locationID: String) throws -> [MediaItem] {
+        let (subfolders, _) = try listContents(at: folder, locationID: locationID)
+        return subfolders
+    }
+
     /// Recursively lists all subfolders within a local or iCloud folder for destination picking.
     ///
     /// Protects against symlink loops and deep hierarchies by enforcing a maximum recursion depth

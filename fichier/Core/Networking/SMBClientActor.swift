@@ -473,6 +473,20 @@ actor SMBClientActor {
         await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
     }
 
+    /// Lists immediate child subfolders in the given directory of an SMB share.
+    ///
+    /// - Parameters:
+    ///   - shareName: Name of the SMB share volume.
+    ///   - path: Relative path within the share.
+    /// - Returns: Sorted array of immediate child subfolders.
+    func listSubfolders(
+        inShare shareName: String,
+        atPath path: String
+    ) async throws -> [MediaItem] {
+        let (subfolders, _) = try await scanFolder(shareName: shareName, at: path)
+        return subfolders
+    }
+
     /// Recursively lists subfolders within an SMB share for destination picking in `FolderPickerSheetView`.
     func listSubfoldersRecursively(
         inShare shareName: String,
