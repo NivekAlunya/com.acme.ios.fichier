@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Adaptive grid presentation featuring an optional subfolder shelf and a thumbnail matrix.
 @MainActor

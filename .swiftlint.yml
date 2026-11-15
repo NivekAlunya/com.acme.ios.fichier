@@ -3,6 +3,7 @@
 # Include only your application source directory
 included:
   - fichier
+  - FichierTV
 
 # Exclude build artifacts and external vendor dependencies
 excluded:

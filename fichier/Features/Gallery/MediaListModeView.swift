@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Vertical list mode presentation rendering subfolders and detailed media metadata rows.
 @MainActor
