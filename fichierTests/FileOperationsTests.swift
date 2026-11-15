@@ -221,6 +221,43 @@ final class FileOperationsTests: XCTestCase {
         }
     }
     
+    func testMoveItemsDuplicateFilenameBatchFails() async throws {
+        let actor = LocalStorageActor()
+        
+        let folder1 = tempDirectory.appendingPathComponent("Folder1", isDirectory: true)
+        let folder2 = tempDirectory.appendingPathComponent("Folder2", isDirectory: true)
+        let destFolder = tempDirectory.appendingPathComponent("DestFolder", isDirectory: true)
+        
+        try FileManager.default.createDirectory(at: folder1, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder2, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: destFolder, withIntermediateDirectories: true)
+        
+        let file1 = folder1.appendingPathComponent("conflict.txt")
+        let file2 = folder2.appendingPathComponent("conflict.txt")
+        try "content1".write(to: file1, atomically: true, encoding: .utf8)
+        try "content2".write(to: file2, atomically: true, encoding: .utf8)
+        
+        let item1 = MediaItem(name: "conflict.txt", path: "Folder1/conflict.txt", isDirectory: false, localURL: file1)
+        let item2 = MediaItem(name: "conflict.txt", path: "Folder2/conflict.txt", isDirectory: false, localURL: file2)
+        let destItem = MediaItem(name: "DestFolder", path: "DestFolder", isDirectory: true, localURL: destFolder)
+        
+        do {
+            try await actor.moveItems([item1, item2], to: destItem)
+            XCTFail("Expected itemAlreadyExists error for intra-batch collision")
+        } catch let error as FileOperationError {
+            if case .itemAlreadyExists(let name) = error {
+                XCTAssertEqual(name, "conflict.txt")
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+        
+        // Ensure atomic pre-flight preserved original files
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file1.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file2.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destFolder.appendingPathComponent("conflict.txt").path))
+    }
+    
     @MainActor
     func testStorageLocationManagerCapabilities() {
         let manager = StorageLocationManager()

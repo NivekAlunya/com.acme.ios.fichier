@@ -452,6 +452,7 @@ public actor LocalStorageActor {
         
         // Pre-flight validation: check all sources and destination collisions before mutating
         var plannedMoves: [(sourceURL: URL, targetURL: URL)] = []
+        var plannedTargets = Set<String>()
         for item in items {
             guard let sourceURL = item.localURL else {
                 throw FileOperationError.missingURL(item.name)
@@ -474,9 +475,11 @@ public actor LocalStorageActor {
             }
             
             let targetURL = destURL.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: item.isDirectory)
-            if fileManager.fileExists(atPath: targetURL.path) {
+            let targetPath = targetURL.standardizedFileURL.path
+            if fileManager.fileExists(atPath: targetPath) || plannedTargets.contains(targetPath) {
                 throw FileOperationError.itemAlreadyExists(sourceURL.lastPathComponent)
             }
+            plannedTargets.insert(targetPath)
             plannedMoves.append((sourceURL, targetURL))
         }
         
