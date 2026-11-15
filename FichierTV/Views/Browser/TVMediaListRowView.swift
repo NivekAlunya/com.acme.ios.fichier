@@ -10,6 +10,12 @@ import FichierKit
 public struct TVMediaListRowView: View {
     public let item: MediaSourceItem
 
+    @State private var mediaDetail: String? = nil
+
+    private var displayedDetail: String? {
+        MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail
+    }
+
     public init(item: MediaSourceItem) {
         self.item = item
     }
@@ -34,8 +40,8 @@ public struct TVMediaListRowView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if let date = item.modifiedDate {
-                        Text(MediaFormatHelper.formatDate(date))
+                    if let detail = displayedDetail {
+                        Text(detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -51,6 +57,10 @@ public struct TVMediaListRowView: View {
         .frame(height: 110)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+        .task(id: item.id) {
+            guard item.type != .folder, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item)
+        }
     }
 
     @ViewBuilder

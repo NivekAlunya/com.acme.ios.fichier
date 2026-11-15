@@ -16,9 +16,9 @@
 		D20000000000000000000013 /* AMSMB2 in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000016 /* AMSMB2 */; };
 		D20000000000000000000014 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000016 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		D20000000000000000000113 /* FichierKit in Frameworks */ = {isa = PBXBuildFile; productRef = D20000000000000000000112 /* FichierKit */; };
+		D20000000000000000000202 /* strings.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000201 /* strings.xcstrings */; };
 		D30000000000000000000002 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
 		D30000000000000000000003 /* Wappn in Frameworks */ = {isa = PBXBuildFile; productRef = D30000000000000000000001 /* Wappn */; };
-		D20000000000000000000202 /* strings.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000201 /* strings.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */

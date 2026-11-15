@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Horizontal table row cell view used when `MediaGridView` is configured in `.list` view mode.
 ///
@@ -21,7 +22,21 @@ struct MediaListRowCell: View {
     
     /// Indicates whether the gallery is currently in multi-selection editing mode.
     var isSelectionMode: Bool = false
+
+    /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
+    @State private var mediaDetail: String? = nil
     
+    /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
+    private var displayedDetail: String? {
+        if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
+            return cached
+        }
+        if item.isVideo, let rec = VideoPlaybackStore.shared.records[item.id], rec.duration > 0 {
+            return MediaFormatHelper.formatDuration(rec.duration)
+        }
+        return mediaDetail
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             if isSelectionMode {
@@ -65,9 +80,9 @@ struct MediaListRowCell: View {
                 }
                 HStack(spacing: 6) {
                     Text(item.formattedSize)
-                    if let dateStr = item.formattedDate {
+                    if let detail = displayedDetail {
                         Text("•")
-                        Text(dateStr)
+                        Text(detail)
                     }
                 }
                 .font(.caption)
@@ -77,5 +92,9 @@ struct MediaListRowCell: View {
             Spacer()
         }
         .contentShape(Rectangle())
+        .task(id: item.id) {
+            guard !item.isDirectory, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item.asMediaSourceItem)
+        }
     }
 }

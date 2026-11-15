@@ -10,6 +10,12 @@ import FichierKit
 public struct TVMediaGridItemView: View {
     public let item: MediaSourceItem
 
+    @State private var mediaDetail: String? = nil
+
+    private var displayedDetail: String? {
+        MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail
+    }
+
     public init(item: MediaSourceItem) {
         self.item = item
     }
@@ -38,23 +44,30 @@ public struct TVMediaGridItemView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                if let date = item.modifiedDate {
-                    Text(MediaFormatHelper.formatDate(date))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else if item.type != .folder && item.size > 0 {
-                    Text(MediaFormatHelper.formatByteCount(item.size))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                HStack(spacing: 6) {
+                    if item.type != .folder && item.size > 0 {
+                        Text(MediaFormatHelper.formatByteCount(item.size))
+                    }
+                    if let detail = displayedDetail {
+                        if item.size > 0 {
+                            Text("•")
+                        }
+                        Text(detail)
+                    }
                 }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
             .padding(.horizontal, 4)
         }
         .padding(12)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
+        .task(id: item.id) {
+            guard item.type != .folder, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item)
+        }
     }
 
     @ViewBuilder

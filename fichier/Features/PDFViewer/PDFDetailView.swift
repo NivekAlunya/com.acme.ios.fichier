@@ -22,10 +22,16 @@ struct PDFDetailView: View {
     /// Shared storage location manager handling document streaming and caching.
     var manager: StorageLocationManager
     
-    /// Target document media item.
-    let item: MediaItem
+    /// Playlist of document items available in this browsing session.
+    let documents: [MediaItem]
+    
+    /// The initial document item focused when the viewer opened.
+    let initialItem: MediaItem
     
     @Environment(\.dismiss) private var dismiss
+    
+    /// The currently displayed document item.
+    @State private var currentItem: MediaItem
     
     /// Loaded and parsed PDFKit document instance.
     @State private var document: PDFDocument?
@@ -84,6 +90,32 @@ struct PDFDetailView: View {
     
     /// Retry attempt counter used to force `.task` reload upon tap.
     @State private var reloadAttempt = 0
+    
+    /// Designated public initializer.
+    ///
+    /// - Parameters:
+    ///   - manager: Shared storage location manager.
+    ///   - documents: Array of candidate media items.
+    ///   - initialItem: Initial focused document item.
+    public init(
+        manager: StorageLocationManager,
+        documents: [MediaItem] = [],
+        initialItem: MediaItem
+    ) {
+        self.manager = manager
+        var pdfs = documents.filter(\.isPDF)
+        if !pdfs.contains(where: { $0.id == initialItem.id }) {
+            pdfs.append(initialItem)
+        }
+        self.documents = pdfs.isEmpty ? [initialItem] : pdfs
+        self.initialItem = initialItem
+        self._currentItem = State(initialValue: initialItem)
+    }
+    
+    /// Zero-based index of the current document within the active playlist.
+    private var currentIndex: Int {
+        documents.firstIndex(where: { $0.id == currentItem.id }) ?? 0
+    }
     
     /// Ordered array of page spreads synthesized for the current document.
     private var spreads: [PDFSpread] {
@@ -201,15 +233,14 @@ struct PDFDetailView: View {
                         onPageSelected: { targetPage in
                             if isBookMode {
                                 if let match = spreads.firstIndex(where: { $0.pageIndices.contains(targetPage - 1) }) {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        currentSpreadIndex = match
-                                    }
+                                    currentSpreadIndex = match
                                 }
                             } else {
                                 coordinator?.goToPage(index: targetPage - 1)
                             }
                         }
                     )
+                    .id(currentItem.id)
                     .padding(.leading, 12)
                     .padding(.top, 70)
                     .padding(.bottom, 80)
@@ -218,21 +249,37 @@ struct PDFDetailView: View {
                 }
                 .opacity(showControls ? 1.0 : 0.0)
                 .animation(.easeInOut(duration: 0.2), value: showControls)
-                .transition(.move(edge: .leading).combined(with: .opacity))
+                .transition(.identity)
             }
             
             // HUD Overlays
             if showControls && document != nil {
                 VStack {
-                    topHUD
+                    PDFViewerTopBarView(
+                        item: currentItem,
+                        currentIndex: currentIndex,
+                        totalCount: documents.count,
+                        onDismiss: { dismiss() }
+                    )
                     Spacer()
-                    bottomHUD
+                    PDFViewerBottomBarView(
+                        hasMultipleDocuments: documents.count > 1,
+                        readingMode: $readingMode,
+                        pageInfoText: pageInfoText,
+                        isFavorite: FavoritesManager.shared.isFavorite(currentItem),
+                        localFileURL: localFileURL,
+                        currentName: currentItem.name,
+                        onPreviousDocument: { goToPreviousDocument() },
+                        onNextDocument: { goToNextDocument() },
+                        onToggleFavorite: { FavoritesManager.shared.toggleFavorite(currentItem) }
+                    )
+                    .padding(.bottom, 20)
                 }
                 .transition(.opacity)
             }
         }
         .preferredColorScheme(.dark)
-        .task(id: "\(item.id)-\(reloadAttempt)") {
+        .task(id: "\(currentItem.id)-\(reloadAttempt)") {
             await loadDocument()
         }
         .onChange(of: readingMode) { _, newMode in
@@ -253,6 +300,7 @@ struct PDFDetailView: View {
                     }
                 }
                 .keyboardShortcut("b", modifiers: [])
+                // Turn pages backward (Left arrow)
                 Button("") {
                     if isBookMode {
                         withAnimation(.easeInOut(duration: 0.25)) {
@@ -263,6 +311,7 @@ struct PDFDetailView: View {
                     }
                 }
                 .keyboardShortcut(.leftArrow, modifiers: [])
+                // Turn pages forward (Right arrow)
                 Button("") {
                     if isBookMode {
                         withAnimation(.easeInOut(duration: 0.25)) {
@@ -273,148 +322,61 @@ struct PDFDetailView: View {
                     }
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [])
+                // Document playlist navigation shortcuts: "p" and "Cmd + Left Arrow"
+                Button("") { goToPreviousDocument() }
+                    .keyboardShortcut("p", modifiers: [])
+                Button("") { goToPreviousDocument() }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command])
+                // Document playlist navigation shortcuts: "n" and "Cmd + Right Arrow"
+                Button("") { goToNextDocument() }
+                    .keyboardShortcut("n", modifiers: [])
+                Button("") { goToNextDocument() }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command])
             }
             .opacity(0)
             .allowsHitTesting(false)
         }
     }
     
-    // MARK: - Top HUD
+    // MARK: - Document Playlist Navigation
     
-    /// Translucent top action bar displaying file title, pagination, book mode selector, and export tools.
-    private var topHUD: some View {
-        HStack(spacing: 12) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close document viewer"))
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                
-                HStack(spacing: 6) {
-                    Text(item.formattedSize)
-                    Text("•")
-                    Text(pageInfoText)
-                }
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.7))
-            }
-            
-            Spacer()
-            
-            // Book Mode (Two Pages Side-by-Side) Toggle & Options
-            Menu {
-                ForEach(PDFReadingMode.allCases) { mode in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            readingMode = mode
-                            if mode.isBookMode {
-                                syncCurrentSpread()
-                            }
-                        }
-                    } label: {
-                        Label(
-                            mode.localizedTitle,
-                            systemImage: readingMode == mode ? "checkmark" : mode.iconName
-                        )
-                    }
-                }
-            } label: {
-                Image(systemName: isBookMode ? "book.fill" : "book")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(isBookMode ? Color.blue : Color.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            } primaryAction: {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    readingMode = isBookMode ? .continuous : .book
-                    if readingMode.isBookMode {
-                        syncCurrentSpread()
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isBookMode ? String(localized: "Switch to Single Page View", comment: "Accessibility label") : String(localized: "Switch to Book View", comment: "Accessibility label"))
-            
-            Button {
-                FavoritesManager.shared.toggleFavorite(item)
-            } label: {
-                Image(systemName: FavoritesManager.shared.isFavorite(item) ? "heart.fill" : "heart")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(FavoritesManager.shared.isFavorite(item) ? Color.red : Color.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(FavoritesManager.shared.isFavorite(item) ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite"))
-            
-            if let localFileURL {
-                ShareLink(item: localFileURL, preview: SharePreview(item.name)) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color.black.opacity(0.6))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Share Document", comment: "Accessibility label to share document"))
-            }
+    /// Navigates to the next PDF document in the queue with cyclic wrapping.
+    private func goToNextDocument() {
+        guard !documents.isEmpty else { return }
+        let nextIndex = (currentIndex + 1) % documents.count
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            currentItem = documents[nextIndex]
+            resetDocumentState()
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(
-                colors: [Color.black.opacity(0.75), Color.black.opacity(0.0)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .top)
-        )
     }
     
-    // MARK: - Bottom HUD
+    /// Navigates to the previous PDF document in the queue with cyclic wrapping.
+    private func goToPreviousDocument() {
+        guard !documents.isEmpty else { return }
+        let prevIndex = (currentIndex - 1 + documents.count) % documents.count
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            currentItem = documents[prevIndex]
+            resetDocumentState()
+        }
+    }
     
-    /// Docked translucent status pill displaying the active page numbers and document length.
-    private var bottomHUD: some View {
-        Text(pageInfoText)
-            .font(.system(size: 12, weight: .semibold))
-            .monospacedDigit()
-            .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(
-                Capsule().stroke(Color.white.opacity(0.2), lineWidth: 0.5)
-            )
-            .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 20)
-            .background(
-                LinearGradient(
-                    colors: [Color.black.opacity(0.0), Color.black.opacity(0.85)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea(edges: .bottom)
-            )
+    /// Resets transient reader state before loading a newly switched document.
+    private func resetDocumentState() {
+        document = nil
+        localFileURL = nil
+        isLoading = true
+        errorMessage = nil
+        currentPage = 1
+        endVisiblePage = 1
+        totalPages = 1
+        currentSpreadIndex = 0
+        bytesReceived = 0
+        totalBytes = 0
+        lastReportedBytes = 0
     }
     
     // MARK: - Loading Overlay
@@ -428,20 +390,20 @@ struct PDFDetailView: View {
                     .progressViewStyle(.linear)
                     .frame(width: 200)
                     .tint(.white)
-                Text("\(Int(progress * 100))% • \(item.formattedSize)")
+                Text("\(Int(progress * 100))% • \(currentItem.formattedSize)")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
             } else {
                 ProgressView()
                     .tint(.white)
                     .scaleEffect(1.4)
-                Text(item.name)
+                Text(currentItem.name)
                     .font(.headline)
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.horizontal, 32)
-                Text(item.formattedSize)
+                Text(currentItem.formattedSize)
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -502,7 +464,7 @@ struct PDFDetailView: View {
         
         // Asynchronously generate or upgrade the thumbnail from the in-memory document while reading
         Task {
-            await manager.upgradePDFThumbnail(for: item, from: doc)
+            await manager.upgradePDFThumbnail(for: currentItem, from: doc)
         }
     }
     
@@ -516,7 +478,7 @@ struct PDFDetailView: View {
         lastReportedBytes = 0
         
         // Check if localURL is available
-        if let local = item.localURL, FileManager.default.fileExists(atPath: local.path) {
+        if let local = currentItem.localURL, FileManager.default.fileExists(atPath: local.path) {
             self.localFileURL = local
             if let doc = PDFDocument(url: local) {
                 onDocumentLoaded(doc)
@@ -525,8 +487,8 @@ struct PDFDetailView: View {
         }
         
         // Check if cached locally in documentsDirectory
-        if MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let cachedURL = MediaCacheManager.shared.localDocumentURL(for: item)
+        if MediaCacheManager.shared.hasCachedDocument(for: currentItem) {
+            let cachedURL = MediaCacheManager.shared.localDocumentURL(for: currentItem)
             if let doc = PDFDocument(url: cachedURL) {
                 self.localFileURL = cachedURL
                 onDocumentLoaded(doc)
@@ -536,7 +498,7 @@ struct PDFDetailView: View {
         
         // Fetch/download via manager
         do {
-            let url = try await manager.fetchDocumentURL(for: item) { received, total in
+            let url = try await manager.fetchDocumentURL(for: currentItem) { received, total in
                 Task { @MainActor in
                     if received == total || (received - self.lastReportedBytes) > 131_072 {
                         self.bytesReceived = received

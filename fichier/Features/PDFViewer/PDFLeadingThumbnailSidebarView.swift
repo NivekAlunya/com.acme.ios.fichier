@@ -81,9 +81,7 @@ public struct PDFLeadingThumbnailSidebarView: View {
                 proxy.scrollTo(currentPage, anchor: .center)
             }
             .onChange(of: currentPage) { _, newPage in
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    proxy.scrollTo(newPage, anchor: .center)
-                }
+                proxy.scrollTo(newPage, anchor: .center)
             }
         }
     }

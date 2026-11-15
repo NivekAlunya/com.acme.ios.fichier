@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Grid cell view displaying a media item's thumbnail, file metadata, and interactive selection badges.
 ///
@@ -24,7 +25,21 @@ struct MediaThumbnailCell: View {
     
     /// Indicates whether the gallery is currently in multi-selection editing mode.
     var isSelectionMode: Bool = false
+
+    /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
+    @State private var mediaDetail: String? = nil
     
+    /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
+    private var displayedDetail: String? {
+        if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
+            return cached
+        }
+        if item.isVideo, let rec = VideoPlaybackStore.shared.records[item.id], rec.duration > 0 {
+            return MediaFormatHelper.formatDuration(rec.duration)
+        }
+        return mediaDetail
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             MediaThumbnailView(
@@ -48,14 +63,18 @@ struct MediaThumbnailCell: View {
                 .lineLimit(1)
             HStack(spacing: 4) {
                 Text(item.formattedSize)
-                if let d = item.formattedDate {
+                if let detail = displayedDetail {
                     Text("•")
-                    Text(d)
+                    Text(detail)
                 }
             }
             .font(.system(size: 9))
             .foregroundColor(.secondary)
             .lineLimit(1)
+        }
+        .task(id: item.id) {
+            guard !item.isDirectory, displayedDetail == nil else { return }
+            mediaDetail = await MediaDetailStore.shared.resolveDetail(for: item.asMediaSourceItem)
         }
     }
     

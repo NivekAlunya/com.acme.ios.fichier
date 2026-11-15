@@ -15,6 +15,8 @@ public struct TVImageViewerOverlayView: View {
     public let isSettingsSheetPresented: Bool
     public let canNavigatePrevious: Bool
     public let canNavigateNext: Bool
+    public let frameSize: String?
+    public let fileSize: Int64
     public let initialFocusTarget: TVImageViewerFocusTarget
     public let onFocusChanged: ((TVImageViewerFocusTarget?) -> Void)?
     public let onPrevious: () -> Void
@@ -33,6 +35,8 @@ public struct TVImageViewerOverlayView: View {
         isSettingsSheetPresented: Bool = false,
         canNavigatePrevious: Bool,
         canNavigateNext: Bool,
+        frameSize: String? = nil,
+        fileSize: Int64 = 0,
         initialFocusTarget: TVImageViewerFocusTarget = .toggleSlideshow,
         onFocusChanged: ((TVImageViewerFocusTarget?) -> Void)? = nil,
         onPrevious: @escaping () -> Void,
@@ -48,6 +52,8 @@ public struct TVImageViewerOverlayView: View {
         self.isSettingsSheetPresented = isSettingsSheetPresented
         self.canNavigatePrevious = canNavigatePrevious
         self.canNavigateNext = canNavigateNext
+        self.frameSize = frameSize
+        self.fileSize = fileSize
         self.initialFocusTarget = initialFocusTarget
         self.onFocusChanged = onFocusChanged
         self.onPrevious = onPrevious
@@ -134,6 +140,7 @@ public struct TVImageViewerOverlayView: View {
             .accessibilityIdentifier("image_close_button")
 
             VStack(alignment: .leading, spacing: 4) {
+                // Line 1: image name
                 Text(title)
                     .font(.title3)
                     .fontWeight(.semibold)
@@ -141,9 +148,24 @@ public struct TVImageViewerOverlayView: View {
                     .truncationMode(.middle)
                     .foregroundStyle(.white)
 
-                Text("\(currentIndex + 1) of \(totalCount)")
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.7))
+                // Line 2: rest of the information
+                HStack(spacing: 8) {
+                    Text("\(currentIndex + 1) of \(totalCount)")
+
+                    if fileSize > 0 {
+                        Text("•")
+                            .foregroundStyle(.white.opacity(0.4))
+                        Text(MediaFormatHelper.formatByteCount(fileSize))
+                    }
+
+                    if let frameSize, !frameSize.isEmpty {
+                        Text("•")
+                            .foregroundStyle(.white.opacity(0.4))
+                        Text(frameSize)
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.7))
             }
 
             Spacer()

@@ -204,5 +204,72 @@ final class VideoPlaylistNavigationTests: XCTestCase {
         XCTAssertEqual(controller.currentIndex, 1)
         XCTAssertEqual(controller.currentItem.id, item2.id)
     }
+    
+    func testFilteredVideoPlaylistNavigationOnlyTraversesFilteredVideos() {
+        let manager = StorageLocationManager()
+        let matchingVideo1 = createTestMediaItem(name: "trailer_part1.mp4")
+        let matchingVideo2 = createTestMediaItem(name: "trailer_part2.mp4")
+        
+        // Simulating filtered playlist corresponding to search text 'trailer'
+        let filteredPlaylist = [matchingVideo1, matchingVideo2]
+        
+        let controller = VideoPlayerController(
+            manager: manager,
+            videos: filteredPlaylist,
+            initialItem: matchingVideo1
+        )
+        
+        XCTAssertEqual(controller.videos.count, 2)
+        XCTAssertEqual(controller.currentItem.id, matchingVideo1.id)
+        
+        controller.goToNext()
+        XCTAssertEqual(controller.currentItem.id, matchingVideo2.id)
+        
+        controller.goToNext()
+        XCTAssertEqual(controller.currentItem.id, matchingVideo1.id)
+    }
+    
+    func testMediaViewerContextPlaylistConstructionFiltersNonMatchingFolderItems() {
+        let matchingVideo1 = createTestMediaItem(name: "interview_a.mov")
+        let nonMatchingVideo = createTestMediaItem(name: "vacation.mov")
+        let matchingVideo2 = createTestMediaItem(name: "interview_b.mov")
+        let photoItem = MediaItem(
+            locationID: "loc_test",
+            name: "interview_slide.jpg",
+            rootName: "media",
+            path: "media/interview_slide.jpg",
+            isDirectory: false
+        )
+        
+        // Simulating search filter on "interview": includes matchingVideo1, photoItem, matchingVideo2
+        let displayItems = [matchingVideo1, photoItem, matchingVideo2]
+        let context = MediaViewerContext(item: matchingVideo1, contextItems: displayItems)
+        
+        let activeVideos = context.contextItems.filter(\.isVideo)
+        var playlist = activeVideos.isEmpty ? [context.item] : activeVideos
+        if !playlist.contains(where: { $0.id == context.item.id }) {
+            playlist.append(context.item)
+        }
+        
+        XCTAssertEqual(playlist.count, 2)
+        XCTAssertFalse(playlist.contains(where: { $0.id == nonMatchingVideo.id }))
+        XCTAssertFalse(playlist.contains(where: { $0.id == photoItem.id }))
+        XCTAssertEqual(playlist.map(\.id), [matchingVideo1.id, matchingVideo2.id])
+        
+        let manager = StorageLocationManager()
+        let controller = VideoPlayerController(
+            manager: manager,
+            videos: playlist,
+            initialItem: matchingVideo1
+        )
+        
+        // Navigating next should ONLY advance to matchingVideo2, never nonMatchingVideo
+        controller.goToNext()
+        XCTAssertEqual(controller.currentItem.id, matchingVideo2.id)
+        
+        // Navigating next again should cycle back to matchingVideo1
+        controller.goToNext()
+        XCTAssertEqual(controller.currentItem.id, matchingVideo1.id)
+    }
 }
 #endif

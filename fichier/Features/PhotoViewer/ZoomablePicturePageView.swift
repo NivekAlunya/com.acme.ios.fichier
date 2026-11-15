@@ -23,11 +23,30 @@ struct ZoomablePicturePageView: View {
     /// Single tap callback forwarded to toggle HUD visibility.
     let onTap: () -> Void
     
+    /// Optional pre-decoded image provided by parent slideshow preloader.
+    var initialImage: UIImage? = nil
+    
     /// Successfully downloaded and decoded full-resolution image.
     @State private var image: UIImage?
     
     /// Indicates whether image loading is currently in flight.
-    @State private var isLoading = true
+    @State private var isLoading: Bool
+    
+    init(
+        manager: StorageLocationManager,
+        item: MediaItem,
+        initialImage: UIImage? = nil,
+        onImageLoaded: @escaping (UIImage) -> Void,
+        onTap: @escaping () -> Void
+    ) {
+        self.manager = manager
+        self.item = item
+        self.initialImage = initialImage
+        self.onImageLoaded = onImageLoaded
+        self.onTap = onTap
+        self._image = State(initialValue: initialImage)
+        self._isLoading = State(initialValue: initialImage == nil)
+    }
     
     var body: some View {
         ZStack {
@@ -50,6 +69,11 @@ struct ZoomablePicturePageView: View {
             }
         }
         .task(id: item.id) {
+            if let initialImage, self.image == nil {
+                self.image = initialImage
+                onImageLoaded(initialImage)
+                self.isLoading = false
+            }
             if let img = await manager.downloadImage(for: item) {
                 self.image = img
                 onImageLoaded(img)

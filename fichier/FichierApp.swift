@@ -9,7 +9,7 @@ import FichierKit
 
 /// Main entry point for the Fichier application.
 ///
-/// Launches the primary `WindowGroup` scene embedding `RootSMBView`, the root visual coordinator.
+/// Launches the primary `WindowGroup` scene embedding `MediaBrowserSplitView`, the root visual coordinator.
 @main
 struct FichierApp: App {
     init() {
@@ -27,7 +27,7 @@ struct FichierApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootSMBView()
+            MediaBrowserSplitView()
         }
     }
 }
