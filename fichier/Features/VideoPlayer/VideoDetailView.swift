@@ -5,6 +5,7 @@
 
 import SwiftUI
 import AVKit
+import FichierKit
 
 /// Full-screen video detail presentation view hosting custom hardware-accelerated playback.
 ///

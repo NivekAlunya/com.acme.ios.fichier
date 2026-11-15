@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import FichierKit
 
 /// Primary sidebar view displaying the list of all configured and discovered storage locations.
 ///

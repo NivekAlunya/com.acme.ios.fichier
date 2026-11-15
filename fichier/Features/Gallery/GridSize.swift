@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Preset grid density sizing options for displaying media in `MediaGridView`.
 ///

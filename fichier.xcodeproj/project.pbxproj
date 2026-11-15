@@ -227,6 +227,7 @@
 				D20000000000000000000005 /* Frameworks */,
 				D20000000000000000000006 /* Resources */,
 				D20000000000000000000015 /* Embed Frameworks */,
+				D14BDE20309B4039007D8134 /* Run SwiftLint */,
 			);
 			buildRules = (
 			);

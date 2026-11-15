@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Modal bottom sheet presenting detailed EXIF camera settings, optical metadata, and file attributes.
 ///

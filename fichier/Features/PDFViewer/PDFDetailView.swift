@@ -6,6 +6,7 @@
 #if !os(tvOS)
 import SwiftUI
 import PDFKit
+import FichierKit
 
 /// Full-screen document viewer presenting PDF files with continuous and horizontal book spread modes.
 ///

@@ -6,6 +6,7 @@
 #if DEBUG && canImport(XCTest)
 import XCTest
 import PDFKit
+import FichierKit
 @testable import fichier
 
 final class MediaCacheManagerTests: XCTestCase {

@@ -117,7 +117,7 @@ public final class TVVideoPlayerViewModel {
     public init(
         initialItem: MediaSourceItem,
         videos: [MediaSourceItem],
-        playbackStore: any VideoPlaybackStoreProtocol = DefaultVideoPlaybackStore.shared,
+        playbackStore: any VideoPlaybackStoreProtocol = VideoPlaybackStore.shared,
         resolver: any MediaSourceResolverProtocol = DefaultMediaSourceResolver.shared,
         remoteCommandBridge: any TVRemoteCommandHandling = TVSystemRemoteCommandBridge(),
         thumbnailProvider: any TVSeekThumbnailProviding = TVSeekThumbnailService(),

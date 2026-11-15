@@ -28,6 +28,9 @@ struct MediaSelectionBottomBar: View {
     /// Flag controlling visibility of the "Save to Photos" button (hidden when already in Photos library).
     var showSaveToPhotos: Bool = true
     
+    /// Flag controlling visibility of file management buttons (Move, Delete).
+    var showFileManagement: Bool = false
+    
     /// Optional closure triggered when the user cancels an ongoing batch operation.
     var onCancel: (() -> Void)?
     
@@ -39,6 +42,12 @@ struct MediaSelectionBottomBar: View {
     
     /// Handler invoked to export selected items to the system activity share sheet.
     let onShare: () -> Void
+    
+    /// Handler invoked to move selected items to another folder.
+    var onMove: (() -> Void)?
+    
+    /// Handler invoked to delete (trash) selected items.
+    var onDelete: (() -> Void)?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -108,6 +117,46 @@ struct MediaSelectionBottomBar: View {
                     .disabled(selectedCount == 0 || isProcessing)
                     .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save selected items to Photos"))
                     .accessibilityHint(String(localized: "Downloads and exports \(selectedCount) selected items to your photo library", comment: "Accessibility hint for batch save"))
+                }
+                
+                if showFileManagement {
+                    Spacer()
+                    
+                    // 3. Move Button
+                    Button {
+                        onMove?()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 20))
+                                .foregroundStyle(selectedCount > 0 ? Color.accentColor : Color.secondary)
+                            Text(String(localized: "Move", comment: "Action button to move selected items"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
+                        }
+                    }
+                    .disabled(selectedCount == 0 || isProcessing)
+                    .accessibilityLabel(String(localized: "Move Items", comment: "Accessibility label to move selected items"))
+                    .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to another folder", comment: "Accessibility hint for batch move"))
+                    
+                    Spacer()
+                    
+                    // 4. Delete / Trash Button
+                    Button {
+                        onDelete?()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 20))
+                                .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
+                            Text(String(localized: "Delete", comment: "Action button to delete/trash selected items"))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
+                        }
+                    }
+                    .disabled(selectedCount == 0 || isProcessing)
+                    .accessibilityLabel(String(localized: "Delete Items", comment: "Accessibility label to delete selected items"))
+                    .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to the trash", comment: "Accessibility hint for batch delete"))
                 }
                 
                 Spacer()

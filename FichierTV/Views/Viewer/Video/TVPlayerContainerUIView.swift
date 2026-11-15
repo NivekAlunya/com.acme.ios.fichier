@@ -8,13 +8,16 @@ import AVFoundation
 
 /// `UIView` backed directly by `AVPlayerLayer` so video bounds scale automatically with SwiftUI layout.
 public final class TVPlayerContainerUIView: UIView {
-    public override class var layerClass: AnyClass {
+    public override static var layerClass: AnyClass {
         AVPlayerLayer.self
     }
 
     public var playerLayer: AVPlayerLayer {
-        // Safe cast guaranteed by `layerClass` override.
-        layer as! AVPlayerLayer
+        guard let avPlayerLayer = layer as? AVPlayerLayer else {
+            assertionFailure("TVPlayerContainerUIView layer is not an AVPlayerLayer")
+            return AVPlayerLayer()
+        }
+        return avPlayerLayer
     }
 
     public override init(frame: CGRect) {
