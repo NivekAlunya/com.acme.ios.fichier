@@ -58,6 +58,21 @@ struct FolderPickerSheetView: View {
     
     /// Validates whether a given folder can accept the items to move.
     private func isDestinationValid(_ folder: MediaItem) -> Bool {
+        guard !itemsToMove.isEmpty else { return false }
+        
+        // Ensure destination matches storage type and share boundary
+        if folder.localURL != nil {
+            guard itemsToMove.allSatisfy({ $0.localURL != nil }) else { return false }
+        } else if !folder.shareName.isEmpty {
+            guard itemsToMove.allSatisfy({
+                $0.localURL == nil && $0.shareName == folder.shareName && $0.locationID == folder.locationID
+            }) else {
+                return false
+            }
+        } else {
+            return false
+        }
+        
         // 1. Cannot move directly onto an item that is being moved
         if itemsToMove.contains(where: { $0.id == folder.id }) {
             return false

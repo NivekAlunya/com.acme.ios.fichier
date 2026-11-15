@@ -518,5 +518,81 @@ final class FileOperationsTests: XCTestCase {
         try await actor.deleteItems([item])
         XCTAssertFalse(FileManager.default.fileExists(atPath: testFile.path))
     }
+
+    @MainActor
+    func testMoveItemsCrossStorageBoundaryFails() async {
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: LocalStorageActor())
+
+        let localItem = MediaItem(
+            locationID: "local_loc",
+            name: "file.txt",
+            path: "file.txt",
+            isDirectory: false,
+            localURL: tempDirectory.appendingPathComponent("file.txt")
+        )
+        let smbItemA = MediaItem(
+            locationID: "server1",
+            name: "remote.jpg",
+            rootName: "ShareA",
+            path: "remote.jpg",
+            isDirectory: false
+        )
+        let smbDestB = MediaItem(
+            locationID: "server1",
+            name: "DestFolder",
+            rootName: "ShareB",
+            path: "DestFolder",
+            isDirectory: true
+        )
+        let localDest = MediaItem(
+            locationID: "local_loc",
+            name: "LocalDest",
+            path: "LocalDest",
+            isDirectory: true,
+            localURL: tempDirectory.appendingPathComponent("LocalDest")
+        )
+
+        // 1. Moving local item to SMB destination must throw unsupportedStorage
+        do {
+            try await manager.moveItems([localItem], to: smbDestB)
+            XCTFail("Expected unsupportedStorage error")
+        } catch let error as FileOperationError {
+            if case .unsupportedStorage = error {
+                // Expected
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        // 2. Moving SMB item from ShareA to ShareB must throw unsupportedStorage
+        do {
+            try await manager.moveItems([smbItemA], to: smbDestB)
+            XCTFail("Expected unsupportedStorage error")
+        } catch let error as FileOperationError {
+            if case .unsupportedStorage = error {
+                // Expected
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        // 3. Moving SMB item to Local destination must throw unsupportedStorage
+        do {
+            try await manager.moveItems([smbItemA], to: localDest)
+            XCTFail("Expected unsupportedStorage error")
+        } catch let error as FileOperationError {
+            if case .unsupportedStorage = error {
+                // Expected
+            } else {
+                XCTFail("Unexpected error: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 #endif
