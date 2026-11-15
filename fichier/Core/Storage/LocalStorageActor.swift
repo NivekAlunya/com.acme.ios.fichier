@@ -358,4 +358,155 @@ public actor LocalStorageActor {
             isICloud: isICloud
         )
     }
+    
+    // MARK: - File Management Operations
+    
+    /// Creates a new subfolder inside a local or iCloud directory.
+    ///
+    /// - Parameters:
+    ///   - name: The user-specified folder name.
+    ///   - parentFolder: The parent directory `MediaItem`.
+    ///   - locationID: The owning storage location identifier.
+    /// - Returns: The newly created folder `MediaItem`.
+    /// - Throws: `FileOperationError` or filesystem errors.
+    public func createFolder(
+        named name: String,
+        in parentFolder: MediaItem,
+        locationID: String
+    ) throws -> MediaItem {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("/"), !trimmed.contains(":") else {
+            throw FileOperationError.invalidName(name)
+        }
+        
+        guard let parentURL = parentFolder.localURL else {
+            throw FileOperationError.missingURL(parentFolder.name)
+        }
+        
+        let newFolderURL = parentURL.appendingPathComponent(trimmed, isDirectory: true)
+        
+        if FileManager.default.fileExists(atPath: newFolderURL.path) {
+            throw FileOperationError.itemAlreadyExists(trimmed)
+        }
+        
+        try FileManager.default.createDirectory(at: newFolderURL, withIntermediateDirectories: false, attributes: nil)
+        
+        let relativePath = parentFolder.path.isEmpty ? trimmed : "\(parentFolder.path)/\(trimmed)"
+        return MediaItem(
+            locationID: locationID,
+            name: trimmed,
+            rootName: parentFolder.rootName,
+            path: relativePath,
+            isDirectory: true,
+            size: 0,
+            modifiedDate: Date(),
+            children: nil,
+            localURL: newFolderURL
+        )
+    }
+    
+    /// Moves a collection of media items or subfolders to the macOS/iOS Trash.
+    ///
+    /// - Parameter items: The items to remove.
+    /// - Throws: `FileOperationError` or filesystem errors.
+    public func deleteItems(_ items: [MediaItem]) throws {
+        let fileManager = FileManager.default
+        for item in items {
+            guard let url = item.localURL else {
+                throw FileOperationError.missingURL(item.name)
+            }
+            try fileManager.trashItem(at: url, resultingItemURL: nil)
+        }
+    }
+    
+    /// Moves a collection of media items or folders into a target destination folder.
+    ///
+    /// - Parameters:
+    ///   - items: The items to move.
+    ///   - destinationFolder: The destination folder `MediaItem`.
+    /// - Throws: `FileOperationError` or filesystem errors.
+    public func moveItems(_ items: [MediaItem], to destinationFolder: MediaItem) throws {
+        guard let destURL = destinationFolder.localURL else {
+            throw FileOperationError.missingURL(destinationFolder.name)
+        }
+        
+        let fileManager = FileManager.default
+        let standardizedDestPath = destURL.standardizedFileURL.path
+        
+        for item in items {
+            guard let sourceURL = item.localURL else {
+                throw FileOperationError.missingURL(item.name)
+            }
+            
+            let standardizedSourcePath = sourceURL.standardizedFileURL.path
+            
+            // Cannot move into self or child folder
+            if item.isDirectory {
+                if standardizedDestPath == standardizedSourcePath ||
+                   standardizedDestPath.hasPrefix(standardizedSourcePath + "/") {
+                    throw FileOperationError.cannotMoveIntoSelf
+                }
+            }
+            
+            // Skip if already in the destination folder
+            let sourceParentPath = sourceURL.deletingLastPathComponent().standardizedFileURL.path
+            if sourceParentPath == standardizedDestPath {
+                continue
+            }
+            
+            let targetURL = destURL.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: item.isDirectory)
+            if fileManager.fileExists(atPath: targetURL.path) {
+                throw FileOperationError.itemAlreadyExists(sourceURL.lastPathComponent)
+            }
+            
+            try fileManager.moveItem(at: sourceURL, to: targetURL)
+        }
+    }
+    
+    /// Recursively lists all subfolders within a local or iCloud folder for destination picking.
+    ///
+    /// - Parameters:
+    ///   - folder: The parent folder `MediaItem`.
+    ///   - locationID: Owning storage location identifier.
+    /// - Returns: An array of subfolder `MediaItem`s with their children recursively populated.
+    public func listSubfoldersRecursively(at folder: MediaItem, locationID: String) throws -> [MediaItem] {
+        guard let folderURL = folder.localURL else { return [] }
+        
+        let keys: [URLResourceKey] = [.nameKey, .isDirectoryKey, .contentModificationDateKey]
+        let fileManager = FileManager.default
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: folderURL,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        
+        var subfolders: [MediaItem] = []
+        for url in contents {
+            let resourceValues = try? url.resourceValues(forKeys: Set(keys))
+            guard resourceValues?.isDirectory == true else { continue }
+            
+            let name = resourceValues?.name ?? url.lastPathComponent
+            let date = resourceValues?.contentModificationDate
+            let relativePath = folder.path.isEmpty ? name : "\(folder.path)/\(name)"
+            
+            var item = MediaItem(
+                locationID: locationID,
+                name: name,
+                rootName: folder.rootName,
+                path: relativePath,
+                isDirectory: true,
+                size: 0,
+                modifiedDate: date,
+                children: nil,
+                localURL: url
+            )
+            item.children = try? listSubfoldersRecursively(at: item, locationID: locationID)
+            subfolders.append(item)
+        }
+        
+        subfolders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return subfolders
+    }
 }

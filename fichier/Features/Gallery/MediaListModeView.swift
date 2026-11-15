@@ -19,6 +19,8 @@ struct MediaListModeView: View {
     let onToggleSelection: (MediaItem) -> Void
     let onEnterSelectionMode: (MediaItem) -> Void
     let onRefresh: () async -> Void
+    var onRequestMove: ((MediaItem) -> Void)?
+    var onRequestDelete: ((MediaItem) -> Void)?
     
     init(
         manager: StorageLocationManager,
@@ -31,7 +33,9 @@ struct MediaListModeView: View {
         onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void,
         onToggleSelection: @escaping (MediaItem) -> Void,
         onEnterSelectionMode: @escaping (MediaItem) -> Void,
-        onRefresh: @escaping () async -> Void
+        onRefresh: @escaping () async -> Void,
+        onRequestMove: ((MediaItem) -> Void)? = nil,
+        onRequestDelete: ((MediaItem) -> Void)? = nil
     ) {
         self.manager = manager
         self.folders = folders
@@ -44,6 +48,8 @@ struct MediaListModeView: View {
         self.onToggleSelection = onToggleSelection
         self.onEnterSelectionMode = onEnterSelectionMode
         self.onRefresh = onRefresh
+        self.onRequestMove = onRequestMove
+        self.onRequestDelete = onRequestDelete
     }
     
     private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
@@ -73,6 +79,21 @@ struct MediaListModeView: View {
                                         .foregroundColor(.secondary)
                                 }
                             }
+                            .contextMenu(isSelectionMode ? nil : ContextMenu {
+                                if manager.canManageItem(subfolder) {
+                                    Button {
+                                        onRequestMove?(subfolder)
+                                    } label: {
+                                        Label(String(localized: "Move to Folder...", comment: "Context menu action to move folder"), systemImage: "folder")
+                                    }
+                                    
+                                    Button(role: .destructive) {
+                                        onRequestDelete?(subfolder)
+                                    } label: {
+                                        Label(String(localized: "Delete", comment: "Context menu action to delete folder"), systemImage: "trash")
+                                    }
+                                }
+                            })
                         }
                     }
                     .id("topOfList")
@@ -103,6 +124,36 @@ struct MediaListModeView: View {
                                     }
                                 }
                             )
+                            .contextMenu(isSelectionMode ? nil : ContextMenu {
+                                Button {
+                                    onEnterSelectionMode(pic)
+                                } label: {
+                                    Label(String(localized: "Select", comment: "Context menu action to select item"), systemImage: "checkmark.circle")
+                                }
+                                
+                                if manager.canManageItem(pic) {
+                                    Button {
+                                        onRequestMove?(pic)
+                                    } label: {
+                                        Label(String(localized: "Move to Folder...", comment: "Context menu action to move item"), systemImage: "folder")
+                                    }
+                                    
+                                    Button(role: .destructive) {
+                                        onRequestDelete?(pic)
+                                    } label: {
+                                        Label(String(localized: "Delete", comment: "Context menu action to delete item"), systemImage: "trash")
+                                    }
+                                }
+                                
+                                Button {
+                                    FavoritesManager.shared.toggleFavorite(pic)
+                                } label: {
+                                    Label(
+                                        FavoritesManager.shared.isFavorite(pic) ? String(localized: "Remove from Favorites", comment: "Context menu unfavorite") : String(localized: "Add to Favorites", comment: "Context menu favorite"),
+                                        systemImage: FavoritesManager.shared.isFavorite(pic) ? "heart.slash" : "heart"
+                                    )
+                                }
+                            })
                         }
                     }
                     .id(folders.isEmpty ? "topOfList" : "picturesSection")

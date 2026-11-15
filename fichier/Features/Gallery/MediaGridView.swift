@@ -110,6 +110,21 @@ struct MediaGridView: View {
     /// Controls presentation of the application settings sheet on compact size classes.
     @State private var showingSettings = false
     
+    /// Presentation flag for the "New Folder" alert prompt.
+    @State private var isShowingNewFolderAlert = false
+    
+    /// User input text buffer for a new folder name.
+    @State private var newFolderName = ""
+    
+    /// Items selected or contextualized for moving to another folder.
+    @State private var itemsPendingMove: [MediaItem]?
+    
+    /// Items pending user confirmation for deletion to the system Trash.
+    @State private var itemsPendingDelete: [MediaItem]?
+    
+    /// Error message captured during file management actions.
+    @State private var fileOpErrorMessage: String?
+    
     /// Unique identity token incremented or refreshed to force complete invalidation and reload of visible thumbnail cells.
     @State private var thumbnailReloadToken = UUID()
     
@@ -264,6 +279,12 @@ struct MediaGridView: View {
                                     } else {
                                         await manager.refreshSharesAndFolders()
                                     }
+                                },
+                                onRequestMove: { item in
+                                    itemsPendingMove = [item]
+                                },
+                                onRequestDelete: { item in
+                                    itemsPendingDelete = [item]
                                 }
                             )
                             #if !os(tvOS)
@@ -294,6 +315,12 @@ struct MediaGridView: View {
                                     } else {
                                         await manager.refreshSharesAndFolders()
                                     }
+                                },
+                                onRequestMove: { item in
+                                    itemsPendingMove = [item]
+                                },
+                                onRequestDelete: { item in
+                                    itemsPendingDelete = [item]
                                 }
                             )
                             #if !os(tvOS)
@@ -315,10 +342,17 @@ struct MediaGridView: View {
                     isProcessing: isBatchProcessing,
                     progressMessage: batchProgressMessage,
                     showSaveToPhotos: manager.currentLocation?.kind != .photos,
+                    showFileManagement: manager.canManageCurrentFolder,
                     onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
-                    onShare: { batchShare() }
+                    onShare: { batchShare() },
+                    onMove: {
+                        itemsPendingMove = Array(selectedItems)
+                    },
+                    onDelete: {
+                        itemsPendingDelete = Array(selectedItems)
+                    }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -353,6 +387,74 @@ struct MediaGridView: View {
         }
         .sheet(isPresented: $showingSettings) {
             AppSettingsView()
+        }
+        .sheet(isPresented: Binding(
+            get: { itemsPendingMove != nil },
+            set: { if !$0 { itemsPendingMove = nil } }
+        )) {
+            if let items = itemsPendingMove {
+                FolderPickerSheetView(
+                    manager: manager,
+                    itemsToMove: items,
+                    onMoveTo: { destination in
+                        itemsPendingMove = nil
+                        executeMove(items: items, to: destination)
+                    },
+                    onDismiss: {
+                        itemsPendingMove = nil
+                    }
+                )
+            }
+        }
+        .confirmationDialog(
+            deleteConfirmationTitle,
+            isPresented: Binding(
+                get: { itemsPendingDelete != nil },
+                set: { if !$0 { itemsPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Move to Trash", comment: "Confirm move to trash button"), role: .destructive) {
+                if let items = itemsPendingDelete {
+                    itemsPendingDelete = nil
+                    Task {
+                        await executeDelete(items: items)
+                    }
+                }
+            }
+            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
+                itemsPendingDelete = nil
+            }
+        } message: {
+            Text(String(localized: "Items moved to the Trash can be restored from the Files app Trash.", comment: "Explanation of trash behavior"))
+        }
+        .alert(
+            String(localized: "New Folder", comment: "Alert title for creating new folder"),
+            isPresented: $isShowingNewFolderAlert
+        ) {
+            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $newFolderName)
+            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
+            Button(String(localized: "Create", comment: "Create button")) {
+                executeCreateFolder()
+            }
+            .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } message: {
+            if let folder = manager.selectedFolder {
+                Text(String(localized: "Create a subfolder inside '\(folder.name)'.", comment: "Prompt explaining where folder will be created"))
+            }
+        }
+        .alert(
+            String(localized: "File Operation Failed", comment: "Error alert title"),
+            isPresented: Binding(
+                get: { fileOpErrorMessage != nil },
+                set: { if !$0 { fileOpErrorMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "OK", comment: "Dismiss button"), role: .cancel) {}
+        } message: {
+            if let fileOpErrorMessage {
+                Text(fileOpErrorMessage)
+            }
         }
         .toolbar {
             if isSelectionMode {
@@ -391,6 +493,19 @@ struct MediaGridView: View {
                         .tint(.blue)
                         .disabled(manager.parentFolder == nil)
                         .accessibilityLabel(parentFolderAccessibilityLabel)
+                        
+                        if manager.canManageCurrentFolder {
+                            Button {
+                                newFolderName = ""
+                                isShowingNewFolderAlert = true
+                            } label: {
+                                Image(systemName: "folder.badge.plus")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.blue)
+                            }
+                            .tint(.blue)
+                            .accessibilityLabel(String(localized: "New Folder", comment: "Accessibility label for create folder button"))
+                        }
                         
                         if !displayPictures.isEmpty {
                             Button {
@@ -966,6 +1081,79 @@ struct MediaGridView: View {
             return try? await manager.fetchVideoURL(for: item)
         } else {
             return await manager.downloadImage(for: item)
+        }
+    }
+    
+    // MARK: - File Management Operations
+    
+    /// Title presented inside the trash deletion confirmation dialog.
+    private var deleteConfirmationTitle: String {
+        guard let items = itemsPendingDelete, !items.isEmpty else { return "" }
+        if items.count == 1, let first = items.first {
+            return String(localized: "Move '\(first.name)' to Trash?", comment: "Delete single item confirmation title")
+        }
+        return String(localized: "Move \(items.count) items to Trash?", comment: "Delete multiple items confirmation title")
+    }
+    
+    /// Executes deletion (move to Trash) across selected or targeted items.
+    private func executeDelete(items: [MediaItem]) async {
+        do {
+            try await manager.deleteItems(items)
+            if isSelectionMode {
+                withAnimation {
+                    isSelectionMode = false
+                    selectedItems.removeAll()
+                }
+            }
+            showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
+        } catch {
+            fileOpErrorMessage = error.localizedDescription
+        }
+    }
+    
+    /// Dispatches moving items to the selected destination folder.
+    private func executeMove(items: [MediaItem], to destination: MediaItem) {
+        Task {
+            do {
+                try await manager.moveItems(items, to: destination)
+                if isSelectionMode {
+                    withAnimation {
+                        isSelectionMode = false
+                        selectedItems.removeAll()
+                    }
+                }
+                let destName = destination.name.isEmpty ? destination.rootName : destination.name
+                showToastMessage(items.count == 1 ? String(localized: "Item moved to '\(destName)'", comment: "Toast when single item moved") : String(localized: "\(items.count) items moved to '\(destName)'", comment: "Toast when multiple items moved"))
+            } catch {
+                fileOpErrorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    /// Creates a new directory inside the current folder.
+    private func executeCreateFolder() {
+        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task {
+            do {
+                try await manager.createFolder(named: trimmed)
+                showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
+            } catch {
+                fileOpErrorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    /// Displays a transient animated notification pill at the top of the gallery.
+    private func showToastMessage(_ message: String) {
+        withAnimation {
+            batchStatusToast = message
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation {
+                batchStatusToast = nil
+            }
         }
     }
 }
