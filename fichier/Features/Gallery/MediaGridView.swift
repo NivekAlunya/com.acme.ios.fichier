@@ -415,7 +415,7 @@ struct MediaGridView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button(String(localized: "Move to Trash", comment: "Confirm move to trash button"), role: .destructive) {
+            Button(deleteConfirmationButtonTitle, role: .destructive) {
                 if let items = itemsPendingDelete {
                     itemsPendingDelete = nil
                     Task {
@@ -427,7 +427,7 @@ struct MediaGridView: View {
                 itemsPendingDelete = nil
             }
         } message: {
-            Text(String(localized: "Items moved to the Trash can be restored from the Files app Trash.", comment: "Explanation of trash behavior"))
+            Text(deleteConfirmationMessage)
         }
         .alert(
             String(localized: "New Folder", comment: "Alert title for creating new folder"),
@@ -441,7 +441,8 @@ struct MediaGridView: View {
             .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
             if let folder = manager.selectedFolder {
-                Text(String(localized: "Create a subfolder inside '\(folder.name)'.", comment: "Prompt explaining where folder will be created"))
+                let displayName = folder.name.isEmpty ? folder.rootName : folder.name
+                Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
             }
         }
         .alert(
@@ -1087,18 +1088,49 @@ struct MediaGridView: View {
     
     // MARK: - File Management Operations
     
+    /// Indicates whether the currently pending delete batch targets items on an SMB network share.
+    private var isDeletingFromSMB: Bool {
+        itemsPendingDelete?.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty }) ?? false
+    }
+    
     /// Title presented inside the trash deletion confirmation dialog.
     private var deleteConfirmationTitle: String {
         guard let items = itemsPendingDelete, !items.isEmpty else { return "" }
-        if items.count == 1, let first = items.first {
-            return String(localized: "Move '\(first.name)' to Trash?", comment: "Delete single item confirmation title")
+        if isDeletingFromSMB {
+            if items.count == 1, let first = items.first {
+                return String(localized: "Delete '\(first.name)' permanently?", comment: "Permanent delete single item confirmation title")
+            }
+            return String(localized: "Permanently delete \(items.count) items?", comment: "Permanent delete multiple items confirmation title")
+        } else {
+            if items.count == 1, let first = items.first {
+                return String(localized: "Move '\(first.name)' to Trash?", comment: "Delete single item confirmation title")
+            }
+            return String(localized: "Move \(items.count) items to Trash?", comment: "Delete multiple items confirmation title")
         }
-        return String(localized: "Move \(items.count) items to Trash?", comment: "Delete multiple items confirmation title")
     }
     
-    /// Executes deletion (move to Trash) across selected or targeted items.
+    /// Button title for confirming deletion.
+    private var deleteConfirmationButtonTitle: String {
+        if isDeletingFromSMB {
+            return String(localized: "Delete Permanently", comment: "Confirm permanent deletion button")
+        } else {
+            return String(localized: "Move to Trash", comment: "Confirm move to trash button")
+        }
+    }
+    
+    /// Message explaining the permanent or trash nature of the pending delete.
+    private var deleteConfirmationMessage: String {
+        if isDeletingFromSMB {
+            return String(localized: "This file will be permanently deleted from the network share.", comment: "Warning when deleting from SMB share")
+        } else {
+            return String(localized: "Items moved to the Trash can be restored from the Files app Trash.", comment: "Explanation of trash behavior")
+        }
+    }
+    
+    /// Executes deletion across selected or targeted items.
     private func executeDelete(items: [MediaItem]) async {
         do {
+            let wasSMB = items.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty })
             try await manager.deleteItems(items)
             if isSelectionMode {
                 withAnimation {
@@ -1106,7 +1138,11 @@ struct MediaGridView: View {
                     selectedItems.removeAll()
                 }
             }
-            showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
+            if wasSMB {
+                showToastMessage(items.count == 1 ? String(localized: "Item permanently deleted", comment: "Toast when single item permanently deleted") : String(localized: "\(items.count) items permanently deleted", comment: "Toast when multiple items permanently deleted"))
+            } else {
+                showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
+            }
         } catch {
             fileOpErrorMessage = error.localizedDescription
         }

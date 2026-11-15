@@ -348,6 +348,178 @@ actor SMBClientActor {
         return (folders, pictures)
     }
 
+    // MARK: - File Management Operations
+
+    /// Creates a new subfolder within an SMB share and returns the created `MediaItem`.
+    func createFolder(
+        named name: String,
+        inShare shareName: String,
+        atPath parentPath: String
+    ) async throws -> MediaItem {
+        try Task.checkCancellation()
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty,
+              trimmedName != ".",
+              trimmedName != "..",
+              !trimmedName.contains("/"),
+              !trimmedName.contains(":") else {
+            throw FileOperationError.invalidName(name)
+        }
+
+        let cleanParent = parentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let newFolderPath = cleanParent.isEmpty ? trimmedName : "\(cleanParent)/\(trimmedName)"
+        let connID = self.currentConnectionID
+
+        try await client.createDirectory(share: shareName, path: newFolderPath)
+
+        return MediaItem(
+            locationID: connID,
+            name: trimmedName,
+            rootName: shareName,
+            path: newFolderPath,
+            isDirectory: true,
+            size: 0,
+            modifiedDate: Date(),
+            children: nil,
+            localURL: nil
+        )
+    }
+
+    /// Permanently deletes items (files or subfolders) from the remote SMB share and evicts cached representations.
+    func deleteItems(_ items: [MediaItem]) async throws {
+        try Task.checkCancellation()
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+        guard !items.isEmpty else { return }
+
+        // Execute remote removals
+        for item in items {
+            try Task.checkCancellation()
+            try await client.removeItem(share: item.shareName, path: item.smbRelativePath)
+
+            // Evict in-memory and disk caches
+            let memoryCacheKey = "\(item.id)_thumb" as NSString
+            thumbnailCache.removeObject(forKey: memoryCacheKey)
+            fullImageCache.removeObject(forKey: "\(item.id)_full" as NSString)
+            metadataCache.removeObject(forKey: item.id as NSString)
+        }
+
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
+    }
+
+    /// Moves a collection of media items or subfolders to a target destination folder on the same SMB share.
+    func moveItems(_ items: [MediaItem], to destinationFolder: MediaItem) async throws {
+        try Task.checkCancellation()
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+        guard !items.isEmpty else { return }
+
+        let destShare = destinationFolder.shareName
+        let destPath = destinationFolder.smbRelativePath
+
+        // Pre-flight check: all items must belong to the same connection and share as destination
+        for item in items {
+            guard item.locationID == destinationFolder.locationID,
+                  item.shareName == destShare else {
+                throw FileOperationError.unsupportedStorage
+            }
+        }
+
+        var plannedMoves: [(fromPath: String, toPath: String, item: MediaItem)] = []
+        var plannedTargets = Set<String>()
+
+        for item in items {
+            let sourcePath = item.smbRelativePath
+
+            // Cannot move directory into itself or descendant
+            if item.isDirectory {
+                if destPath == sourcePath || destPath.hasPrefix(sourcePath + "/") {
+                    throw FileOperationError.cannotMoveIntoSelf
+                }
+            }
+
+            // Skip if already in destination
+            let sourceParent = (sourcePath as NSString).deletingLastPathComponent
+            let normalizedParent = (sourceParent == "." ? "" : sourceParent)
+            if normalizedParent == destPath {
+                continue
+            }
+
+            let targetPath = destPath.isEmpty ? item.name : "\(destPath)/\(item.name)"
+            if plannedTargets.contains(targetPath) {
+                throw FileOperationError.itemAlreadyExists(item.name)
+            }
+            plannedTargets.insert(targetPath)
+            plannedMoves.append((sourcePath, targetPath, item))
+        }
+
+        for move in plannedMoves {
+            try Task.checkCancellation()
+            try await client.moveItem(share: destShare, fromPath: move.fromPath, toPath: move.toPath)
+
+            // Evict in-memory and disk caches
+            let memoryCacheKey = "\(move.item.id)_thumb" as NSString
+            thumbnailCache.removeObject(forKey: memoryCacheKey)
+            fullImageCache.removeObject(forKey: "\(move.item.id)_full" as NSString)
+            metadataCache.removeObject(forKey: move.item.id as NSString)
+        }
+
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
+    }
+
+    /// Recursively lists subfolders within an SMB share for destination picking in `FolderPickerSheetView`.
+    func listSubfoldersRecursively(
+        inShare shareName: String,
+        atPath path: String,
+        rootName: String,
+        locationID: String
+    ) async throws -> [MediaItem] {
+        var visitedPaths = Set<String>()
+        return try await listSubfoldersRecursively(
+            atPath: path,
+            currentDepth: 0,
+            context: (share: shareName, root: rootName, locationID: locationID, maxDepth: 10),
+            visitedPaths: &visitedPaths
+        )
+    }
+
+    private func listSubfoldersRecursively(
+        atPath path: String,
+        currentDepth: Int,
+        context: (share: String, root: String, locationID: String, maxDepth: Int),
+        visitedPaths: inout Set<String>
+    ) async throws -> [MediaItem] {
+        guard currentDepth < context.maxDepth else { return [] }
+        try Task.checkCancellation()
+
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !visitedPaths.contains(cleanPath) else { return [] }
+        visitedPaths.insert(cleanPath)
+
+        let (subfolders, _) = try await scanFolder(shareName: context.share, at: cleanPath)
+        var result: [MediaItem] = []
+
+        for var folder in subfolders {
+            if Task.isCancelled { throw CancellationError() }
+            folder.children = try await listSubfoldersRecursively(
+                atPath: folder.smbRelativePath,
+                currentDepth: currentDepth + 1,
+                context: context,
+                visitedPaths: &visitedPaths
+            )
+            result.append(folder)
+        }
+
+        result.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return result
+    }
+
     // MARK: - Thumbnail Retrieval & Downsampling
 
     /// Fetches and downsamples a media thumbnail using a 2-tier caching hierarchy (RAM + Disk).

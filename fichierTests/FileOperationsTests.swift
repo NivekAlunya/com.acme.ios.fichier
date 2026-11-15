@@ -285,6 +285,72 @@ final class FileOperationsTests: XCTestCase {
             localURL: URL(fileURLWithPath: "/tmp/doc.pdf")
         )
         XCTAssertTrue(manager.canManageItem(localItem))
+
+        // SMB Location
+        let smbConn = SavedSMBConnection(host: "192.168.1.10", username: "user", lastConnected: Date())
+        manager.currentLocation = StorageLocation(smb: smbConn)
+        
+        let smbShareFolder = MediaItem(
+            locationID: smbConn.id,
+            name: "Media",
+            rootName: "Media",
+            path: "",
+            isDirectory: true
+        )
+        manager.selectedFolder = smbShareFolder
+        XCTAssertTrue(manager.canManageCurrentFolder)
+        
+        let smbFile = MediaItem(
+            locationID: smbConn.id,
+            name: "movie.mp4",
+            rootName: "Media",
+            path: "movie.mp4",
+            isDirectory: false
+        )
+        XCTAssertTrue(manager.canManageItem(smbFile))
+    }
+
+    func testSMBClientActorFileOperations() async throws {
+        let mockClient = MockSMBClient(shares: ["Media"])
+        let server = SavedSMBConnection(host: "192.168.1.20", username: "admin", lastConnected: Date())
+        let actor = SMBClientActor { _, _ in mockClient }
+
+        _ = try await actor.connectAndListShares(server: server, password: "test")
+
+        // Create folder
+        let createdFolder = try await actor.createFolder(named: "NewFolder", inShare: "Media", atPath: "")
+        XCTAssertEqual(createdFolder.name, "NewFolder")
+        XCTAssertEqual(createdFolder.path, "NewFolder")
+        XCTAssertTrue(createdFolder.isDirectory)
+        let created = await mockClient.createdDirectories
+        XCTAssertEqual(created.count, 1)
+
+        // Move item
+        let sourceFile = MediaItem(
+            locationID: server.id,
+            name: "photo.jpg",
+            rootName: "Media",
+            path: "photo.jpg",
+            isDirectory: false
+        )
+        try await actor.moveItems([sourceFile], to: createdFolder)
+        let moved = await mockClient.movedItems
+        XCTAssertEqual(moved.count, 1)
+        XCTAssertEqual(moved.first?.from, "photo.jpg")
+        XCTAssertEqual(moved.first?.to, "NewFolder/photo.jpg")
+
+        // Delete item
+        let movedFile = MediaItem(
+            locationID: server.id,
+            name: "photo.jpg",
+            rootName: "Media",
+            path: "NewFolder/photo.jpg",
+            isDirectory: false
+        )
+        try await actor.deleteItems([movedFile])
+        let removed = await mockClient.removedItems
+        XCTAssertEqual(removed.count, 1)
+        XCTAssertEqual(removed.first?.path, "NewFolder/photo.jpg")
     }
 }
 #endif

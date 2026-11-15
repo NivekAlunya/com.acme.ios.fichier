@@ -38,6 +38,11 @@ struct SidebarFolderTreeView: View {
         .refreshable {
             await manager.refreshSharesAndFolders()
         }
+        .onChange(of: manager.navigationCoordinator.mutationRevision) { _, _ in
+            Task {
+                await manager.refreshExpandedTreeBranches()
+            }
+        }
     }
     
     /// Determines whether a root share/folder node should be expanded automatically upon initial appearance.

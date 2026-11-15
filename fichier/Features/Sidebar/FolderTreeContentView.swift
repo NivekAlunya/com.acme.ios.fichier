@@ -93,6 +93,13 @@ public struct FolderTreeContentView: View {
             }
         }
         .navigationTitle(navigationTitle)
+        .onChange(of: manager.navigationCoordinator.mutationRevision) { _, _ in
+            if manager.isConnected && manager.folderTree.isEmpty {
+                Task {
+                    await manager.refreshSharesAndFolders()
+                }
+            }
+        }
     }
     
     /// Computes the column title reflecting the current connection name or active folder.

@@ -55,9 +55,6 @@ struct FolderPickerSheetView: View {
     
     /// Validates whether a given folder can accept the items to move.
     private func isDestinationValid(_ folder: MediaItem) -> Bool {
-        guard let folderURL = folder.localURL else { return false }
-        let standardizedFolderPath = folderURL.standardizedFileURL.path
-        
         // 1. Cannot move directly onto an item that is being moved
         if itemsToMove.contains(where: { $0.id == folder.id }) {
             return false
@@ -65,9 +62,16 @@ struct FolderPickerSheetView: View {
         
         // 2. If moving directories, cannot move into self or any descendant
         for movingItem in itemsToMove where movingItem.isDirectory {
-            if let movingURL = movingItem.localURL {
+            if let movingURL = movingItem.localURL, let folderURL = folder.localURL {
                 let movingPath = movingURL.standardizedFileURL.path
+                let standardizedFolderPath = folderURL.standardizedFileURL.path
                 if standardizedFolderPath == movingPath || standardizedFolderPath.hasPrefix(movingPath + "/") {
+                    return false
+                }
+            } else if movingItem.shareName == folder.shareName && movingItem.locationID == folder.locationID {
+                let movingPath = movingItem.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                let folderPath = folder.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                if folderPath == movingPath || folderPath.hasPrefix(movingPath + "/") {
                     return false
                 }
             }
@@ -75,8 +79,15 @@ struct FolderPickerSheetView: View {
         
         // 3. Cannot move if all items are already located in this folder
         let allAlreadyInDestination = itemsToMove.allSatisfy { item in
-            guard let itemURL = item.localURL else { return false }
-            return itemURL.deletingLastPathComponent().standardizedFileURL.path == standardizedFolderPath
+            if let itemURL = item.localURL, let folderURL = folder.localURL {
+                return itemURL.deletingLastPathComponent().standardizedFileURL.path == folderURL.standardizedFileURL.path
+            } else if item.shareName == folder.shareName && item.locationID == folder.locationID {
+                let itemParent = (item.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) as NSString).deletingLastPathComponent
+                let normalizedParent = (itemParent == "." ? "" : itemParent)
+                let normalizedFolder = folder.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                return normalizedParent == normalizedFolder
+            }
+            return false
         }
         if allAlreadyInDestination {
             return false
@@ -226,11 +237,7 @@ struct FolderPickerSheetView: View {
         
         Task {
             do {
-                _ = try await manager.localWorker.createFolder(
-                    named: trimmed,
-                    in: parent,
-                    locationID: parent.locationID
-                )
+                try await manager.createFolder(named: trimmed, in: parent)
                 await loadTree()
             } catch {
                 errorMessage = error.localizedDescription

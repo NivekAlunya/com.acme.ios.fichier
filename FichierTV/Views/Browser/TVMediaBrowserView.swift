@@ -66,6 +66,9 @@ public struct TVMediaBrowserView: View {
                 }
             }
         }
+        .refreshable {
+            await viewModel?.refreshCurrentFolder()
+        }
     }
 
     // MARK: - View Model Lifecycle

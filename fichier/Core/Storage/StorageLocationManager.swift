@@ -117,8 +117,18 @@ public final class StorageLocationManager {
     /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
     private let persistenceStore: StorageLocationPersistenceStore
     
-    /// Navigation coordinator handling root boundary checks and tree hierarchy derivation.
-    private let navigationCoordinator: FolderNavigationCoordinator
+    /// Navigation coordinator handling root boundary checks, mutation revisions, and tree hierarchy derivation.
+    public let navigationCoordinator: FolderNavigationCoordinator
+    
+    /// Relays the current mutation revision from the navigation coordinator.
+    public var mutationRevision: Int {
+        navigationCoordinator.mutationRevision
+    }
+    
+    /// Signals that a filesystem mutation occurred, bumping the revision counter and refreshing state.
+    public func recordMutation() {
+        navigationCoordinator.recordMutation()
+    }
     
     /// Initializes the manager, restoring saved connections and registering lifecycle observers.
     public convenience init() {
@@ -497,7 +507,12 @@ public final class StorageLocationManager {
                 if let newBookmark = updatedBookmark {
                     updateBookmarkData(newBookmark, for: folderLoc)
                 }
-                self.folderTree = [rootItem]
+                let existingChildren = self.folderTree.first?.children
+                var rootWithPreserved = rootItem
+                if let existingChildren {
+                    rootWithPreserved.children = existingChildren
+                }
+                self.folderTree = [rootWithPreserved]
                 self.isLoading = false
                 if let current = selectedFolder {
                     await selectAndLoadFolder(current)
@@ -513,7 +528,19 @@ public final class StorageLocationManager {
         
         do {
             let refreshedShares = try await worker.refreshShares()
-            self.folderTree = refreshedShares
+            let existingChildrenMap = Dictionary(
+                self.folderTree.compactMap { share in
+                    share.children.map { (share.id, $0) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            self.folderTree = refreshedShares.map { share in
+                var updated = share
+                if let children = existingChildrenMap[share.id] {
+                    updated.children = children
+                }
+                return updated
+            }
             
             if let current = selectedFolder {
                 await selectAndLoadFolder(current)
@@ -662,7 +689,29 @@ public final class StorageLocationManager {
         }
     }
     
+    /// Refreshes all currently expanded branches in the folder tree hierarchy without collapsing nodes.
+    public func refreshExpandedTreeBranches() async {
+        let expandedNodes = collectNodesWithChildren(in: folderTree)
+        for node in expandedNodes {
+            await loadSubfoldersForTree(at: node)
+        }
+    }
+    
+    /// Recursively collects all folder nodes within the tree that currently maintain loaded child subfolders.
+    private func collectNodesWithChildren(in nodes: [MediaItem]) -> [MediaItem] {
+        var result: [MediaItem] = []
+        for node in nodes {
+            if let children = node.children, !children.isEmpty {
+                result.append(node)
+                result.append(contentsOf: collectNodesWithChildren(in: children))
+            }
+        }
+        return result
+    }
+
     /// Pure functional recursive tree traversal that injects loaded child nodes into the corresponding parent.
+    ///
+    /// Preserves existing loaded sub-children of descendants so deeper expanded branches are not discarded.
     ///
     /// - Parameters:
     ///   - nodes: The current subtree list.
@@ -673,7 +722,20 @@ public final class StorageLocationManager {
         nodes.map { node in
             var updated = node
             if node.id == targetID {
-                updated.children = children.isEmpty ? nil : children
+                let existingChildrenMap = Dictionary(
+                    (node.children ?? []).compactMap { child in
+                        child.children.map { (child.id, $0) }
+                    },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                let mergedChildren = children.map { child -> MediaItem in
+                    var updatedChild = child
+                    if let existingDescendants = existingChildrenMap[child.id] {
+                        updatedChild.children = existingDescendants
+                    }
+                    return updatedChild
+                }
+                updated.children = mergedChildren.isEmpty ? nil : mergedChildren
             } else if let existingChildren = node.children {
                 updated.children = updateTreeNodes(in: existingChildren, targetID: targetID, children: children)
             }

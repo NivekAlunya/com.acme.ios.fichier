@@ -239,6 +239,16 @@ public final class TVBrowserViewModel {
         }
     }
 
+    /// Explicitly reloads the current folder contents, bypassing caches and resetting pagination.
+    public func reload() async {
+        await loadInitial(force: true)
+    }
+
+    /// Refreshes the directory listing if a mutation occurred or when returning to this browser view.
+    public func refreshCurrentFolder() async {
+        await loadInitial(force: true)
+    }
+
     private func advanceGenerationForReload() -> Int {
         loadGeneration += 1
         isLoading = true

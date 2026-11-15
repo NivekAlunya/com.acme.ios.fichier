@@ -12,14 +12,24 @@ final class FolderNavigationCoordinatorTests: XCTestCase {
     
     private var coordinator: FolderNavigationCoordinator!
     
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         coordinator = FolderNavigationCoordinator()
     }
     
-    override func tearDown() {
+    override func tearDown() async throws {
         coordinator = nil
-        super.tearDown()
+        try await super.tearDown()
+    }
+    
+    // MARK: - Mutation Tracking
+    
+    func testMutationRevisionIncrements() {
+        XCTAssertEqual(coordinator.mutationRevision, 0)
+        coordinator.recordMutation()
+        XCTAssertEqual(coordinator.mutationRevision, 1)
+        coordinator.recordMutation()
+        XCTAssertEqual(coordinator.mutationRevision, 2)
     }
     
     // MARK: - Root Folder Detection

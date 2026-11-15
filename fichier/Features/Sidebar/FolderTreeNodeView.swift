@@ -150,6 +150,13 @@ struct FolderTreeNodeView: View {
                 }
             }
         }
+        .onChange(of: manager.navigationCoordinator.mutationRevision) { _, _ in
+            if isExpanded {
+                Task {
+                    await manager.loadSubfoldersForTree(at: node)
+                }
+            }
+        }
         
         // Render child subfolders recursively when expanded
         if isExpanded, let children = node.children {
