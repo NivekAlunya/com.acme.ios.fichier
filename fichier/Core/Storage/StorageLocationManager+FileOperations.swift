@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftUI
 import FichierKit
 
 extension StorageLocationManager {
@@ -16,7 +17,9 @@ extension StorageLocationManager {
         switch location.kind {
         case .localFolder, .iCloudFolder:
             return selectedFolder?.localURL != nil
-        case .smb, .photos:
+        case .smb:
+            return selectedFolder != nil && !(selectedFolder?.shareName.isEmpty ?? true)
+        case .photos:
             return false
         }
     }
@@ -24,57 +27,99 @@ extension StorageLocationManager {
     /// Checks whether an individual media item supports filesystem manipulation.
     ///
     /// - Parameter item: The item to inspect.
-    /// - Returns: `true` if the item resides on local or iCloud storage and has a local URL.
+    /// - Returns: `true` if the item resides on local, iCloud, or remote SMB storage.
     public func canManageItem(_ item: MediaItem) -> Bool {
         guard let location = currentLocation else { return false }
         switch location.kind {
         case .localFolder, .iCloudFolder:
             return item.localURL != nil
-        case .smb, .photos:
+        case .smb:
+            return !item.shareName.isEmpty
+        case .photos:
             return false
         }
     }
     
     // MARK: - Folder Creation
     
-    /// Creates a new subfolder in the currently selected directory and refreshes folder contents.
+    /// Creates a new subfolder in the specified or currently selected directory and refreshes folder contents.
     ///
-    /// - Parameter name: The name of the new directory to create.
+    /// - Parameters:
+    ///   - name: The name of the new directory to create.
+    ///   - targetFolder: Optional parent folder; defaults to `selectedFolder`.
+    /// - Returns: The newly created folder `MediaItem`.
     /// - Throws: `FileOperationError` if the name is invalid, already exists, or the backend is unsupported.
-    public func createFolder(named name: String) async throws {
-        guard let current = selectedFolder, current.localURL != nil else {
+    @discardableResult
+    public func createFolder(named name: String, in targetFolder: MediaItem? = nil) async throws -> MediaItem {
+        guard let current = targetFolder ?? selectedFolder else {
             throw FileOperationError.unsupportedStorage
         }
         
-        _ = try await localWorker.createFolder(
-            named: name,
-            in: current,
-            locationID: current.locationID
-        )
+        let createdFolder: MediaItem
+        if current.localURL != nil {
+            createdFolder = try await localWorker.createFolder(
+                named: name,
+                in: current,
+                locationID: current.locationID
+            )
+        } else if !current.shareName.isEmpty {
+            createdFolder = try await worker.createFolder(
+                named: name,
+                inShare: current.shareName,
+                atPath: current.path
+            )
+        } else {
+            throw FileOperationError.unsupportedStorage
+        }
         
-        await selectAndLoadFolder(current)
+        recordMutation()
+        await refreshExpandedTreeBranches()
+        
+        if let reloadTarget = selectedFolder {
+            await selectAndLoadFolder(reloadTarget)
+        }
+        return createdFolder
     }
     
     // MARK: - Deletion / Move to Trash
     
-    /// Moves a collection of items (files or subfolders) to the system Trash.
+    /// Moves a collection of items (files or subfolders) to the system Trash for local files,
+    /// or permanently deletes them from remote SMB shares.
     ///
     /// - Parameter items: The items to delete.
     /// - Throws: `FileOperationError` if deletion fails or storage is unsupported.
     public func deleteItems(_ items: [MediaItem]) async throws {
         guard !items.isEmpty else { return }
-        guard items.allSatisfy({ $0.localURL != nil }) else {
+        
+        let localItems = items.filter { $0.localURL != nil }
+        let smbItems = items.filter { $0.localURL == nil && !$0.shareName.isEmpty }
+        
+        guard localItems.count + smbItems.count == items.count else {
             throw FileOperationError.unsupportedStorage
         }
         
-        try await localWorker.deleteItems(items)
+        if !localItems.isEmpty {
+            try await localWorker.deleteItems(localItems)
+        }
+        if !smbItems.isEmpty {
+            try await worker.deleteItems(smbItems)
+        }
         
         for item in items where FavoritesManager.shared.isFavorite(item) {
             FavoritesManager.shared.toggleFavorite(item)
         }
         
-        if let current = selectedFolder {
-            await selectAndLoadFolder(current)
+        // Remove deleted items in-place from current view to preserve scroll position without full reload
+        let deletedIDs = Set(items.map(\.id))
+        withAnimation(.snappy) {
+            self.pictures.removeAll(where: { deletedIDs.contains($0.id) })
+            self.currentFolders.removeAll(where: { deletedIDs.contains($0.id) })
+        }
+        
+        if items.contains(where: \.isDirectory) {
+            self.folderTree = removeNodesFromTree(in: self.folderTree, targetIDs: deletedIDs)
+            recordMutation()
+            await refreshExpandedTreeBranches()
         }
     }
     
@@ -85,35 +130,92 @@ extension StorageLocationManager {
     /// - Parameters:
     ///   - items: The items to move.
     ///   - destinationFolder: The target destination folder.
-    /// - Throws: `FileOperationError` if moving fails.
+    /// - Throws: `FileOperationError` if moving fails or crossing distinct storage boundaries.
     public func moveItems(_ items: [MediaItem], to destinationFolder: MediaItem) async throws {
         guard !items.isEmpty else { return }
-        guard items.allSatisfy({ $0.localURL != nil }), destinationFolder.localURL != nil else {
+        
+        if destinationFolder.localURL != nil {
+            guard items.allSatisfy({ $0.localURL != nil }) else {
+                throw FileOperationError.unsupportedStorage
+            }
+            try await localWorker.moveItems(items, to: destinationFolder)
+        } else if !destinationFolder.shareName.isEmpty {
+            guard items.allSatisfy({ $0.localURL == nil && $0.shareName == destinationFolder.shareName && $0.locationID == destinationFolder.locationID }) else {
+                throw FileOperationError.unsupportedStorage
+            }
+            try await worker.moveItems(items, to: destinationFolder)
+        } else {
             throw FileOperationError.unsupportedStorage
         }
         
-        try await localWorker.moveItems(items, to: destinationFolder)
+        // Remove moved items in-place from current view to preserve scroll position
+        let movedIDs = Set(items.map(\.id))
+        withAnimation(.snappy) {
+            self.pictures.removeAll(where: { movedIDs.contains($0.id) })
+            self.currentFolders.removeAll(where: { movedIDs.contains($0.id) })
+        }
         
-        if let current = selectedFolder {
-            await selectAndLoadFolder(current)
+        if items.contains(where: \.isDirectory) {
+            self.folderTree = removeNodesFromTree(in: self.folderTree, targetIDs: movedIDs)
+            recordMutation()
+            await refreshExpandedTreeBranches()
         }
     }
     
     // MARK: - Folder Picker Hierarchy
     
-    /// Loads a complete directory tree for picking destination folders in the move sheet.
+    /// Loads the root directory tree for picking destination folders in the move sheet.
     ///
-    /// - Returns: An array containing the root directory with populated subfolder children.
+    /// Reuses already loaded subfolder branches from the sidebar tree when available,
+    /// or fetches immediate child directories without recursive traversal to minimize latency.
+    ///
+    /// - Returns: An array containing the root directory with its immediate child folders.
     public func loadFolderPickerTree() async throws -> [MediaItem] {
-        guard let rootItem = folderTree.first, rootItem.localURL != nil else {
+        guard let location = currentLocation else { return [] }
+        switch location.kind {
+        case .localFolder, .iCloudFolder:
+            guard let rootItem = folderTree.first, rootItem.localURL != nil else {
+                return []
+            }
+            var rootWithChildren = rootItem
+            if let existing = rootItem.children {
+                rootWithChildren.children = existing
+            } else {
+                let immediateSubfolders = try await localWorker.listSubfolders(at: rootItem, locationID: rootItem.locationID)
+                rootWithChildren.children = immediateSubfolders.isEmpty ? [] : immediateSubfolders
+            }
+            return [rootWithChildren]
+            
+        case .smb:
+            let activeShareName = selectedFolder?.shareName ?? ""
+            guard let rootItem = folderTree.first(where: { $0.shareName == activeShareName }) ?? folderTree.first else {
+                return []
+            }
+            var rootWithChildren = rootItem
+            if let existing = rootItem.children {
+                rootWithChildren.children = existing
+            } else {
+                let immediateSubfolders = try await worker.listSubfolders(inShare: rootItem.shareName, atPath: "")
+                rootWithChildren.children = immediateSubfolders.isEmpty ? [] : immediateSubfolders
+            }
+            return [rootWithChildren]
+            
+        case .photos:
             return []
         }
-        
-        var rootWithChildren = rootItem
-        rootWithChildren.children = try await localWorker.listSubfoldersRecursively(
-            at: rootItem,
-            locationID: rootItem.locationID
-        )
-        return [rootWithChildren]
+    }
+    
+    /// Fetches immediate child subfolders for an individual directory node in the destination folder picker.
+    ///
+    /// - Parameter folder: The folder node being expanded by the user.
+    /// - Returns: Discovered immediate child subfolders.
+    public func fetchSubfoldersForPicker(at folder: MediaItem) async throws -> [MediaItem] {
+        if folder.localURL != nil {
+            return try await localWorker.listSubfolders(at: folder, locationID: folder.locationID)
+        } else if folder.locationID == StorageLocation.photosLocationID {
+            return []
+        } else {
+            return try await worker.listSubfolders(inShare: folder.shareName, atPath: folder.path)
+        }
     }
 }

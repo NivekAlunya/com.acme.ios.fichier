@@ -40,6 +40,11 @@ public final class TVSharesViewModel {
         await probeReachability(for: connections)
     }
 
+    /// Explicitly refreshes the server list and probes connection reachability.
+    public func refreshServers() async {
+        await loadServers()
+    }
+
     /// Removes a server from persistent storage, invalidates its active resolver cache, and updates visible cards.
     public func removeServer(_ server: SavedSMBConnection) async {
         try? await store.removeServer(server)

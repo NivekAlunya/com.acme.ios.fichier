@@ -26,6 +26,9 @@ actor MockSMBClient: SMBClientProtocol {
     private(set) var readFileCalls: [String] = []
     private(set) var disconnectCalls: Int = 0
     private(set) var disconnectObservedCancelled: [Bool] = []
+    private(set) var createdDirectories: [(share: String, path: String)] = []
+    private(set) var removedItems: [(share: String, path: String)] = []
+    private(set) var movedItems: [(share: String, from: String, to: String)] = []
 
     private var isSharesGateArmed = false
     private var hasSharesGateStarted = false
@@ -45,6 +48,15 @@ actor MockSMBClient: SMBClientProtocol {
     private var readReleaseWaiters: [String: [UUID: CheckedContinuation<Void, any Error>]] = [:]
     private var cancelledReadWaitIDs: Set<UUID> = []
 
+    private static func normalizeDictKeys<T>(_ dict: [String: T]) -> [String: T] {
+        var result: [String: T] = [:]
+        for (k, v) in dict {
+            let normalized = k.split(separator: "/").joined(separator: "/")
+            result[normalized] = v
+        }
+        return result
+    }
+
     init(
         shares: [String] = [],
         sharesError: (any Error)? = nil,
@@ -55,14 +67,15 @@ actor MockSMBClient: SMBClientProtocol {
     ) {
         self.shares = shares
         self.sharesError = sharesError
-        self.directoryContents = directoryContents
-        self.directoryErrors = directoryErrors
-        self.fileData = fileData
-        self.fileErrors = fileErrors
+        self.directoryContents = Self.normalizeDictKeys(directoryContents)
+        self.directoryErrors = Self.normalizeDictKeys(directoryErrors)
+        self.fileData = Self.normalizeDictKeys(fileData)
+        self.fileErrors = Self.normalizeDictKeys(fileErrors)
     }
 
     func updateDirectoryContents(_ contents: [MediaSourceItem], forKey key: String) {
-        directoryContents[key] = contents
+        let normalized = key.split(separator: "/").joined(separator: "/")
+        directoryContents[normalized] = contents
     }
 
     func setPageError(_ error: (any Error)?, forKey key: String, cursor: String?) {
@@ -428,6 +441,73 @@ actor MockSMBClient: SMBClientProtocol {
             throw CancellationError()
         }
         try data.write(to: localURL, options: .atomic)
+    }
+
+    func createDirectory(share: String, path: String) async throws {
+        createdDirectories.append((share: share, path: path))
+        let folderItem = MediaSourceItem(
+            id: "\(share)::/\(path)",
+            name: (path as NSString).lastPathComponent,
+            path: "\(share)/\(path)",
+            type: .folder,
+            size: 0,
+            modifiedDate: Date(),
+            smbShare: share,
+            smbPath: path
+        )
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let parentPath = (cleanPath as NSString).deletingLastPathComponent
+        let parentKey = Self.normalizedKey(share: share, path: parentPath == "." ? "" : parentPath)
+        directoryContents[parentKey, default: []].append(folderItem)
+        let ownKey = Self.normalizedKey(share: share, path: path)
+        directoryContents[ownKey] = []
+    }
+
+    func removeItem(share: String, path: String) async throws {
+        removedItems.append((share: share, path: path))
+        let ownKey = Self.normalizedKey(share: share, path: path)
+        directoryContents.removeValue(forKey: ownKey)
+        fileData.removeValue(forKey: ownKey)
+        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let parentPath = (cleanPath as NSString).deletingLastPathComponent
+        let parentKey = Self.normalizedKey(share: share, path: parentPath == "." ? "" : parentPath)
+        let filename = (cleanPath as NSString).lastPathComponent
+        directoryContents[parentKey]?.removeAll(where: { $0.name == filename })
+    }
+
+    func moveItem(share: String, fromPath: String, toPath: String) async throws {
+        movedItems.append((share: share, from: fromPath, to: toPath))
+        let fromKey = Self.normalizedKey(share: share, path: fromPath)
+        let toKey = Self.normalizedKey(share: share, path: toPath)
+        if let data = fileData.removeValue(forKey: fromKey) {
+            fileData[toKey] = data
+        }
+        if let contents = directoryContents.removeValue(forKey: fromKey) {
+            directoryContents[toKey] = contents
+        }
+        let cleanFrom = fromPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let fromParent = (cleanFrom as NSString).deletingLastPathComponent
+        let fromParentKey = Self.normalizedKey(share: share, path: fromParent == "." ? "" : fromParent)
+        let filename = (cleanFrom as NSString).lastPathComponent
+        if let itemIndex = directoryContents[fromParentKey]?.firstIndex(where: { $0.name == filename }) {
+            let movedItem = directoryContents[fromParentKey]?.remove(at: itemIndex)
+            let cleanTo = toPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let toParent = (cleanTo as NSString).deletingLastPathComponent
+            let toParentKey = Self.normalizedKey(share: share, path: toParent == "." ? "" : toParent)
+            if let movedItem {
+                let updated = MediaSourceItem(
+                    id: "\(share)::/\(toPath)",
+                    name: (cleanTo as NSString).lastPathComponent,
+                    path: "\(share)/\(toPath)",
+                    type: movedItem.type,
+                    size: movedItem.size,
+                    modifiedDate: Date(),
+                    smbShare: share,
+                    smbPath: toPath
+                )
+                directoryContents[toParentKey, default: []].append(updated)
+            }
+        }
     }
 }
 #endif

@@ -81,111 +81,92 @@ struct MediaSelectionBottomBar: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
-            HStack(spacing: 24) {
+            HStack(spacing: 10) {
                 // 1. Favorite / Unfavorite Button
                 Button {
                     onToggleFavorite()
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: isAllFavorites ? "heart.slash.fill" : "heart.fill")
-                            .font(.system(size: 20))
-                            .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
-                        Text(isAllFavorites ? .Strings.galleryActionUnfavorite : .Strings.galleryActionFavorite)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
-                    }
+                    Image(systemName: isAllFavorites ? "heart.slash.fill" : "heart.fill")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(isAllFavorites ? Color.red : (selectedCount > 0 ? Color.red : Color.secondary))
+                        .frame(width: 28, height: 28)
                 }
+                .buttonStyle(.plain)
                 .disabled(selectedCount == 0 || isProcessing)
                 .accessibilityLabel(isAllFavorites ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite selected items") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite selected items"))
                 .accessibilityHint(String(localized: "Applies to \(selectedCount) selected items", comment: "Accessibility hint indicating selected count"))
                 
                 if showSaveToPhotos {
-                    Spacer()
-                    
                     // 2. Save to Photos Button
                     Button {
                         onSaveToPhotos()
                     } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 20))
-                            Text(.Strings.galleryActionSaveToPhotos)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
-                        }
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
+                            .frame(width: 28, height: 28)
                     }
+                    .buttonStyle(.plain)
                     .disabled(selectedCount == 0 || isProcessing)
                     .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save selected items to Photos"))
                     .accessibilityHint(String(localized: "Downloads and exports \(selectedCount) selected items to your photo library", comment: "Accessibility hint for batch save"))
                 }
                 
                 if showFileManagement {
-                    Spacer()
-                    
                     // 3. Move Button
                     Button {
                         onMove?()
                     } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "folder")
-                                .font(.system(size: 20))
-                                .foregroundStyle(selectedCount > 0 ? Color.accentColor : Color.secondary)
-                            Text(String(localized: "Move", comment: "Action button to move selected items"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
-                        }
+                        Image(systemName: "folder")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(selectedCount > 0 ? Color.accentColor : Color.secondary)
+                            .frame(width: 28, height: 28)
                     }
+                    .buttonStyle(.plain)
                     .disabled(selectedCount == 0 || isProcessing)
                     .accessibilityLabel(String(localized: "Move Items", comment: "Accessibility label to move selected items"))
                     .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to another folder", comment: "Accessibility hint for batch move"))
-                    
-                    Spacer()
                     
                     // 4. Delete / Trash Button
                     Button {
                         onDelete?()
                     } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 20))
-                                .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
-                            Text(String(localized: "Delete", comment: "Action button to delete/trash selected items"))
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
-                        }
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(selectedCount > 0 ? Color.red : Color.secondary)
+                            .frame(width: 28, height: 28)
                     }
+                    .buttonStyle(.plain)
                     .disabled(selectedCount == 0 || isProcessing)
                     .accessibilityLabel(String(localized: "Delete Items", comment: "Accessibility label to delete selected items"))
                     .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to the trash", comment: "Accessibility hint for batch delete"))
                 }
                 
-                Spacer()
-                
-                // 3. Share Button
+                // 5. Share Button
                 Button {
                     onShare()
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 20))
-                            .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
-                        Text(.Strings.galleryActionShare)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
-                    }
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
+                        .frame(width: 28, height: 28)
                 }
+                .buttonStyle(.plain)
                 .disabled(selectedCount == 0 || isProcessing)
                 .accessibilityLabel(String(localized: "Share Items", comment: "Accessibility label to share selected items"))
                 .accessibilityHint(String(localized: "Prepares \(selectedCount) selected items for sharing", comment: "Accessibility hint for batch share"))
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 Capsule()
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .black.opacity(0.2), radius: 12, y: 5)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                    )
+                    .shadow(color: .black.opacity(0.35), radius: 10, y: 5)
             )
-            .padding(.horizontal, 20)
             .padding(.bottom, 10)
         }
     }

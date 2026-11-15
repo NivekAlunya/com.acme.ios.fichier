@@ -49,4 +49,23 @@ struct TVSharesViewModelTests {
         #expect(viewModel.serverCards[0].id == nas.id)
         #expect(await store.loadServers().count == 1)
     }
+
+    @Test("Refreshes servers and re-probes reachability status")
+    @MainActor
+    func testRefreshServers() async {
+        let macMini = SavedSMBConnection(
+            host: "192.168.1.50",
+            username: "kevin",
+            lastConnected: Date(),
+            hostname: "Mac mini"
+        )
+        let store = StubSMBServerStore(
+            servers: [macMini],
+            statuses: [macMini.id: ServerConnectionStatus.online]
+        )
+        let viewModel = TVSharesViewModel(store: store)
+        await viewModel.refreshServers()
+        #expect(viewModel.serverCards.count == 1)
+        #expect(viewModel.serverCards[0].status == ServerConnectionStatus.online)
+    }
 }

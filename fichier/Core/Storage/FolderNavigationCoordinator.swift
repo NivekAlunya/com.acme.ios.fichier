@@ -4,15 +4,25 @@
 //
 
 import Foundation
+import Observation
 
 /// Coordinator managing tree navigation, root boundary detection, and breadcrumb parent derivation.
 ///
 /// Encapsulates hierarchical lookups across SMB shares, local sandboxed directories, and Photos library albums.
+@Observable
 @MainActor
 public final class FolderNavigationCoordinator {
     
+    /// Monotonically increasing revision counter tracking filesystem mutations.
+    public var mutationRevision: Int = 0
+    
     /// Default initializer.
     public init() {}
+    
+    /// Records a file mutation (create, delete, move) and increments the mutation revision.
+    public func recordMutation() {
+        mutationRevision &+= 1
+    }
     
     /// Determines whether a folder represents the top-level root of its storage backend.
     ///

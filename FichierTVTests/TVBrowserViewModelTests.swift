@@ -477,4 +477,23 @@ struct TVBrowserViewModelTests {
         #expect(!viewModel.isPaginating)
         #expect(await source.requestedPages == [0, 1])
     }
+
+    @Test("Reload and refreshCurrentFolder force re-fetch from source")
+    @MainActor
+    func testReloadAndRefreshCurrentFolder() async {
+        let items = [
+            MediaSourceItem(id: "item_0", name: "Item_00.jpg", path: "item_0", type: .image)
+        ]
+        let source = StubMediaSource(id: "shares", items: items)
+        let viewModel = TVBrowserViewModel(source: source, folder: nil, preferenceStore: StubSortPreferenceStore())
+        await viewModel.loadInitial()
+        #expect(viewModel.items.count == 1)
+
+        await viewModel.refreshCurrentFolder()
+        #expect(viewModel.items.count == 1)
+
+        await viewModel.reload()
+        #expect(viewModel.items.count == 1)
+        #expect(!viewModel.isLoading)
+    }
 }
