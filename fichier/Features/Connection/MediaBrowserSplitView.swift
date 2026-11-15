@@ -1,5 +1,5 @@
 //
-//  RootSMBView.swift
+//  MediaBrowserSplitView.swift
 //  fichier
 //
 
@@ -16,23 +16,20 @@ import SwiftUI
 /// - `PictureDetailView` for full-resolution photo inspection and automated slideshows.
 /// - `VideoDetailView` for custom AVPlayer video playback and audio/subtitle track selection.
 /// - `PDFDetailView` for document rendering via PDFKit.
-public struct RootSMBView: View {
+public struct MediaBrowserSplitView: View {
     /// Centralized storage location manager driving application state.
-    @State private var smbManager = StorageLocationManager()
+    @State private var storageManager = StorageLocationManager()
     
-    /// Target image media item for presenting the full-screen photo viewer.
-    @State private var activePictureForViewer: MediaItem?
+    /// Target photo presentation context containing the focused item and the active filtered/sorted gallery items.
+    @State private var activePictureContext: MediaViewerContext?
     
-    /// Target video media item for presenting the full-screen video player.
-    @State private var activeVideoForViewer: MediaItem?
+    /// Target video presentation context containing the focused item and the active filtered/sorted playlist items.
+    @State private var activeVideoContext: MediaViewerContext?
     
     #if !os(tvOS)
-    /// Target PDF media item for presenting the full-screen document viewer.
-    @State private var activePDFForViewer: MediaItem?
+    /// Target PDF presentation context containing the focused item and the active filtered/sorted document items.
+    @State private var activePDFContext: MediaViewerContext?
     #endif
-    
-    /// Filtered or sorted snapshot of media items from the active gallery, passed as paging context.
-    @State private var activeContextMedia: [MediaItem] = []
     
     /// Flag signaling `PictureDetailView` to commence automatic slideshow cycling immediately on appearance.
     @State private var shouldAutoStartSlideshow = false
@@ -65,7 +62,7 @@ public struct RootSMBView: View {
         ) {
             // 1. Sidebar: Unified Locations list (iCloud, Local, SMB)
             LocationsSidebarView(
-                manager: smbManager,
+                manager: storageManager,
                 showingAddRemote: $showingAddRemote,
                 showingSettings: $showingSettings,
                 connectingLocationID: connectingLocationID,
@@ -76,51 +73,56 @@ public struct RootSMBView: View {
         } content: {
             // 2. Content: Folder Tree of the selected/connected remote
             FolderTreeContentView(
-                manager: smbManager,
+                manager: storageManager,
                 showingAddRemote: $showingAddRemote,
                 onSelectFolder: { folder in
                     Task {
-                        await smbManager.selectAndLoadFolder(folder)
+                        await storageManager.selectAndLoadFolder(folder)
                         preferredCompactColumn = .detail
                     }
                 }
             )
         } detail: {
-            // 3. Detail: Media Grid & Viewer
+            // 3. Detail: Media Grid and navigation toolbar
             Group {
-                if let selectedFolder = smbManager.selectedFolder {
+                if let selectedFolder = storageManager.selectedFolder {
                     MediaGridView(
-                        manager: smbManager,
+                        manager: storageManager,
                         onSelectFolder: { subfolder in
                             Task {
-                                await smbManager.selectAndLoadFolder(subfolder)
+                                await storageManager.selectAndLoadFolder(subfolder)
                                 preferredCompactColumn = .detail
                             }
                         },
                         onStartSlideshow: { currentDisplayPictures in
                             let photosOnly = currentDisplayPictures.filter(\.isImage)
                             if let first = photosOnly.first {
-                                activeContextMedia = currentDisplayPictures
-                                activePictureForViewer = first
+                                activePictureContext = MediaViewerContext(
+                                    item: first,
+                                    contextItems: currentDisplayPictures
+                                )
                                 shouldAutoStartSlideshow = true
                             }
                         },
                         onSelectPicture: { item, currentDisplayPictures in
-                            activeContextMedia = currentDisplayPictures
+                            let context = MediaViewerContext(
+                                item: item,
+                                contextItems: currentDisplayPictures
+                            )
                             #if !os(tvOS)
                             if item.isPDF {
-                                activePDFForViewer = item
+                                activePDFContext = context
                             } else if item.isVideo {
-                                activeVideoForViewer = item
+                                activeVideoContext = context
                             } else {
-                                activePictureForViewer = item
+                                activePictureContext = context
                                 shouldAutoStartSlideshow = false
                             }
                             #else
                             if item.isVideo {
-                                activeVideoForViewer = item
+                                activeVideoContext = context
                             } else {
-                                activePictureForViewer = item
+                                activePictureContext = context
                                 shouldAutoStartSlideshow = false
                             }
                             #endif
@@ -136,36 +138,46 @@ public struct RootSMBView: View {
                     } description: {
                         Text(.Strings.galleryNoFolderSelectedDescription)
                     }
-                    .navigationTitle(smbManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
+                    .navigationTitle(storageManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
                 }
             }
         }
-        .fullScreenCover(item: $activePictureForViewer) { pic in
-            let context = activeContextMedia.isEmpty ? smbManager.pictures : activeContextMedia
-            PictureDetailView(
-                manager: smbManager,
-                pictures: context.filter { !$0.isVideo && !$0.isPDF },
-                initialItem: pic,
+        .fullScreenCover(item: $activePictureContext) { context in
+            let activeImages = context.contextItems.filter(\.isImage)
+            var gallery = activeImages.isEmpty ? [context.item] : activeImages
+            if !gallery.contains(where: { $0.id == context.item.id }) {
+                gallery.append(context.item)
+            }
+            return PictureDetailView(
+                manager: storageManager,
+                pictures: gallery,
+                initialItem: context.item,
                 autoStartSlideshow: shouldAutoStartSlideshow
             )
         }
-        .fullScreenCover(item: $activeVideoForViewer) { vid in
-            let activeVideos = activeContextMedia.filter(\.isVideo)
-            var playlist = activeVideos.isEmpty ? smbManager.pictures.filter(\.isVideo) : activeVideos
-            if !playlist.contains(where: { $0.id == vid.id }) {
-                playlist.append(vid)
+        .fullScreenCover(item: $activeVideoContext) { context in
+            let activeVideos = context.contextItems.filter(\.isVideo)
+            var playlist = activeVideos.isEmpty ? [context.item] : activeVideos
+            if !playlist.contains(where: { $0.id == context.item.id }) {
+                playlist.append(context.item)
             }
             return VideoDetailView(
-                manager: smbManager,
+                manager: storageManager,
                 videos: playlist,
-                initialItem: vid
+                initialItem: context.item
             )
         }
         #if !os(tvOS)
-        .fullScreenCover(item: $activePDFForViewer) { pdf in
-            PDFDetailView(
-                manager: smbManager,
-                item: pdf
+        .fullScreenCover(item: $activePDFContext) { context in
+            let activeDocuments = context.contextItems.filter(\.isPDF)
+            var documents = activeDocuments.isEmpty ? [context.item] : activeDocuments
+            if !documents.contains(where: { $0.id == context.item.id }) {
+                documents.append(context.item)
+            }
+            return PDFDetailView(
+                manager: storageManager,
+                documents: documents,
+                initialItem: context.item
             )
         }
         #endif
@@ -173,7 +185,7 @@ public struct RootSMBView: View {
             AppSettingsView()
         }
         .sheet(isPresented: $showingAddRemote) {
-            SMBConnectWithDiscoveryView(smbManager: smbManager)
+            SMBConnectWithDiscoveryView(smbManager: storageManager)
         }
     }
     
@@ -181,7 +193,7 @@ public struct RootSMBView: View {
     ///
     /// - Parameter location: The target location selected by the user.
     private func selectLocation(_ location: StorageLocation) {
-        if smbManager.isConnected && smbManager.currentLocation?.id == location.id {
+        if storageManager.isConnected && storageManager.currentLocation?.id == location.id {
             preferredCompactColumn = .content
             return
         }
@@ -191,12 +203,12 @@ public struct RootSMBView: View {
         AppHapticFeedback.light()
         
         connectionTask = Task {
-            await smbManager.selectLocation(location)
+            await storageManager.selectLocation(location)
             guard !Task.isCancelled else { return }
             connectingLocationID = nil
-            if smbManager.isConnected {
+            if storageManager.isConnected {
                 // If a folder was automatically restored or loaded, navigate directly to detail on compact layouts
-                preferredCompactColumn = smbManager.selectedFolder != nil ? .detail : .content
+                preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .content
             }
         }
     }

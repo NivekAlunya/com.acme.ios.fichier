@@ -37,7 +37,41 @@ public final class TVImageViewerViewModel {
 
     private var slideshowTask: Task<Void, Never>?
     private var imageLoadTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
     private var paginationTask: Task<Void, Never>?
+
+    private var imageCache: [String: UIImage] = [:]
+    private var imageCacheKeys: [String] = []
+    private static let maxImageCacheSize = 8
+
+    /// Adaptive animation curve for slideshow advancing and manual paging.
+    public var slideAnimation: Animation {
+        if isSlideshowPlaying {
+            return .easeInOut(duration: 0.8)
+        }
+        switch transitionStyle {
+        case .fade, .kenBurns:
+            return .easeInOut(duration: 0.8)
+        case .slide:
+            return .easeInOut(duration: 0.55)
+        }
+    }
+
+    /// Returns a preloaded image for a given item identifier if present in the in-memory cache.
+    public func cachedImage(for id: String) -> UIImage? {
+        imageCache[id]
+    }
+
+    private func cacheImage(_ image: UIImage, for id: String) {
+        if imageCache[id] == nil {
+            imageCacheKeys.append(id)
+            if imageCacheKeys.count > Self.maxImageCacheSize {
+                let evicted = imageCacheKeys.removeFirst()
+                imageCache.removeValue(forKey: evicted)
+            }
+        }
+        imageCache[id] = image
+    }
 
     public var currentItem: MediaSourceItem {
         guard !items.isEmpty, currentIndex >= 0, currentIndex < items.count else {
@@ -190,41 +224,84 @@ public final class TVImageViewerViewModel {
         showOverlay = visible
     }
 
-    /// Loads the full-resolution image asset for the current selection.
+    /// Loads the full-resolution image asset for the current selection, utilizing cache when available.
     public func loadCurrentImage() {
         imageLoadTask?.cancel()
+
+        let item = currentItem
+        if let cached = imageCache[item.id] {
+            self.currentImage = cached
+            self.isLoadingImage = false
+            prefetchNeighbors()
+            return
+        }
+
         currentImage = nil
         isLoadingImage = true
 
-        let item = currentItem
-        imageLoadTask = Task {
-            if let phID = item.phAssetIdentifier {
-                let image = await PhotoFullImageLoader.shared.loadFullImage(for: phID)
-                if !Task.isCancelled {
-                    self.currentImage = image
-                    self.isLoadingImage = false
+        imageLoadTask = Task { [weak self] in
+            guard let self else { return }
+            let loaded = await self.fetchImage(for: item)
+            guard !Task.isCancelled, !self.isTornDown else { return }
+            if let loaded {
+                self.cacheImage(loaded, for: item.id)
+                self.currentImage = loaded
+            }
+            self.isLoadingImage = false
+            self.prefetchNeighbors()
+        }
+    }
+
+    private func fetchImage(for item: MediaSourceItem) async -> UIImage? {
+        if let phID = item.phAssetIdentifier {
+            return await PhotoFullImageLoader.shared.loadFullImage(for: phID)
+        } else if let localURL = item.localURL {
+            return UIImage(contentsOfFile: localURL.path)
+        } else if let sourceID = item.sourceID,
+                  let share = item.smbShare,
+                  let path = item.smbPath {
+            return await SMBImageLoader.shared.loadFullImage(
+                sourceID: sourceID,
+                share: share,
+                path: path,
+                resolver: resolver
+            )
+        }
+        return nil
+    }
+
+    private func prefetchNeighbors() {
+        prefetchTask?.cancel()
+        guard !items.isEmpty else { return }
+
+        var indicesToPrefetch: [Int] = []
+        if currentIndex + 1 < items.count {
+            indicesToPrefetch.append(currentIndex + 1)
+        } else if isSlideshowPlaying && items.count > 1 {
+            indicesToPrefetch.append(0)
+        }
+        if currentIndex > 0 {
+            indicesToPrefetch.append(currentIndex - 1)
+        }
+        if currentIndex + 2 < items.count {
+            indicesToPrefetch.append(currentIndex + 2)
+        }
+
+        let candidates = indicesToPrefetch.compactMap { idx -> MediaSourceItem? in
+            guard idx >= 0 && idx < items.count else { return nil }
+            let itm = items[idx]
+            return imageCache[itm.id] == nil ? itm : nil
+        }
+        guard !candidates.isEmpty else { return }
+
+        prefetchTask = Task { [weak self] in
+            guard let self else { return }
+            for candidate in candidates {
+                guard !Task.isCancelled, !self.isTornDown else { break }
+                if let image = await self.fetchImage(for: candidate) {
+                    guard !Task.isCancelled, !self.isTornDown else { break }
+                    self.cacheImage(image, for: candidate.id)
                 }
-            } else if let localURL = item.localURL {
-                let image = UIImage(contentsOfFile: localURL.path)
-                if !Task.isCancelled {
-                    self.currentImage = image
-                    self.isLoadingImage = false
-                }
-            } else if let sourceID = item.sourceID,
-                      let share = item.smbShare,
-                      let path = item.smbPath {
-                let image = await SMBImageLoader.shared.loadFullImage(
-                    sourceID: sourceID,
-                    share: share,
-                    path: path,
-                    resolver: resolver
-                )
-                if !Task.isCancelled {
-                    self.currentImage = image
-                    self.isLoadingImage = false
-                }
-            } else {
-                self.isLoadingImage = false
             }
         }
     }
@@ -235,7 +312,22 @@ public final class TVImageViewerViewModel {
             guard let self else { return }
             try? await Task.sleep(nanoseconds: UInt64(self.slideshowInterval * 1_000_000_000))
             guard !Task.isCancelled, self.isSlideshowPlaying else { return }
-            self.showNext()
+
+            // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve
+            let nextIndex = (self.currentIndex + 1 < self.items.count) ? self.currentIndex + 1 : 0
+            if nextIndex < self.items.count {
+                let nextItem = self.items[nextIndex]
+                if self.cachedImage(for: nextItem.id) == nil {
+                    if let loaded = await self.fetchImage(for: nextItem) {
+                        self.cacheImage(loaded, for: nextItem.id)
+                    }
+                }
+            }
+            guard !Task.isCancelled, self.isSlideshowPlaying else { return }
+
+            withAnimation(self.slideAnimation) {
+                self.showNext()
+            }
             if self.isSlideshowPlaying {
                 self.scheduleNextSlide()
             }
@@ -248,8 +340,11 @@ public final class TVImageViewerViewModel {
         pendingAdvanceOnPagination = false
         stopSlideshow()
         imageLoadTask?.cancel()
+        prefetchTask?.cancel()
         paginationTask?.cancel()
         paginationTask = nil
+        imageCache.removeAll()
+        imageCacheKeys.removeAll()
     }
 
     // MARK: - Multi-Page Source Lookahead & Image Filtering

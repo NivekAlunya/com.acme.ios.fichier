@@ -52,10 +52,19 @@ public struct TVImageViewerView: View {
         ZStack {
             Color.black
                 .ignoresSafeArea()
+                .zIndex(0)
 
-            imageCanvas
-                .id(viewModel.currentIndex)
+            ZStack {
+                TVSlideImageView(
+                    item: viewModel.currentItem,
+                    image: viewModel.currentImage ?? viewModel.cachedImage(for: viewModel.currentItem.id)
+                )
                 .transition(imageTransition)
+                .id(viewModel.currentIndex)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .zIndex(1)
 
             if !viewModel.showOverlay {
                 Button {
@@ -73,9 +82,13 @@ public struct TVImageViewerView: View {
                 .onMoveCommand { direction in
                     switch direction {
                     case .left:
-                        viewModel.showPrevious()
+                        withAnimation(slideAnimation) {
+                            viewModel.showPrevious()
+                        }
                     case .right:
-                        viewModel.showNext()
+                        withAnimation(slideAnimation) {
+                            viewModel.showNext()
+                        }
                     case .up:
                         withAnimation(reduceMotion ? nil : .snappy) {
                             viewModel.setOverlayVisible(true)
@@ -90,13 +103,14 @@ public struct TVImageViewerView: View {
                 }
             }
 
-            if viewModel.isLoadingImage || viewModel.isLoadingMoreImages {
+            if viewModel.isLoadingImage && viewModel.currentImage == nil && viewModel.cachedImage(for: viewModel.currentItem.id) == nil {
                 ProgressView()
                     .tint(.white)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             if viewModel.showOverlay {
+                let currentFrameSize = viewModel.currentImage.map { "\(Int($0.size.width * $0.scale)) × \(Int($0.size.height * $0.scale))" } ?? MediaDetailStore.shared.cachedDetail(for: viewModel.currentItem.id)
                 TVImageViewerOverlayView(
                     title: viewModel.currentItem.name,
                     currentIndex: viewModel.currentIndex,
@@ -105,9 +119,19 @@ public struct TVImageViewerView: View {
                     isSettingsSheetPresented: viewModel.isShowingSettingsSheet,
                     canNavigatePrevious: viewModel.canNavigatePrevious,
                     canNavigateNext: viewModel.canNavigateNext,
-                    onPrevious: { viewModel.showPrevious() },
+                    frameSize: currentFrameSize,
+                    fileSize: viewModel.currentItem.size,
+                    onPrevious: {
+                        withAnimation(slideAnimation) {
+                            viewModel.showPrevious()
+                        }
+                    },
                     onToggleSlideshow: { viewModel.toggleSlideshow() },
-                    onNext: { viewModel.showNext() },
+                    onNext: {
+                        withAnimation(slideAnimation) {
+                            viewModel.showNext()
+                        }
+                    },
                     onOpenSettings: { viewModel.isShowingSettingsSheet = true },
                     onClose: { dismiss() }
                 )
@@ -160,31 +184,43 @@ public struct TVImageViewerView: View {
         }
     }
 
-    // MARK: - Canvas & Transitions
+    // MARK: - Transitions & Animations
 
-    @ViewBuilder
-    private var imageCanvas: some View {
-        if let image = viewModel.currentImage {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            TVThumbnailView(item: viewModel.currentItem, targetSize: CGSize(width: 800, height: 600))
-                .scaledToFit()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var slideAnimation: Animation {
+        if reduceMotion {
+            return .easeInOut(duration: 0.25)
         }
+        if viewModel.isSlideshowPlaying {
+            return .easeInOut(duration: 0.8)
+        }
+        return viewModel.slideAnimation
     }
 
     private var imageTransition: AnyTransition {
-        if reduceMotion || viewModel.transitionStyle == .fade {
-            return .opacity
+        let baseTransition: AnyTransition
+        if reduceMotion {
+            baseTransition = .opacity
+        } else {
+            switch viewModel.transitionStyle {
+            case .fade:
+                baseTransition = .asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 1.04)),
+                    removal: .opacity.combined(with: .scale(scale: 0.96))
+                )
+            case .kenBurns:
+                baseTransition = .asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 1.08)),
+                    removal: .opacity.combined(with: .scale(scale: 0.92))
+                )
+            case .slide:
+                let edgeIn: Edge = (viewModel.transitionDirection == .forward) ? .trailing : .leading
+                let edgeOut: Edge = (viewModel.transitionDirection == .forward) ? .leading : .trailing
+                baseTransition = .asymmetric(
+                    insertion: .move(edge: edgeIn).combined(with: .opacity),
+                    removal: .move(edge: edgeOut).combined(with: .opacity)
+                )
+            }
         }
-        let edgeIn: Edge = (viewModel.transitionDirection == .forward) ? .trailing : .leading
-        let edgeOut: Edge = (viewModel.transitionDirection == .forward) ? .leading : .trailing
-        return .asymmetric(
-            insertion: .move(edge: edgeIn).combined(with: .opacity),
-            removal: .move(edge: edgeOut).combined(with: .opacity)
-        )
+        return baseTransition.animation(slideAnimation)
     }
 }

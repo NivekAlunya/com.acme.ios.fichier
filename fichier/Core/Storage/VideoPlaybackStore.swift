@@ -5,6 +5,7 @@
 
 import Foundation
 import Observation
+import FichierKit
 
 /// Persistent store tracking playback offsets, completion states, and resume positions for video media items.
 ///
@@ -64,6 +65,9 @@ public final class VideoPlaybackStore {
                 }
             }
             self.records = valid
+            for (id, record) in valid where record.duration > 0 {
+                MediaDetailStore.shared.registerDetail(MediaFormatHelper.formatDuration(record.duration), for: id)
+            }
             persist()
         } else if let legacyData = UserDefaults.standard.data(forKey: legacyKey),
                   let legacyPositions = try? JSONDecoder().decode([String: Double].self, from: legacyData) {
@@ -140,6 +144,10 @@ public final class VideoPlaybackStore {
         let isNearEnd = duration > 15.0 ? (seconds >= duration - 4.0) : (duration > 0 && seconds >= duration - 1.5)
         let isHighPercentage = duration > 0 ? (seconds / duration >= 0.90) : false
         
+        if duration > 0 {
+            MediaDetailStore.shared.registerDetail(MediaFormatHelper.formatDuration(duration), for: item.id)
+        }
+
         if duration > 0 && (isNearEnd || isHighPercentage) {
             markFinished(for: item, duration: duration)
         } else if seconds >= 3.0 {

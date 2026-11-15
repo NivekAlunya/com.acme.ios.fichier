@@ -186,7 +186,7 @@ com.acme.ios.fichier/
 │   ├── Features/                                   # Vertical feature modules (80 files)
 │   │   ├── Connection/                             # Storage location management & discovery (7 files)
 │   │   │   ├── DiscoveredHost.swift                # Discovered Bonjour host model
-│   │   │   ├── RootSMBView.swift                   # SplitView / Root host switcher
+│   │   │   ├── MediaBrowserSplitView.swift         # SplitView / Root host switcher
 │   │   │   ├── SavedFolderLocation.swift           # Bookmark for local/iCloud folders
 │   │   │   ├── SavedSMBConnection.swift            # Saved connection metadata model
 │   │   │   ├── SMBConnectWithDiscoveryView.swift   # Bonjour discovery list & credential form

@@ -445,6 +445,11 @@ actor SMBClientActor {
             if metadataCache.object(forKey: item.id as NSString) == nil {
                 let meta = ImageMetadataExtractor.extract(from: data, fileName: item.name, fileSize: item.formattedSize)
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
+                if let dims = meta.dimensions {
+                    Task { @MainActor in
+                        MediaDetailStore.shared.registerDetail(dims, for: item.id)
+                    }
+                }
             }
 
             // Offload CPU-bound image downsampling and disk caching off the actor lock

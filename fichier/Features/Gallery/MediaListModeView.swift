@@ -66,11 +66,6 @@ struct MediaListModeView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(subfolder.name)
                                             .foregroundColor(.primary)
-                                        if let d = subfolder.formattedDate {
-                                            Text(d)
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
                                     }
                                     Spacer()
                                     Image(systemName: "chevron.right")

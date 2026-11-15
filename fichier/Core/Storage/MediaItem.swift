@@ -216,13 +216,33 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Indicates whether the item is a PDF document.
     public var isPDF: Bool {
         let ext = (name as NSString).pathExtension
-        return SupportedMediaTypes.isPDF(extension: ext)
+        if !ext.isEmpty {
+            return SupportedMediaTypes.isPDF(extension: ext)
+        }
+        let pathExt = (path as NSString).pathExtension
+        if !pathExt.isEmpty {
+            return SupportedMediaTypes.isPDF(extension: pathExt)
+        }
+        if let localURL {
+            return SupportedMediaTypes.isPDF(extension: localURL.pathExtension)
+        }
+        return false
     }
     
     /// Indicates whether the item represents a document format.
     public var isDocument: Bool {
         let ext = (name as NSString).pathExtension
-        return SupportedMediaTypes.isDocument(extension: ext)
+        if !ext.isEmpty {
+            return SupportedMediaTypes.isDocument(extension: ext)
+        }
+        let pathExt = (path as NSString).pathExtension
+        if !pathExt.isEmpty {
+            return SupportedMediaTypes.isDocument(extension: pathExt)
+        }
+        if let localURL {
+            return SupportedMediaTypes.isDocument(extension: localURL.pathExtension)
+        }
+        return false
     }
     
     /// Indicates whether the item represents a photo or image format (excluding videos and documents).

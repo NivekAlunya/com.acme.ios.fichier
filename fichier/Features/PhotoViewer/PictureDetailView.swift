@@ -53,6 +53,9 @@ public struct PictureDetailView: View {
     /// Full-resolution image decoded for the currently active photo.
     @State private var currentImage: UIImage?
     
+    /// In-memory cache holding preloaded full-resolution slides for seamless slideshow cross-dissolving.
+    @State private var slideImageCache: [String: UIImage] = [:]
+    
     /// Parsed EXIF metadata for the currently active photo.
     @State private var activeMetadata: PictureEXIFData?
     
@@ -79,7 +82,7 @@ public struct PictureDetailView: View {
         autoStartSlideshow: Bool = false
     ) {
         self.manager = manager
-        let photos = pictures.filter { !$0.isVideo }
+        let photos = pictures.filter(\.isImage)
         self.pictures = photos.isEmpty ? [initialItem] : photos
         self.initialItem = initialItem
         self.autoStartSlideshow = autoStartSlideshow
@@ -97,13 +100,15 @@ public struct PictureDetailView: View {
             Color.black.ignoresSafeArea()
             
             if isPlayingSlideshow {
-                // Slideshow Mode: Smooth Sliding Transition between Photos
+                // Slideshow Mode: Simultaneous cross-dissolve with subtle scale
                 ZStack {
                     ZoomablePicturePageView(
                         manager: manager,
                         item: currentItem,
+                        initialImage: slideImageCache[currentItem.id] ?? (currentItem.id == initialItem.id ? currentImage : nil),
                         onImageLoaded: { loadedImg in
                             self.currentImage = loadedImg
+                            self.slideImageCache[currentItem.id] = loadedImg
                         },
                         onTap: {
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -111,9 +116,12 @@ public struct PictureDetailView: View {
                             }
                         }
                     )
-                    .id(currentItem.id)
                     .transition(activeTransition)
+                    .id(currentItem.id)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .zIndex(1)
                 .contentShape(Rectangle())
                 #if !os(tvOS)
                 .gesture(
@@ -121,12 +129,12 @@ public struct PictureDetailView: View {
                         .onEnded { value in
                             if value.translation.width < -40 {
                                 // Swiped left -> Advance to next image
-                                withAnimation(.easeInOut(duration: 0.55)) {
+                                withAnimation(.easeInOut(duration: 0.8)) {
                                     goToNext()
                                 }
                             } else if value.translation.width > 40 {
                                 // Swiped right -> Return to previous image
-                                withAnimation(.easeInOut(duration: 0.55)) {
+                                withAnimation(.easeInOut(duration: 0.8)) {
                                     goToPrevious()
                                 }
                             }
@@ -164,6 +172,7 @@ public struct PictureDetailView: View {
                         item: currentItem,
                         currentIndex: currentIndex,
                         totalCount: pictures.count,
+                        frameSize: activeMetadata?.dimensions,
                         onDismiss: { dismiss() }
                     )
                     
@@ -179,8 +188,8 @@ public struct PictureDetailView: View {
                         isSaving: isSaving,
                         currentImage: currentImage,
                         currentName: currentItem.name,
-                        onPrevious: { withAnimation { goToPrevious() } },
-                        onNext: { withAnimation { goToNext() } },
+                        onPrevious: { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
+                        onNext: { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
                         onShowInfo: {
                             Task {
                                 if activeMetadata == nil {
@@ -240,7 +249,18 @@ public struct PictureDetailView: View {
                 return
             }
             guard isPlayingSlideshow && !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.6)) {
+            
+            // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve
+            let nextIndex = (currentIndex + 1) % pictures.count
+            let nextItem = pictures[nextIndex]
+            if slideImageCache[nextItem.id] == nil, !nextItem.isVideo {
+                if let loaded = await manager.downloadImage(for: nextItem) {
+                    slideImageCache[nextItem.id] = loaded
+                }
+            }
+            guard isPlayingSlideshow && !Task.isCancelled else { return }
+
+            withAnimation(.easeInOut(duration: 0.8)) {
                 goToNext()
             }
         }
@@ -273,6 +293,9 @@ public struct PictureDetailView: View {
                         self.activeMetadata = result.meta
                     } else {
                         self.currentImage = result.image
+                        if let img = result.image {
+                            self.slideImageCache[targetID] = img
+                        }
                     }
                 }
             }
@@ -283,13 +306,13 @@ public struct PictureDetailView: View {
             Group {
                 Button("") { dismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
-                Button("") { withAnimation { goToPrevious() } }
+                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
                     .keyboardShortcut(.leftArrow, modifiers: [])
-                Button("") { withAnimation { goToNext() } }
+                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut(.rightArrow, modifiers: [])
-                Button("") { withAnimation { goToPrevious() } }
+                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
                     .keyboardShortcut("[", modifiers: [])
-                Button("") { withAnimation { goToNext() } }
+                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut("]", modifiers: [])
                 Button("") { withAnimation { isPlayingSlideshow.toggle() } }
                     .keyboardShortcut(.space, modifiers: [])
@@ -313,19 +336,27 @@ public struct PictureDetailView: View {
     
     /// Dynamically constructs the transition animation based on user preference and trajectory direction.
     private var activeTransition: AnyTransition {
+        let base: AnyTransition
         switch transitionStyle {
         case .slide:
-            return .asymmetric(
+            base = .asymmetric(
                 insertion: .move(edge: slideDirection == .forward ? .trailing : .leading)
                     .combined(with: .opacity),
                 removal: .move(edge: slideDirection == .forward ? .leading : .trailing)
                     .combined(with: .opacity)
             )
         case .dissolve:
-            return .opacity
+            base = .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 1.04)),
+                removal: .opacity.combined(with: .scale(scale: 0.96))
+            )
         case .kenBurns:
-            return .opacity.combined(with: .scale(scale: 0.94))
+            base = .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 1.08)),
+                removal: .opacity.combined(with: .scale(scale: 0.92))
+            )
         }
+        return base.animation(.easeInOut(duration: 0.8))
     }
     
     // MARK: - Actions & Navigation Helpers
@@ -378,7 +409,9 @@ public struct PictureDetailView: View {
         let nextItem = pictures[nextIdx]
         guard !nextItem.isVideo else { return }
         Task {
-            _ = await manager.downloadImage(for: nextItem)
+            if let img = await manager.downloadImage(for: nextItem) {
+                slideImageCache[nextItem.id] = img
+            }
         }
     }
 }

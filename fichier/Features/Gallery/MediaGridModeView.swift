@@ -87,11 +87,6 @@ struct MediaGridModeView: View {
                                                     .font(.subheadline)
                                                     .foregroundColor(.primary)
                                                     .lineLimit(1)
-                                                if let d = subfolder.formattedDate {
-                                                    Text(d)
-                                                        .font(.caption2)
-                                                        .foregroundColor(.secondary)
-                                                }
                                             }
                                             Spacer()
                                             Image(systemName: "chevron.right")
