@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Asynchronous thumbnail loading component rendering cached or remote previews for photos, videos, and documents.
 ///
