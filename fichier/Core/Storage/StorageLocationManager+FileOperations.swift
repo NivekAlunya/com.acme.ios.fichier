@@ -211,7 +211,7 @@ extension StorageLocationManager {
     /// - Returns: Discovered immediate child subfolders.
     public func fetchSubfoldersForPicker(at folder: MediaItem) async throws -> [MediaItem] {
         if folder.localURL != nil {
-            return try await localWorker.listSubfolders(at: folder, locationID: folder.connectionID)
+            return try await localWorker.listSubfolders(at: folder, locationID: folder.locationID)
         } else if folder.locationID == StorageLocation.photosLocationID {
             return []
         } else {
