@@ -17,26 +17,49 @@ struct SidebarFolderTreeView: View {
     let onSelectFolder: (MediaItem) -> Void
     
     var body: some View {
-        List {
-            Section(sectionHeaderTitle) {
-                ForEach(manager.folderTree) { shareRootNode in
-                    FolderTreeNodeView(
-                        node: shareRootNode,
-                        level: 0,
-                        isInitiallyExpanded: isRootInitiallyExpanded(shareRootNode),
-                        manager: manager,
-                        onSelectFolder: onSelectFolder
-                    )
+        Group {
+            if displayedTreeNodes.isEmpty {
+                if manager.isLoading {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text(.Strings.sidebarLoadingShares)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ContentUnavailableView {
+                        Label(
+                            String(localized: .Strings.gallerySectionSubfoldersCount(0)),
+                            systemImage: "folder"
+                        )
+                    } description: {
+                        Text(.Strings.galleryNoFolderSelectedDescription)
+                    }
+                }
+            } else {
+                List {
+                    Section(sectionHeaderTitle) {
+                        ForEach(displayedTreeNodes) { childNode in
+                            FolderTreeNodeView(
+                                node: childNode,
+                                level: 0,
+                                isInitiallyExpanded: isRootInitiallyExpanded(childNode),
+                                manager: manager,
+                                onSelectFolder: onSelectFolder
+                            )
+                        }
+                    }
+                }
+                #if os(tvOS)
+                .listStyle(.plain)
+                #else
+                .listStyle(.sidebar)
+                #endif
+                .refreshable {
+                    await manager.refreshSharesAndFolders()
                 }
             }
-        }
-        #if os(tvOS)
-        .listStyle(.plain)
-        #else
-        .listStyle(.sidebar)
-        #endif
-        .refreshable {
-            await manager.refreshSharesAndFolders()
         }
         .onChange(of: manager.navigationCoordinator.mutationRevision) { _, _ in
             Task {
@@ -45,12 +68,27 @@ struct SidebarFolderTreeView: View {
         }
     }
     
+    /// Root-level tree nodes displayed in the middle column, scoped to the active share's children for SMB connections.
+    private var displayedTreeNodes: [MediaItem] {
+        if manager.currentLocation?.kind == .smb {
+            if let activeShare = manager.selectedShare {
+                let matchedNode = manager.folderTree.first(where: { $0.shareName == activeShare.shareName }) ?? activeShare
+                return matchedNode.children ?? (manager.selectedFolder?.shareName == activeShare.shareName && manager.selectedFolder?.path.isEmpty == true ? manager.currentFolders : [])
+            }
+            return []
+        }
+        return manager.folderTree
+    }
+
     /// Determines whether a root share/folder node should be expanded automatically upon initial appearance.
     ///
     /// - Parameter root: The root `MediaItem` being evaluated.
     /// - Returns: `true` if the currently selected folder belongs to this root tree.
     private func isRootInitiallyExpanded(_ root: MediaItem) -> Bool {
         guard let selected = manager.selectedFolder else { return false }
+        if manager.currentLocation?.kind == .smb {
+            return selected.path.hasPrefix(root.path) && selected.path != root.path
+        }
         return selected.shareName == root.shareName || selected.rootName == root.rootName
     }
     
@@ -62,6 +100,6 @@ struct SidebarFolderTreeView: View {
         if manager.currentLocation?.kind == .localFolder || manager.currentLocation?.kind == .iCloudFolder {
             return String(localized: .Strings.gallerySectionSubfoldersCount(manager.folderTree.count))
         }
-        return String(localized: .Strings.sidebarSectionServerShares(manager.folderTree.count))
+        return String(localized: .Strings.gallerySectionSubfoldersCount(displayedTreeNodes.count))
     }
 }

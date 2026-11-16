@@ -29,6 +29,9 @@ public struct LocationsSidebarView: View {
     
     /// Callback triggered when the user taps a storage location row.
     let onSelectLocation: (StorageLocation) -> Void
+    
+    /// Callback triggered when the user taps a discovered SMB share row.
+    let onSelectShare: (MediaItem) -> Void
 
     @State private var viewModel: LocationsSidebarViewModel
     
@@ -40,17 +43,20 @@ public struct LocationsSidebarView: View {
     ///   - showingSettings: Binding for settings sheet.
     ///   - connectingLocationID: Active connecting location ID.
     ///   - onSelectLocation: Location selection handler.
+    ///   - onSelectShare: Share selection handler.
     public init(
         manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
         showingSettings: Binding<Bool>,
         connectingLocationID: String?,
-        onSelectLocation: @escaping (StorageLocation) -> Void
+        onSelectLocation: @escaping (StorageLocation) -> Void,
+        onSelectShare: @escaping (MediaItem) -> Void
     ) {
         self._showingAddRemote = showingAddRemote
         self._showingSettings = showingSettings
         self.connectingLocationID = connectingLocationID
         self.onSelectLocation = onSelectLocation
+        self.onSelectShare = onSelectShare
         // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
         // While State(initialValue:) evaluates on every init, @State retains only the
         // original state object across renders and discards transient allocations.
@@ -77,93 +83,21 @@ public struct LocationsSidebarView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    ForEach(viewModel.manager.allLocations) { location in
-                        HStack(spacing: 12) {
-                            Button {
-                                onSelectLocation(location)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: location.systemIcon)
-                                        .foregroundColor(location.iconColor)
-                                        .font(.title3)
-                                        .frame(width: 28)
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(location.name)
-                                            .font(.headline)
-                                            .foregroundColor(.primary)
-                                            .lineLimit(1)
-                                        
-                                        if let subtitle = location.subtitle {
-                                            Text(subtitle)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            
-                            if isConnecting(location) {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                            } else if isCurrentLocation(location) {
-                                if location.kind == .smb {
-                                    HStack(spacing: 8) {
-                                        Circle()
-                                            .fill(Color.green)
-                                            .frame(width: 8, height: 8)
-                                        
-                                        Button {
-                                            Task {
-                                                await viewModel.manager.disconnect()
-                                            }
-                                        } label: {
-                                            Image(systemName: "eject.fill")
-                                                .font(.system(size: 13, weight: .semibold))
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .accessibilityLabel(.Strings.connectionButtonDisconnect)
-                                    }
-                                } else {
-                                    Circle()
-                                        .fill(Color.green)
-                                        .frame(width: 8, height: 8)
-                                }
-                            }
-                        }
-                        .deleteDisabled(location.kind == .photos)
-                        .contextMenu {
-                            if isCurrentLocation(location) && location.kind == .smb {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await viewModel.manager.disconnect()
-                                    }
-                                } label: {
-                                    Label(.Strings.connectionButtonDisconnect, systemImage: "eject")
-                                }
-                            }
-                            if location.kind != .photos {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await viewModel.manager.removeLocation(location)
-                                    }
-                                } label: {
-                                    Label(String(localized: "Remove Location"), systemImage: "trash")
-                                }
-                            }
+                    ForEach(viewModel.sidebarItems) { item in
+                        switch item {
+                        case .location(let location):
+                            locationRow(for: location)
+                        case .share(let share):
+                            shareRow(for: share)
                         }
                     }
                     .onDelete { indexSet in
-                        let locationsToRemove = indexSet.map { viewModel.manager.allLocations[$0] }
-                        for loc in locationsToRemove where loc.kind != .photos {
-                            Task {
-                                await viewModel.manager.removeLocation(loc)
+                        for index in indexSet {
+                            guard index < viewModel.sidebarItems.count else { continue }
+                            if case .location(let loc) = viewModel.sidebarItems[index], loc.kind != .photos {
+                                Task {
+                                    await viewModel.manager.removeLocation(loc)
+                                }
                             }
                         }
                     }
@@ -255,6 +189,131 @@ public struct LocationsSidebarView: View {
         } label: {
             Label(.Strings.sidebarMenuConnectSmb, systemImage: "macmini")
         }
+    }
+    
+    // MARK: - Row Builders
+    
+    @ViewBuilder
+    private func locationRow(for location: StorageLocation) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                onSelectLocation(location)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: location.systemIcon)
+                        .foregroundColor(location.iconColor)
+                        .font(.title3)
+                        .frame(width: 28)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(location.name)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        if let subtitle = location.subtitle {
+                            Text(subtitle)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            if isConnecting(location) {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else if isCurrentLocation(location) {
+                if location.kind == .smb {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        
+                        Button {
+                            Task {
+                                await viewModel.manager.disconnect()
+                            }
+                        } label: {
+                            Image(systemName: "eject.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(.Strings.connectionButtonDisconnect)
+                    }
+                } else {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 8, height: 8)
+                }
+            }
+        }
+        .deleteDisabled(location.kind == .photos)
+        .contextMenu {
+            if isCurrentLocation(location) && location.kind == .smb {
+                Button(role: .destructive) {
+                    Task {
+                        await viewModel.manager.disconnect()
+                    }
+                } label: {
+                    Label(.Strings.connectionButtonDisconnect, systemImage: "eject")
+                }
+            }
+            if location.kind != .photos {
+                Button(role: .destructive) {
+                    Task {
+                        await viewModel.manager.removeLocation(location)
+                    }
+                } label: {
+                    Label(String(localized: "Remove Location"), systemImage: "trash")
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func shareRow(for share: MediaItem) -> some View {
+        Button {
+            onSelectShare(share)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "externaldrive.connected.to.line.below")
+                    .foregroundColor(isShareSelected(share) ? .accentColor : .secondary)
+                    .font(.body)
+                    .frame(width: 20)
+                
+                Text(share.name)
+                    .font(.subheadline)
+                    .fontWeight(isShareSelected(share) ? .semibold : .regular)
+                    .foregroundColor(isShareSelected(share) ? .primary : .secondary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if isShareSelected(share) {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.leading, 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .deleteDisabled(true)
+    }
+    
+    private func isShareSelected(_ share: MediaItem) -> Bool {
+        if let selectedShare = viewModel.manager.selectedShare {
+            return selectedShare.id == share.id || selectedShare.shareName == share.shareName
+        }
+        return viewModel.manager.selectedFolder?.shareName == share.shareName
     }
     
     /// Tests whether the given location is currently active and connected.

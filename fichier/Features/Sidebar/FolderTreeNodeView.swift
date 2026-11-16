@@ -70,8 +70,9 @@ struct FolderTreeNodeView: View {
                 return "icloud.fill"
             } else if manager.currentLocation?.kind == .localFolder {
                 return "folder.fill"
+            } else if node.path.isEmpty {
+                return "externaldrive.fill.badge.wifi"
             }
-            return "externaldrive.fill.badge.wifi"
         }
         return isSelected ? "folder.fill" : "folder"
     }

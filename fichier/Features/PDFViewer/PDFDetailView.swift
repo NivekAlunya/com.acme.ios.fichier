@@ -222,6 +222,9 @@ struct PDFDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            AppKeyboardDismissal.dismiss()
+        }
         .task(id: "\(viewModel.currentItem.id)-\(viewModel.reloadAttempt)") {
             await loadDocument()
         }

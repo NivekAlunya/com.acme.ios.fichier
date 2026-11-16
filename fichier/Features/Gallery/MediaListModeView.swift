@@ -175,6 +175,9 @@ struct MediaListModeView: View {
                     .id(folders.isEmpty ? "topOfList" : "picturesSection")
                 }
             }
+            #if !os(tvOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
             .id(currentDirectoryID)
             .onChange(of: currentDirectoryID) { _, _ in
                 proxy.scrollTo("topOfList", anchor: .top)

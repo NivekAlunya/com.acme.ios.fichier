@@ -68,6 +68,15 @@ public struct FolderTreeContentView: View {
                             .buttonStyle(.bordered)
                         }
                     }
+                } else if manager.currentLocation?.kind == .smb && manager.selectedShare == nil {
+                    ContentUnavailableView {
+                        Label(
+                            String(localized: .Strings.connectionTitleSharedFolders),
+                            systemImage: "externaldrive.connected.to.line.below"
+                        )
+                    } description: {
+                        Text(.Strings.galleryNoFolderSelectedDescription)
+                    }
                 } else {
                     SidebarFolderTreeView(
                         manager: manager,
@@ -104,6 +113,9 @@ public struct FolderTreeContentView: View {
     
     /// Computes the column title reflecting the current connection name or active folder.
     private var navigationTitle: String {
+        if manager.currentLocation?.kind == .smb, let share = manager.selectedShare {
+            return share.name
+        }
         if let location = manager.currentLocation {
             return location.name
         }
