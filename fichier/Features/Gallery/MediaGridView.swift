@@ -36,6 +36,21 @@ struct MediaGridView: View {
     /// Callback closure invoked when an individual picture is tapped to open fullscreen viewer,
     /// providing the tapped item alongside the contextual list of all sibling pictures for swiping.
     let onSelectPicture: (MediaItem, [MediaItem]) -> Void
+
+    @State private var viewModel: MediaGridViewModel
+
+    init(
+        manager: StorageLocationManager,
+        onSelectFolder: ((MediaItem) -> Void)? = nil,
+        onStartSlideshow: (([MediaItem]) -> Void)? = nil,
+        onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void
+    ) {
+        self.manager = manager
+        self.onSelectFolder = onSelectFolder
+        self.onStartSlideshow = onStartSlideshow
+        self.onSelectPicture = onSelectPicture
+        _viewModel = State(initialValue: MediaGridViewModel(manager: manager))
+    }
     
     // MARK: - Environment & Persistent Settings
     
@@ -59,9 +74,6 @@ struct MediaGridView: View {
     
     // MARK: - Search & Gesture State
     
-    /// Live search query string bound to the SwiftUI `.searchable` modifier.
-    @State private var searchText = ""
-    
     /// Tracks the magnification scale at the end of the previous discrete gesture step to compute relative zoom ratios.
     @State private var lastPinchScale: CGFloat = 1.0
     
@@ -79,145 +91,103 @@ struct MediaGridView: View {
     /// Minimum time delay (in seconds) required between consecutive discrete pinch-to-zoom step evaluations, preventing visual stutter.
     private static let pinchCooldownSeconds: TimeInterval = 0.30
     
-    // MARK: - Filtering & Batch Selection State
+    // MARK: - ViewModel Forwarding
     
-    /// Flag indicating whether the media list should be restricted exclusively to items marked as favorites.
-    @State private var showFavoritesOnly = false
-    
-    /// Active media category filter applied to display items (e.g. photos, videos, documents, or all).
-    @State private var mediaFilter: MediaFilter = .all
-    
-    /// Toggles multi-selection mode for performing batch operations (favoriting, saving to Photos, or sharing).
-    @State private var isSelectionMode = false
-    
-    /// The set of uniquely selected `MediaItem` instances currently highlighted in selection mode.
-    @State private var selectedItems: Set<MediaItem> = []
-    
-    /// Flag indicating that a background batch export or share preparation task is currently executing.
-    @State private var isBatchProcessing = false
-    
-    /// User-facing status string displayed in the selection bottom bar indicating current batch progress (e.g., "Saving (2/10)").
-    @State private var batchProgressMessage: String?
-    
-    /// Transient status message displayed inside an animated toast capsule upon batch operation completion.
-    @State private var batchStatusToast: String?
-    
-    /// Active structured asynchronous task handle executing batch processing, cancellable by user action or view dismissal.
-    @State private var batchTask: Task<Void, Never>?
-    
-    /// Holds the prepared shareable items (images/URLs) passed to `MediaActivityShareSheet` when ready to present.
-    @State private var shareSheetItems: [Any]?
-    
-    /// Controls presentation of the application settings sheet on compact size classes.
-    @State private var showingSettings = false
-    
-    /// Presentation flag for the "New Folder" alert prompt.
-    @State private var isShowingNewFolderAlert = false
-    
-    /// User input text buffer for a new folder name.
-    @State private var newFolderName = ""
-    
-    /// Item pending user renaming.
-    @State private var itemToRename: MediaItem?
-    
-    /// User input text buffer for renaming an item.
-    @State private var renameText = ""
-    
-    /// Items selected or contextualized for moving to another folder.
-    @State private var itemsPendingMove: [MediaItem]?
-    
-    /// Items pending user confirmation for deletion to the system Trash.
-    @State private var itemsPendingDelete: [MediaItem]?
-    
-    /// Staged local file URLs pending export to the iOS Files app via UIDocumentPickerViewController.
-    @State private var itemsPendingFileExport: [URL]?
-    
-    /// Error message captured during file management actions.
-    @State private var fileOpErrorMessage: String?
-    
-    /// Unique identity token incremented or refreshed to force complete invalidation and reload of visible thumbnail cells.
-    @State private var thumbnailReloadToken = UUID()
+    private var searchText: String {
+        get { viewModel.searchText }
+        nonmutating set { viewModel.searchText = newValue }
+    }
+    private var showFavoritesOnly: Bool {
+        get { viewModel.showFavoritesOnly }
+        nonmutating set { viewModel.showFavoritesOnly = newValue }
+    }
+    private var mediaFilter: MediaFilter {
+        get { viewModel.mediaFilter }
+        nonmutating set { viewModel.mediaFilter = newValue }
+    }
+    private var isSelectionMode: Bool {
+        get { viewModel.isSelectionMode }
+        nonmutating set { viewModel.isSelectionMode = newValue }
+    }
+    private var selectedItems: Set<MediaItem> {
+        get { viewModel.selectedItems }
+        nonmutating set { viewModel.selectedItems = newValue }
+    }
+    private var isBatchProcessing: Bool {
+        get { viewModel.isBatchProcessing }
+        nonmutating set { viewModel.isBatchProcessing = newValue }
+    }
+    private var batchProgressMessage: String? {
+        get { viewModel.batchProgressMessage }
+        nonmutating set { viewModel.batchProgressMessage = newValue }
+    }
+    private var batchStatusToast: String? {
+        get { viewModel.batchStatusToast }
+        nonmutating set { viewModel.batchStatusToast = newValue }
+    }
+    private var batchTask: Task<Void, Never>? {
+        get { viewModel.batchTask }
+        nonmutating set { viewModel.batchTask = newValue }
+    }
+    private var shareSheetItems: [Any]? {
+        get { viewModel.shareSheetItems }
+        nonmutating set { viewModel.shareSheetItems = newValue }
+    }
+    private var showingSettings: Bool {
+        get { viewModel.showingSettings }
+        nonmutating set { viewModel.showingSettings = newValue }
+    }
+    private var isShowingNewFolderAlert: Bool {
+        get { viewModel.isShowingNewFolderAlert }
+        nonmutating set { viewModel.isShowingNewFolderAlert = newValue }
+    }
+    private var newFolderName: String {
+        get { viewModel.newFolderName }
+        nonmutating set { viewModel.newFolderName = newValue }
+    }
+    private var itemToRename: MediaItem? {
+        get { viewModel.itemToRename }
+        nonmutating set { viewModel.itemToRename = newValue }
+    }
+    private var renameText: String {
+        get { viewModel.renameText }
+        nonmutating set { viewModel.renameText = newValue }
+    }
+    private var itemsPendingMove: [MediaItem]? {
+        get { viewModel.itemsPendingMove }
+        nonmutating set { viewModel.itemsPendingMove = newValue }
+    }
+    private var itemsPendingDelete: [MediaItem]? {
+        get { viewModel.itemsPendingDelete }
+        nonmutating set { viewModel.itemsPendingDelete = newValue }
+    }
+    private var itemsPendingFileExport: [URL]? {
+        get { viewModel.itemsPendingFileExport }
+        nonmutating set { viewModel.itemsPendingFileExport = newValue }
+    }
+    private var fileOpErrorMessage: String? {
+        get { viewModel.fileOpErrorMessage }
+        nonmutating set { viewModel.fileOpErrorMessage = newValue }
+    }
+    private var thumbnailReloadToken: UUID {
+        get { viewModel.thumbnailReloadToken }
+        nonmutating set { viewModel.thumbnailReloadToken = newValue }
+    }
     
     // MARK: - Directory Identification
     
-    /// Stable identifier representing the current browsing scope, used to reset scroll positions when switching folders.
     private var currentDirectoryID: String {
-        manager.selectedFolder?.id ?? "root"
+        viewModel.currentDirectoryID
     }
     
     // MARK: - Filtered and Sorted Data Pipeline
     
-    /// Applies search filtering, favorites filtering, media kind classification, and ordering to the current folder's contents.
-    ///
-    /// - Returns: A tuple containing sorted subfolders and sorted media items ready for presentation.
-    ///
-    /// ### Complex Logic Breakdown:
-    /// 1. **Search**: Case-insensitive substring matching using `localizedCaseInsensitiveContains` on folder and media item names.
-    /// 2. **Favorites Discrimination**: Queries the high-performance `FavoritesManager` cache when `showFavoritesOnly` is active.
-    /// 3. **Type Segregation**: Categorizes items into photos, videos, or documents based on MIME type and file extension flags.
-    /// 4. **Natural Ordering**: Applies `sortItems(_:)` to ensure natural alphanumeric sorting (e.g. "File 2" before "File 10").
     private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
-        let listFolders = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-        }
-        let sortedFolders = sortItems(listFolders)
-        
-        var listPictures = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-        }
-        if showFavoritesOnly {
-            listPictures = listPictures.filter { FavoritesManager.shared.isFavorite($0) }
-        }
-        switch mediaFilter {
-        case .all:
-            break
-        case .photos:
-            listPictures = listPictures.filter(\.isImage)
-        case .videos:
-            listPictures = listPictures.filter { $0.isVideo }
-        #if !os(tvOS)
-        case .documents:
-            listPictures = listPictures.filter { $0.isPDF }
-        #endif
-        }
-        let sortedPictures = sortItems(listPictures)
-        return (sortedFolders, sortedPictures)
+        viewModel.filterAndSortData(sortOption: sortOption)
     }
     
-    /// Produces a localized section header string dynamically reflecting the active media filter and count.
-    ///
-    /// - Parameter count: The number of media items present in the section.
-    /// - Returns: A localized string resource configured with the item count.
     private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        switch mediaFilter {
-        case .all: return .Strings.gallerySectionMediaCount(count)
-        case .photos: return .Strings.gallerySectionPhotosCount(count)
-        case .videos: return .Strings.gallerySectionVideosCount(count)
-        #if !os(tvOS)
-        case .documents: return LocalizedStringResource("gallery_section_documents_count", defaultValue: "\(count) Documents")
-        #endif
-        }
-    }
-    
-    /// Sorts an array of `MediaItem` instances according to the user's selected `sortOption`.
-    ///
-    /// - Parameter items: The unsorted media items.
-    /// - Returns: The stably sorted media items.
-    private func sortItems(_ items: [MediaItem]) -> [MediaItem] {
-        switch sortOption {
-        case .nameAsc:
-            return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        case .nameDesc:
-            return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
-        case .dateDesc:
-            return items.sorted { ($0.modifiedDate ?? .distantPast) > ($1.modifiedDate ?? .distantPast) }
-        case .dateAsc:
-            return items.sorted { ($0.modifiedDate ?? .distantPast) < ($1.modifiedDate ?? .distantPast) }
-        case .sizeDesc:
-            return items.sorted { $0.size > $1.size }
-        case .sizeAsc:
-            return items.sorted { $0.size < $1.size }
-        }
+        viewModel.mediaSectionHeader(for: count)
     }
     
     /// Dynamic grid layout specification computed from the active `gridSize`.
@@ -226,14 +196,8 @@ struct MediaGridView: View {
         [GridItem(.adaptive(minimum: gridSize.minDimension, maximum: gridSize.minDimension * 1.45), spacing: 10)]
     }
     
-    /// Accessibility label for the parent folder navigation button, dynamically reflecting the parent folder name when available.
-    /// Extracted as a dedicated property to avoid complex nested expression evaluation inside the SwiftUI toolbar ViewBuilder.
     private var parentFolderAccessibilityLabel: String {
-        if let parentName = manager.parentFolder?.name {
-            String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
-        } else {
-            String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
-        }
+        viewModel.parentFolderAccessibilityLabel
     }
     
     // MARK: - Body View Hierarchy
@@ -382,8 +346,8 @@ struct MediaGridView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .statusToast(message: $batchStatusToast)
-        .searchable(text: $searchText, prompt: .Strings.gallerySearchPrompt)
+        .statusToast(message: $viewModel.batchStatusToast)
+        .searchable(text: $viewModel.searchText, prompt: .Strings.gallerySearchPrompt)
         .sheet(isPresented: Binding(
             get: { shareSheetItems != nil },
             set: { if !$0 { shareSheetItems = nil } }
@@ -392,7 +356,7 @@ struct MediaGridView: View {
                 MediaActivityShareSheet(activityItems: shareSheetItems)
             }
         }
-        .sheet(isPresented: $showingSettings) {
+        .sheet(isPresented: $viewModel.showingSettings) {
             AppSettingsView()
         }
         #if !os(tvOS)
@@ -462,9 +426,9 @@ struct MediaGridView: View {
         }
         .alert(
             String(localized: "New Folder", comment: "Alert title for creating new folder"),
-            isPresented: $isShowingNewFolderAlert
+            isPresented: $viewModel.isShowingNewFolderAlert
         ) {
-            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $newFolderName)
+            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $viewModel.newFolderName)
             Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
             Button(String(localized: "Create", comment: "Create button")) {
                 executeCreateFolder()
@@ -485,7 +449,7 @@ struct MediaGridView: View {
                 set: { if !$0 { itemToRename = nil } }
             )
         ) {
-            TextField(String(localized: .Strings.galleryRenameFieldPlaceholder), text: $renameText)
+            TextField(String(localized: .Strings.galleryRenameFieldPlaceholder), text: $viewModel.renameText)
             Button(String(localized: .Strings.commonCancel), role: .cancel) {
                 itemToRename = nil
             }
@@ -628,13 +592,13 @@ struct MediaGridView: View {
                             }
                             
                             Section(.Strings.galleryMenuFilter) {
-                                Picker(.Strings.galleryPickerMediaType, selection: $mediaFilter) {
+                                Picker(.Strings.galleryPickerMediaType, selection: $viewModel.mediaFilter) {
                                     ForEach(MediaFilter.allCases) { filter in
                                         Label(filter.localizedTitle, systemImage: filter.iconName).tag(filter)
                                     }
                                 }
                                 
-                                Toggle(isOn: $showFavoritesOnly) {
+                                Toggle(isOn: $viewModel.showFavoritesOnly) {
                                     Label(.Strings.galleryFilterFavoritesOnly, systemImage: "heart.fill")
                                 }
                             }
