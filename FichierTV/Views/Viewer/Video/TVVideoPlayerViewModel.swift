@@ -180,18 +180,8 @@ public final class TVVideoPlayerViewModel {
             mount(url: localURL, kind: initialKind)
         } else if let phID = item.phAssetIdentifier {
             loadPhotoKitVideo(assetIdentifier: phID, itemID: item.id, preferredKind: initialKind)
-        } else if let sourceID = item.sourceID,
-                  let share = item.smbShare,
-                  let smbPath = item.smbPath {
-            loadSMBVideo(
-                sourceID: sourceID,
-                share: share,
-                path: smbPath,
-                fileName: item.name,
-                totalSize: item.size,
-                itemID: item.id,
-                preferredKind: initialKind
-            )
+        } else if item.sourceID != nil, item.smbShare != nil, item.smbPath != nil {
+            loadSMBVideo(item: item, preferredKind: initialKind)
         } else {
             playbackState = .failed("Unable to locate video source for \(item.name).")
             errorMessage = "Unable to locate video source for \(item.name)."
@@ -1350,15 +1340,15 @@ public final class TVVideoPlayerViewModel {
         }
     }
 
-    private func loadSMBVideo(
-        sourceID: String,
-        share: String,
-        path: String,
-        fileName: String,
-        totalSize: Int64,
-        itemID: String,
-        preferredKind: PlayerEngineKind
-    ) {
+    private func loadSMBVideo(item: MediaSourceItem, preferredKind: PlayerEngineKind) {
+        guard let sourceID = item.sourceID,
+              let share = item.smbShare,
+              let path = item.smbPath else { return }
+
+        let fileName = item.name
+        let totalSize = item.size
+        let itemID = item.id
+
         playbackState = .loading
         mediaLoadTask = Task { [weak self] in
             guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }

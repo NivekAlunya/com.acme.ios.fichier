@@ -249,13 +249,13 @@ struct FolderPickerSheetView: View {
     /// Toggles folder expansion state, lazily loading its child subfolders on demand if not yet cached.
     private func toggleExpand(for folder: MediaItem) {
         if expandedIDs.contains(folder.id) {
-            withAnimation(.snappy) {
+            _ = withAnimation(.snappy) {
                 expandedIDs.remove(folder.id)
             }
         } else {
             if let children = folder.children {
                 if !children.isEmpty {
-                    withAnimation(.snappy) {
+                    _ = withAnimation(.snappy) {
                         expandedIDs.insert(folder.id)
                     }
                 }
@@ -268,7 +268,7 @@ struct FolderPickerSheetView: View {
                     let subfolders = try await manager.fetchSubfoldersForPicker(at: folder)
                     folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: folder.id, children: subfolders)
                     if !subfolders.isEmpty {
-                        withAnimation(.snappy) {
+                        _ = withAnimation(.snappy) {
                             expandedIDs.insert(folder.id)
                         }
                     }
@@ -290,7 +290,7 @@ struct FolderPickerSheetView: View {
                 let created = try await manager.createFolder(named: trimmed, in: parent)
                 let subfolders = try await manager.fetchSubfoldersForPicker(at: parent)
                 folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: parent.id, children: subfolders)
-                withAnimation(.snappy) {
+                _ = withAnimation(.snappy) {
                     expandedIDs.insert(parent.id)
                 }
                 selectedDestination = created
