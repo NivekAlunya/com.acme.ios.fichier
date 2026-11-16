@@ -8,11 +8,11 @@ import SwiftUI
 import PDFKit
 import FichierKit
 
-/// Full-screen document viewer presenting PDF files with continuous and horizontal book spread modes.
+/// Full-screen viewModel.document viewer presenting PDF files with continuous and horizontal book spread modes.
 ///
 /// ### Core Capabilities
 /// - **Dual Reading Modes**:
-///   1. *Continuous Scroll*: Vertical single-page document scrolling using native `PDFKitRepresentedView`.
+///   1. *Continuous Scroll*: Vertical single-page viewModel.document scrolling using native `PDFKitRepresentedView`.
 ///   2. *Book Mode*: Interactive horizontal swipe `TabView` rendering facing page spreads (`PDFSpreadPageView`).
 /// - **Leading Thumbnail Sidebar**: Docked thumbnail strip (`PDFLeadingThumbnailSidebarView`) allowing rapid
 ///   jumping to any page with synchronized scrolling and haptic feedback.
@@ -20,13 +20,13 @@ import FichierKit
 ///   via `manager.fetchDocumentURL`, throttling UI progress updates to 128 KB byte intervals.
 /// - **Hardware Keyboard Support**: Complete iPad / Mac shortcuts (`Esc` to dismiss, `B` to toggle book mode, Arrow keys to turn pages).
 struct PDFDetailView: View {
-    /// Shared storage location manager handling document streaming and caching.
+    /// Shared storage location manager handling viewModel.document streaming and caching.
     var manager: StorageLocationManager
     
-    /// Playlist of document items available in this browsing session.
+    /// Playlist of viewModel.document items available in this browsing session.
     let documents: [MediaItem]
     
-    /// The initial document item focused when the viewer opened.
+    /// The initial viewModel.document item focused when the viewer opened.
     let initialItem: MediaItem
     
     @Environment(\.dismiss) private var dismiss
@@ -46,77 +46,13 @@ struct PDFDetailView: View {
         readingMode.displaysAsBook
     }
 
-    private var currentItem: MediaItem {
-        get { viewModel.currentItem }
-        nonmutating set { viewModel.currentItem = newValue }
-    }
-    private var document: PDFDocument? {
-        get { viewModel.document }
-        nonmutating set { viewModel.document = newValue }
-    }
-    private var localFileURL: URL? {
-        get { viewModel.localFileURL }
-        nonmutating set { viewModel.localFileURL = newValue }
-    }
-    private var isLoading: Bool {
-        get { viewModel.isLoading }
-        nonmutating set { viewModel.isLoading = newValue }
-    }
-    private var bytesReceived: Int64 {
-        get { viewModel.bytesReceived }
-        nonmutating set { viewModel.bytesReceived = newValue }
-    }
-    private var totalBytes: Int64 {
-        get { viewModel.totalBytes }
-        nonmutating set { viewModel.totalBytes = newValue }
-    }
-    private var lastReportedBytes: Int64 {
-        get { viewModel.lastReportedBytes }
-        nonmutating set { viewModel.lastReportedBytes = newValue }
-    }
-    private var errorMessage: String? {
-        get { viewModel.errorMessage }
-        nonmutating set { viewModel.errorMessage = newValue }
-    }
-    private var showControls: Bool {
-        get { viewModel.showControls }
-        nonmutating set { viewModel.showControls = newValue }
-    }
-    private var currentPage: Int {
-        get { viewModel.currentPage }
-        nonmutating set { viewModel.currentPage = newValue }
-    }
-    private var endVisiblePage: Int {
-        get { viewModel.endVisiblePage }
-        nonmutating set { viewModel.endVisiblePage = newValue }
-    }
-    private var totalPages: Int {
-        get { viewModel.totalPages }
-        nonmutating set { viewModel.totalPages = newValue }
-    }
-    private var currentSpreadIndex: Int {
-        get { viewModel.currentSpreadIndex }
-        nonmutating set { viewModel.currentSpreadIndex = newValue }
-    }
-    private var activePDFView: PDFView? {
-        get { viewModel.activePDFView }
-        nonmutating set { viewModel.activePDFView = newValue }
-    }
-    private var coordinator: PDFKitCoordinator? {
-        get { viewModel.coordinator }
-        nonmutating set { viewModel.coordinator = newValue }
-    }
-    private var reloadAttempt: Int {
-        get { viewModel.reloadAttempt }
-        nonmutating set { viewModel.reloadAttempt = newValue }
-    }
     
     /// Designated public initializer.
     ///
     /// - Parameters:
     ///   - manager: Shared storage location manager.
     ///   - documents: Array of candidate media items.
-    ///   - initialItem: Initial focused document item.
+    ///   - initialItem: Initial focused viewModel.document item.
     public init(
         manager: StorageLocationManager,
         documents: [MediaItem] = [],
@@ -138,33 +74,33 @@ struct PDFDetailView: View {
         )
     }
     
-    /// Zero-based index of the current document within the active playlist.
+    /// Zero-based index of the current viewModel.document within the active playlist.
     private var currentIndex: Int {
-        documents.firstIndex(where: { $0.id == currentItem.id }) ?? 0
+        documents.firstIndex(where: { $0.id == viewModel.currentItem.id }) ?? 0
     }
     
-    /// Ordered array of page spreads synthesized for the current document.
+    /// Ordered array of page spreads synthesized for the current viewModel.document.
     private var spreads: [PDFSpread] {
-        guard let document else { return [] }
+        guard let document = viewModel.document else { return [] }
         return PDFSpread.buildSpreads(pageCount: document.pageCount, displaysAsBook: displaysAsBook)
     }
     
     /// Synchronizes the active book spread index with the current visible page number.
     private func syncCurrentSpread() {
-        if let match = spreads.firstIndex(where: { $0.pageIndices.contains(currentPage - 1) }) {
-            currentSpreadIndex = match
+        if let match = spreads.firstIndex(where: { $0.pageIndices.contains(viewModel.currentPage - 1) }) {
+            viewModel.currentSpreadIndex = match
             let spread = spreads[match]
-            self.currentPage = spread.firstPageNumber
-            self.endVisiblePage = spread.lastPageNumber
+            self.viewModel.currentPage = spread.firstPageNumber
+            self.viewModel.endVisiblePage = spread.lastPageNumber
         }
     }
     
     /// Formatted status string displaying page numbers (e.g. "Page 1 of 40" or "Pages 2–3 of 40").
     private var pageInfoText: String {
-        if isBookMode && currentPage != endVisiblePage && endVisiblePage > currentPage {
-            return "Pages \(currentPage)–\(endVisiblePage) of \(totalPages)"
+        if isBookMode && viewModel.currentPage != viewModel.endVisiblePage && viewModel.endVisiblePage > viewModel.currentPage {
+            return "Pages \(viewModel.currentPage)–\(viewModel.endVisiblePage) of \(viewModel.totalPages)"
         } else {
-            return "Page \(currentPage) of \(totalPages)"
+            return "Page \(viewModel.currentPage) of \(viewModel.totalPages)"
         }
     }
     
@@ -172,7 +108,7 @@ struct PDFDetailView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if let document {
+            if let document = viewModel.document {
                 if isBookMode {
                     // Book Mode: Interactive 1:1 finger swipe TabView (like PictureDetailView)
                     TabView(selection: $viewModel.currentSpreadIndex) {
@@ -182,7 +118,7 @@ struct PDFDetailView: View {
                                 spread: spread,
                                 onTap: {
                                     withAnimation(.easeInOut(duration: 0.2)) {
-                                        showControls.toggle()
+                                        viewModel.showControls.toggle()
                                     }
                                 }
                             )
@@ -191,11 +127,11 @@ struct PDFDetailView: View {
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .ignoresSafeArea()
-                    .onChange(of: currentSpreadIndex) { _, newIndex in
+                    .onChange(of: viewModel.currentSpreadIndex) { _, newIndex in
                         guard newIndex >= 0 && newIndex < spreads.count else { return }
                         let spread = spreads[newIndex]
-                        self.currentPage = spread.firstPageNumber
-                        self.endVisiblePage = spread.lastPageNumber
+                        self.viewModel.currentPage = spread.firstPageNumber
+                        self.viewModel.endVisiblePage = spread.lastPageNumber
                         UISelectionFeedbackGenerator().selectionChanged()
                     }
                 } else {
@@ -206,83 +142,83 @@ struct PDFDetailView: View {
                         displaysAsBook: false,
                         onPageChange: { cur, total in
                             Task { @MainActor in
-                                if self.currentPage != cur {
-                                    self.currentPage = cur
+                                if self.viewModel.currentPage != cur {
+                                    self.viewModel.currentPage = cur
                                 }
                                 let maxTotal = max(1, total)
-                                if self.totalPages != maxTotal {
-                                    self.totalPages = maxTotal
+                                if self.viewModel.totalPages != maxTotal {
+                                    self.viewModel.totalPages = maxTotal
                                 }
                             }
                         },
                         onPageRangeChange: { first, last, total in
                             Task { @MainActor in
-                                if self.currentPage != first {
-                                    self.currentPage = first
+                                if self.viewModel.currentPage != first {
+                                    self.viewModel.currentPage = first
                                 }
-                                if self.endVisiblePage != last {
-                                    self.endVisiblePage = last
+                                if self.viewModel.endVisiblePage != last {
+                                    self.viewModel.endVisiblePage = last
                                 }
                                 let maxTotal = max(1, total)
-                                if self.totalPages != maxTotal {
-                                    self.totalPages = maxTotal
+                                if self.viewModel.totalPages != maxTotal {
+                                    self.viewModel.totalPages = maxTotal
                                 }
                             }
                         },
                         onTap: {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                showControls.toggle()
+                                viewModel.showControls.toggle()
                             }
                         },
                         onCoordinatorCreated: { coord in
-                            self.coordinator = coord
+                            self.viewModel.coordinator = coord
                         },
                         onPDFViewCreated: { view in
-                            self.activePDFView = view
+                            self.viewModel.activePDFView = view
                         }
                     )
                     .ignoresSafeArea()
                 }
-            } else if isLoading {
+            } else if viewModel.isLoading {
                 loadingOverlay
-            } else if let error = errorMessage {
+            } else if let error = viewModel.errorMessage {
                 errorOverlay(error: error)
             }
             
             // Leading-Edge Thumbnail Sidebar
-            if totalPages > 1, let document {
+            if viewModel.totalPages > 1, let document = viewModel.document {
                 HStack {
                     PDFLeadingThumbnailSidebarView(
                         document: document,
-                        currentPage: currentPage,
-                        endVisiblePage: endVisiblePage,
+                        currentPage: viewModel.currentPage,
+                        endVisiblePage: viewModel.endVisiblePage,
                         onPageSelected: { targetPage in
                             if isBookMode {
                                 if let match = spreads.firstIndex(where: { $0.pageIndices.contains(targetPage - 1) }) {
-                                    currentSpreadIndex = match
+                                    viewModel.currentSpreadIndex = match
                                 }
                             } else {
-                                coordinator?.goToPage(index: targetPage - 1)
+                                viewModel.coordinator?.goToPage(index: targetPage - 1)
                             }
                         }
                     )
-                    .id(currentItem.id)
+                    .id(viewModel.currentItem.id)
                     .padding(.leading, 12)
                     .padding(.top, 70)
                     .padding(.bottom, 80)
                     
                     Spacer()
                 }
-                .opacity(showControls ? 1.0 : 0.0)
-                .animation(.easeInOut(duration: 0.2), value: showControls)
+                .opacity(viewModel.showControls ? 1.0 : 0.0)
+                .animation(.easeInOut(duration: 0.2), value: viewModel.showControls)
                 .transition(.identity)
             }
             
             // HUD Overlays
-            if showControls && document != nil {
+            if viewModel.showControls && viewModel.document != nil {
                 VStack {
                     PDFViewerTopBarView(
-                        item: currentItem,
+                        item: viewModel.currentItem,
                         currentIndex: currentIndex,
                         totalCount: documents.count,
                         onDismiss: { dismiss() }
@@ -292,12 +228,12 @@ struct PDFDetailView: View {
                         hasMultipleDocuments: documents.count > 1,
                         readingMode: $readingMode,
                         pageInfoText: pageInfoText,
-                        isFavorite: FavoritesManager.shared.isFavorite(currentItem),
-                        localFileURL: localFileURL,
-                        currentName: currentItem.name,
+                        isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
+                        localFileURL: viewModel.localFileURL,
+                        currentName: viewModel.currentItem.name,
                         onPreviousDocument: { goToPreviousDocument() },
                         onNextDocument: { goToNextDocument() },
-                        onToggleFavorite: { FavoritesManager.shared.toggleFavorite(currentItem) }
+                        onToggleFavorite: { FavoritesManager.shared.toggleFavorite(viewModel.currentItem) }
                     )
                     .padding(.bottom, 20)
                 }
@@ -305,7 +241,7 @@ struct PDFDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task(id: "\(currentItem.id)-\(reloadAttempt)") {
+        .task(id: "\(viewModel.currentItem.id)-\(viewModel.reloadAttempt)") {
             await loadDocument()
         }
         .onChange(of: readingMode) { _, newMode in
@@ -330,10 +266,10 @@ struct PDFDetailView: View {
                 Button("") {
                     if isBookMode {
                         withAnimation(.easeInOut(duration: 0.25)) {
-                            currentSpreadIndex = max(0, currentSpreadIndex - 1)
+                            viewModel.currentSpreadIndex = max(0, viewModel.currentSpreadIndex - 1)
                         }
                     } else {
-                        coordinator?.goToPrevious()
+                        viewModel.coordinator?.goToPrevious()
                     }
                 }
                 .keyboardShortcut(.leftArrow, modifiers: [])
@@ -341,10 +277,10 @@ struct PDFDetailView: View {
                 Button("") {
                     if isBookMode {
                         withAnimation(.easeInOut(duration: 0.25)) {
-                            currentSpreadIndex = min(spreads.count - 1, currentSpreadIndex + 1)
+                            viewModel.currentSpreadIndex = min(spreads.count - 1, viewModel.currentSpreadIndex + 1)
                         }
                     } else {
-                        coordinator?.goToNext()
+                        viewModel.coordinator?.goToNext()
                     }
                 }
                 .keyboardShortcut(.rightArrow, modifiers: [])
@@ -366,43 +302,43 @@ struct PDFDetailView: View {
     
     // MARK: - Document Playlist Navigation
     
-    /// Navigates to the next PDF document in the queue with cyclic wrapping.
+    /// Navigates to the next PDF viewModel.document in the queue with cyclic wrapping.
     private func goToNextDocument() {
         guard !documents.isEmpty else { return }
         let nextIndex = (currentIndex + 1) % documents.count
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            currentItem = documents[nextIndex]
+            viewModel.currentItem = documents[nextIndex]
             resetDocumentState()
         }
     }
     
-    /// Navigates to the previous PDF document in the queue with cyclic wrapping.
+    /// Navigates to the previous PDF viewModel.document in the queue with cyclic wrapping.
     private func goToPreviousDocument() {
         guard !documents.isEmpty else { return }
         let prevIndex = (currentIndex - 1 + documents.count) % documents.count
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            currentItem = documents[prevIndex]
+            viewModel.currentItem = documents[prevIndex]
             resetDocumentState()
         }
     }
     
-    /// Resets transient reader state before loading a newly switched document.
+    /// Resets transient reader state before loading a newly switched viewModel.document.
     private func resetDocumentState() {
-        document = nil
-        localFileURL = nil
-        isLoading = true
-        errorMessage = nil
-        currentPage = 1
-        endVisiblePage = 1
-        totalPages = 1
-        currentSpreadIndex = 0
-        bytesReceived = 0
-        totalBytes = 0
-        lastReportedBytes = 0
+        viewModel.document = nil
+        viewModel.localFileURL = nil
+        viewModel.isLoading = true
+        viewModel.errorMessage = nil
+        viewModel.currentPage = 1
+        viewModel.endVisiblePage = 1
+        viewModel.totalPages = 1
+        viewModel.currentSpreadIndex = 0
+        viewModel.bytesReceived = 0
+        viewModel.totalBytes = 0
+        viewModel.lastReportedBytes = 0
     }
     
     // MARK: - Loading Overlay
@@ -410,26 +346,26 @@ struct PDFDetailView: View {
     /// Loading view displaying determinate progress percentage or indeterminate spinner.
     private var loadingOverlay: some View {
         VStack(spacing: 16) {
-            if totalBytes > 0 {
-                let progress = Double(bytesReceived) / Double(totalBytes)
+            if viewModel.totalBytes > 0 {
+                let progress = Double(viewModel.bytesReceived) / Double(viewModel.totalBytes)
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
                     .frame(width: 200)
                     .tint(.white)
-                Text("\(Int(progress * 100))% • \(currentItem.formattedSize)")
+                Text("\(Int(progress * 100))% • \(viewModel.currentItem.formattedSize)")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
             } else {
                 ProgressView()
                     .tint(.white)
                     .scaleEffect(1.4)
-                Text(currentItem.name)
+                Text(viewModel.currentItem.name)
                     .font(.headline)
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.horizontal, 32)
-                Text(currentItem.formattedSize)
+                Text(viewModel.currentItem.formattedSize)
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -470,7 +406,7 @@ struct PDFDetailView: View {
                 .tint(.white)
                 
                 Button(String(localized: "Retry", comment: "Retry button")) {
-                    reloadAttempt += 1
+                    viewModel.reloadAttempt += 1
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -480,32 +416,32 @@ struct PDFDetailView: View {
     
     // MARK: - Loading Logic
     
-    /// Configures reader state once the PDF document is successfully parsed, and triggers background thumbnail generation.
+    /// Configures reader state once the PDF viewModel.document is successfully parsed, and triggers background thumbnail generation.
     @MainActor
     private func onDocumentLoaded(_ doc: PDFDocument) {
-        self.document = doc
-        self.totalPages = max(1, doc.pageCount)
+        self.viewModel.document = doc
+        self.viewModel.totalPages = max(1, doc.pageCount)
         self.syncCurrentSpread()
-        self.isLoading = false
+        self.viewModel.isLoading = false
         
-        // Asynchronously generate or upgrade the thumbnail from the in-memory document while reading
+        // Asynchronously generate or upgrade the thumbnail from the in-memory viewModel.document while reading
         Task {
-            await manager.upgradePDFThumbnail(for: currentItem, from: doc)
+            await manager.upgradePDFThumbnail(for: viewModel.currentItem, from: doc)
         }
     }
     
-    /// Asynchronously locates or streams the PDF document, updating progress and instantiating `PDFDocument`.
+    /// Asynchronously locates or streams the PDF viewModel.document, updating progress and instantiating `PDFDocument`.
     @MainActor
     private func loadDocument() async {
-        isLoading = true
-        errorMessage = nil
-        bytesReceived = 0
-        totalBytes = 0
-        lastReportedBytes = 0
+        viewModel.isLoading = true
+        viewModel.errorMessage = nil
+        viewModel.bytesReceived = 0
+        viewModel.totalBytes = 0
+        viewModel.lastReportedBytes = 0
         
         // Check if localURL is available
-        if let local = currentItem.localURL, FileManager.default.fileExists(atPath: local.path) {
-            self.localFileURL = local
+        if let local = viewModel.currentItem.localURL, FileManager.default.fileExists(atPath: local.path) {
+            self.viewModel.localFileURL = local
             if let doc = PDFDocument(url: local) {
                 onDocumentLoaded(doc)
                 return
@@ -513,10 +449,10 @@ struct PDFDetailView: View {
         }
         
         // Check if cached locally in documentsDirectory
-        if MediaCacheManager.shared.hasCachedDocument(for: currentItem) {
-            let cachedURL = MediaCacheManager.shared.localDocumentURL(for: currentItem)
+        if MediaCacheManager.shared.hasCachedDocument(for: viewModel.currentItem) {
+            let cachedURL = MediaCacheManager.shared.localDocumentURL(for: viewModel.currentItem)
             if let doc = PDFDocument(url: cachedURL) {
-                self.localFileURL = cachedURL
+                self.viewModel.localFileURL = cachedURL
                 onDocumentLoaded(doc)
                 return
             }
@@ -524,27 +460,27 @@ struct PDFDetailView: View {
         
         // Fetch/download via manager
         do {
-            let url = try await manager.fetchDocumentURL(for: currentItem) { received, total in
+            let url = try await manager.fetchDocumentURL(for: viewModel.currentItem) { received, total in
                 Task { @MainActor in
-                    if received == total || (received - self.lastReportedBytes) > 131_072 {
-                        self.bytesReceived = received
-                        self.totalBytes = total
-                        self.lastReportedBytes = received
+                    if received == total || (received - self.viewModel.lastReportedBytes) > 131_072 {
+                        self.viewModel.bytesReceived = received
+                        self.viewModel.totalBytes = total
+                        self.viewModel.lastReportedBytes = received
                     }
                 }
             }
             guard !Task.isCancelled else { return }
-            self.localFileURL = url
+            self.viewModel.localFileURL = url
             if let doc = PDFDocument(url: url) {
                 onDocumentLoaded(doc)
             } else {
-                self.errorMessage = String(localized: "Unable to parse PDF content", comment: "Invalid PDF format")
-                self.isLoading = false
+                self.viewModel.errorMessage = String(localized: "Unable to parse PDF content", comment: "Invalid PDF format")
+                self.viewModel.isLoading = false
             }
         } catch {
             guard !Task.isCancelled else { return }
-            self.errorMessage = error.localizedDescription
-            self.isLoading = false
+            self.viewModel.errorMessage = error.localizedDescription
+            self.viewModel.isLoading = false
         }
     }
 }

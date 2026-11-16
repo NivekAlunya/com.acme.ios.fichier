@@ -32,15 +32,8 @@ public struct LocationsSidebarView: View {
     
     /// Callback triggered when the user taps a storage location row.
     let onSelectLocation: (StorageLocation) -> Void
-    
-    /// Controls presentation of the system directory document picker (`.fileImporter`).
-    @State private var showingFolderPicker = false
-    
-    /// Error message captured during document picker security bookmark creation.
-    @State private var folderPickerErrorMessage: String?
-    
-    /// Controls presentation of error alerts originating from directory import failures.
-    @State private var showingFolderErrorAlert = false
+
+    @State private var viewModel: LocationsSidebarViewModel
     
     /// Designated public initializer.
     ///
@@ -62,6 +55,7 @@ public struct LocationsSidebarView: View {
         self._showingSettings = showingSettings
         self.connectingLocationID = connectingLocationID
         self.onSelectLocation = onSelectLocation
+        self._viewModel = State(initialValue: LocationsSidebarViewModel(manager: manager))
     }
     
     public var body: some View {
@@ -208,7 +202,7 @@ public struct LocationsSidebarView: View {
         }
         #if !os(tvOS)
         .fileImporter(
-            isPresented: $showingFolderPicker,
+            isPresented: $viewModel.showingFolderPicker,
             allowedContentTypes: [.folder],
             allowsMultipleSelection: false
         ) { result in
@@ -221,23 +215,21 @@ public struct LocationsSidebarView: View {
                     let loc = StorageLocation(folder: saved)
                     onSelectLocation(loc)
                 } catch {
-                    folderPickerErrorMessage = error.localizedDescription
-                    showingFolderErrorAlert = true
+                    viewModel.handleFolderImportFailure(error.localizedDescription)
                 }
             case .failure(let error):
-                folderPickerErrorMessage = error.localizedDescription
-                showingFolderErrorAlert = true
+                viewModel.handleFolderImportFailure(error.localizedDescription)
             }
         }
         #endif
         .alert(
             Text(.Strings.galleryErrorUnableToLoadFolder),
-            isPresented: $showingFolderErrorAlert,
+            isPresented: $viewModel.showingFolderErrorAlert,
             actions: {
                 Button(.Strings.commonCancel, role: .cancel) {}
             },
             message: {
-                Text(folderPickerErrorMessage ?? "")
+                Text(viewModel.folderPickerErrorMessage ?? "")
             }
         )
     }
@@ -246,13 +238,13 @@ public struct LocationsSidebarView: View {
     @ViewBuilder
     private var addLocationMenuContent: some View {
         Button {
-            showingFolderPicker = true
+            viewModel.presentFolderPicker()
         } label: {
             Label(.Strings.sidebarMenuAddIcloudFolder, systemImage: "icloud")
         }
         
         Button {
-            showingFolderPicker = true
+            viewModel.presentFolderPicker()
         } label: {
             Label(.Strings.sidebarMenuAddLocalFolder, systemImage: "iphone")
         }
