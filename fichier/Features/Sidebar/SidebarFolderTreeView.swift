@@ -70,14 +70,20 @@ struct SidebarFolderTreeView: View {
     
     /// Root-level tree nodes displayed in the middle column, scoped to the active share's children for SMB connections.
     private var displayedTreeNodes: [MediaItem] {
-        if manager.currentLocation?.kind == .smb {
-            if let activeShare = manager.selectedShare {
-                let matchedNode = manager.folderTree.first(where: { $0.shareName == activeShare.shareName }) ?? activeShare
-                return matchedNode.children ?? (manager.selectedFolder?.shareName == activeShare.shareName && manager.selectedFolder?.path.isEmpty == true ? manager.currentFolders : [])
-            }
+        guard manager.currentLocation?.kind == .smb else {
+            return manager.folderTree
+        }
+        guard let activeShare = manager.selectedShare else {
             return []
         }
-        return manager.folderTree
+        let matchedNode = manager.folderTree.first(where: { $0.shareName == activeShare.shareName }) ?? activeShare
+        if let children = matchedNode.children {
+            return children
+        }
+        if manager.selectedFolder?.shareName == activeShare.shareName {
+            return manager.currentFolders
+        }
+        return []
     }
 
     /// Determines whether a root share/folder node should be expanded automatically upon initial appearance.

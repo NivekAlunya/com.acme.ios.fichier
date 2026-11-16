@@ -92,12 +92,16 @@ public struct LocationsSidebarView: View {
                         }
                     }
                     .onDelete { indexSet in
-                        for index in indexSet {
-                            guard index < viewModel.sidebarItems.count else { continue }
-                            if case .location(let loc) = viewModel.sidebarItems[index], loc.kind != .photos {
-                                Task {
-                                    await viewModel.manager.removeLocation(loc)
-                                }
+                        let locationsToRemove = indexSet.compactMap { index -> StorageLocation? in
+                            guard index < viewModel.sidebarItems.count,
+                                  case .location(let loc) = viewModel.sidebarItems[index],
+                                  loc.kind != .photos else { return nil }
+                            return loc
+                        }
+                        guard !locationsToRemove.isEmpty else { return }
+                        Task {
+                            for location in locationsToRemove {
+                                await viewModel.manager.removeLocation(location)
                             }
                         }
                     }

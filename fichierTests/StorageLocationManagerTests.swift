@@ -225,5 +225,23 @@ final class StorageLocationManagerTests: XCTestCase {
         let updatedVersion = manager.thumbnailVersions[item.id] ?? 0
         XCTAssertEqual(updatedVersion, initialVersion + 1, "Invalidating current folder thumbnails must increment thumbnail version tokens")
     }
+    
+    func testSelectShareUpdatesState() async {
+        let manager = StorageLocationManager()
+        let share = MediaItem(
+            locationID: "smb_1",
+            name: "Documents",
+            rootName: "Documents",
+            path: "",
+            isDirectory: true,
+            shareName: "Documents"
+        )
+        
+        await manager.selectShare(share)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Documents")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Documents")
+        XCTAssertEqual(manager.selectedFolder?.name, "Documents")
+    }
 }
 #endif
