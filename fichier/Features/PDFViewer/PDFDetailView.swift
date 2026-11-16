@@ -30,67 +30,86 @@ struct PDFDetailView: View {
     let initialItem: MediaItem
     
     @Environment(\.dismiss) private var dismiss
-    
-    /// The currently displayed document item.
-    @State private var currentItem: MediaItem
-    
-    /// Loaded and parsed PDFKit document instance.
-    @State private var document: PDFDocument?
-    
-    /// Local file URL for the cached or downloaded PDF document.
-    @State private var localFileURL: URL?
-    
-    /// Indicates whether document download or parsing is actively in flight.
-    @State private var isLoading = true
-    
-    /// Number of bytes received so far during network download.
-    @State private var bytesReceived: Int64 = 0
-    
-    /// Total expected byte size of the document.
-    @State private var totalBytes: Int64 = 0
-    
-    /// Tracks byte progress milestones to throttle `@MainActor` UI re-renders to 128 KB intervals.
-    @State private var lastReportedBytes: Int64 = 0
-    
-    /// Error description string if loading or parsing fails.
-    @State private var errorMessage: String?
-    
-    /// Controls visibility of floating top and bottom navigation HUD toolbars.
-    @State private var showControls = true
-    
-    /// 1-based index of the currently active starting visible page.
-    @State private var currentPage = 1
-    
-    /// 1-based index of the currently active ending visible page.
-    @State private var endVisiblePage = 1
-    
-    /// Total number of pages in the document.
-    @State private var totalPages = 1
-    
+
+    @State private var viewModel: PDFDetailViewModel
+
     /// User preference reading mode persisted across sessions.
     @AppStorage("pdf_reading_mode") private var readingMode: PDFReadingMode = .continuous
-    
+
     /// Indicates whether book spread mode is currently active.
     private var isBookMode: Bool {
         readingMode.isBookMode
     }
-    
+
     /// Indicates whether Page 1 is displayed as an isolated cover page in book mode.
     private var displaysAsBook: Bool {
         readingMode.displaysAsBook
     }
-    
-    /// Currently focused spread index in book mode `TabView`.
-    @State private var currentSpreadIndex = 0
-    
-    /// Active `PDFView` reference captured from `PDFKitRepresentedView`.
-    @State private var activePDFView: PDFView?
-    
-    /// Active coordinator managing gestures and PDFKit notifications.
-    @State private var coordinator: PDFKitCoordinator?
-    
-    /// Retry attempt counter used to force `.task` reload upon tap.
-    @State private var reloadAttempt = 0
+
+    private var currentItem: MediaItem {
+        get { viewModel.currentItem }
+        nonmutating set { viewModel.currentItem = newValue }
+    }
+    private var document: PDFDocument? {
+        get { viewModel.document }
+        nonmutating set { viewModel.document = newValue }
+    }
+    private var localFileURL: URL? {
+        get { viewModel.localFileURL }
+        nonmutating set { viewModel.localFileURL = newValue }
+    }
+    private var isLoading: Bool {
+        get { viewModel.isLoading }
+        nonmutating set { viewModel.isLoading = newValue }
+    }
+    private var bytesReceived: Int64 {
+        get { viewModel.bytesReceived }
+        nonmutating set { viewModel.bytesReceived = newValue }
+    }
+    private var totalBytes: Int64 {
+        get { viewModel.totalBytes }
+        nonmutating set { viewModel.totalBytes = newValue }
+    }
+    private var lastReportedBytes: Int64 {
+        get { viewModel.lastReportedBytes }
+        nonmutating set { viewModel.lastReportedBytes = newValue }
+    }
+    private var errorMessage: String? {
+        get { viewModel.errorMessage }
+        nonmutating set { viewModel.errorMessage = newValue }
+    }
+    private var showControls: Bool {
+        get { viewModel.showControls }
+        nonmutating set { viewModel.showControls = newValue }
+    }
+    private var currentPage: Int {
+        get { viewModel.currentPage }
+        nonmutating set { viewModel.currentPage = newValue }
+    }
+    private var endVisiblePage: Int {
+        get { viewModel.endVisiblePage }
+        nonmutating set { viewModel.endVisiblePage = newValue }
+    }
+    private var totalPages: Int {
+        get { viewModel.totalPages }
+        nonmutating set { viewModel.totalPages = newValue }
+    }
+    private var currentSpreadIndex: Int {
+        get { viewModel.currentSpreadIndex }
+        nonmutating set { viewModel.currentSpreadIndex = newValue }
+    }
+    private var activePDFView: PDFView? {
+        get { viewModel.activePDFView }
+        nonmutating set { viewModel.activePDFView = newValue }
+    }
+    private var coordinator: PDFKitCoordinator? {
+        get { viewModel.coordinator }
+        nonmutating set { viewModel.coordinator = newValue }
+    }
+    private var reloadAttempt: Int {
+        get { viewModel.reloadAttempt }
+        nonmutating set { viewModel.reloadAttempt = newValue }
+    }
     
     /// Designated public initializer.
     ///
@@ -110,7 +129,13 @@ struct PDFDetailView: View {
         }
         self.documents = pdfs.isEmpty ? [initialItem] : pdfs
         self.initialItem = initialItem
-        self._currentItem = State(initialValue: initialItem)
+        self._viewModel = State(
+            initialValue: PDFDetailViewModel(
+                manager: manager,
+                documents: self.documents,
+                initialItem: initialItem
+            )
+        )
     }
     
     /// Zero-based index of the current document within the active playlist.
@@ -150,7 +175,7 @@ struct PDFDetailView: View {
             if let document {
                 if isBookMode {
                     // Book Mode: Interactive 1:1 finger swipe TabView (like PictureDetailView)
-                    TabView(selection: $currentSpreadIndex) {
+                    TabView(selection: $viewModel.currentSpreadIndex) {
                         ForEach(spreads) { spread in
                             PDFSpreadPageView(
                                 document: document,
