@@ -243,5 +243,60 @@ final class StorageLocationManagerTests: XCTestCase {
         XCTAssertEqual(manager.selectedShare?.shareName, "Documents")
         XCTAssertEqual(manager.selectedFolder?.name, "Documents")
     }
+    
+    func testSelectAndLoadFolderFallsBackToRootShareWhenTreeEmpty() async {
+        let manager = StorageLocationManager()
+        let smbLoc = StorageLocation(
+            id: "smb_server_1",
+            name: "HomeServer",
+            subtitle: "192.168.1.10",
+            kind: .smb,
+            systemIcon: "server.rack"
+        )
+        manager.currentLocation = smbLoc
+        manager.folderTree = []
+        
+        let rootShare = MediaItem(
+            locationID: "smb_server_1",
+            name: "Media",
+            rootName: "Media",
+            path: "",
+            isDirectory: true,
+            shareName: "Media"
+        )
+        
+        await manager.selectAndLoadFolder(rootShare)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Media")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Media")
+    }
+    
+    func testSelectAndLoadFolderSynthesizesRootShareForSubfolderWhenTreeEmpty() async {
+        let manager = StorageLocationManager()
+        let smbLoc = StorageLocation(
+            id: "smb_server_1",
+            name: "HomeServer",
+            subtitle: "192.168.1.10",
+            kind: .smb,
+            systemIcon: "server.rack"
+        )
+        manager.currentLocation = smbLoc
+        manager.folderTree = []
+        
+        let subfolder = MediaItem(
+            locationID: "smb_server_1",
+            name: "Photos",
+            rootName: "Media",
+            path: "/Photos",
+            isDirectory: true,
+            shareName: "Media"
+        )
+        
+        await manager.selectAndLoadFolder(subfolder)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Media")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Media")
+        XCTAssertEqual(manager.selectedShare?.path, "")
+    }
 }
 #endif

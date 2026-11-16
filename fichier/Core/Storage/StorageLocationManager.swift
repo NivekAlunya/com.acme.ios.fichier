@@ -581,8 +581,20 @@ public final class StorageLocationManager {
 
         if currentLocation?.kind == .smb {
             if selectedShare == nil || selectedShare?.shareName != folder.shareName {
-                if let matchingShare = folderTree.first(where: { $0.shareName == folder.shareName }) {
+                let matchingShare = folderTree.first(where: { $0.shareName == folder.shareName })
+                if let matchingShare {
                     selectedShare = matchingShare
+                } else if folder.path.isEmpty {
+                    selectedShare = folder
+                } else if let shareName = folder.shareName, !shareName.isEmpty {
+                    selectedShare = MediaItem(
+                        locationID: folder.locationID,
+                        name: shareName,
+                        rootName: shareName,
+                        path: "",
+                        isDirectory: true,
+                        shareName: shareName
+                    )
                 }
             }
         }
