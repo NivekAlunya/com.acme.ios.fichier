@@ -46,47 +46,123 @@ struct SMBConnectViewModelTests {
         #expect(viewModel.selectedHostname == "Mac Mini")
     }
 
-    @Test("isConnectDisabled requires non-empty host and username")
-    func connectValidation() {
+    @Test("isConnectDisabled validates host, username, and manager loading state")
+    func isConnectDisabledValidation() {
+        let manager = StorageLocationManager()
         let viewModel = SMBConnectViewModel(
-            smbManager: StorageLocationManager(),
+            smbManager: manager,
             discovery: StubSMBHostDiscovery()
         )
 
+        // 1. Both host and username empty
         #expect(viewModel.isConnectDisabled)
 
+        // 2. Only host provided
         viewModel.selectedHost = "192.168.1.10"
+        viewModel.username = ""
         #expect(viewModel.isConnectDisabled)
 
+        // 3. Only username provided
+        viewModel.selectedHost = ""
         viewModel.username = "alice"
+        #expect(viewModel.isConnectDisabled)
+
+        // 4. Both host and username provided, not loading
+        viewModel.selectedHost = "192.168.1.10"
+        viewModel.username = "alice"
+        manager.isLoading = false
+        #expect(!viewModel.isConnectDisabled)
+
+        // 5. Both provided, but manager is actively loading
+        manager.isLoading = true
+        #expect(viewModel.isConnectDisabled)
+
+        // 6. Loading completes
+        manager.isLoading = false
         #expect(!viewModel.isConnectDisabled)
     }
 
-    @Test("resolvedFinalHostname prefers trimmed selectedHostname and falls back to discovered host name")
-    func resolvedFinalHostname() {
-        let discovered = DiscoveredHost(name: "Studio NAS", resolvedHost: "192.168.1.20")
-        let discovery = StubSMBHostDiscovery(discoveredHosts: [discovered])
+    @Test("resolvedFinalHostname prioritizes manual hostname, falls back to discovered host, or returns nil")
+    func resolvedFinalHostnameResolution() {
+        let discovered1 = DiscoveredHost(name: "Studio NAS", resolvedHost: "192.168.1.20")
+        let discovered2 = DiscoveredHost(name: "Backup Server", resolvedHost: "192.168.1.30")
+        let discovery = StubSMBHostDiscovery(discoveredHosts: [discovered1, discovered2])
         let viewModel = SMBConnectViewModel(
             smbManager: StorageLocationManager(),
             discovery: discovery
         )
 
+        // 1. Manually entered hostname takes priority and is trimmed
         viewModel.selectedHost = "192.168.1.20"
-        viewModel.selectedHostname = "   "
+        viewModel.selectedHostname = "  Workstation  "
+        #expect(viewModel.resolvedFinalHostname() == "Workstation")
+
+        // 2. Whitespace-only hostname falls back to discovered host matching selectedHost
+        viewModel.selectedHostname = "   \n\t  "
         #expect(viewModel.resolvedFinalHostname() == "Studio NAS")
 
-        viewModel.selectedHostname = "  Custom Name  "
-        #expect(viewModel.resolvedFinalHostname() == "Custom Name")
+        // 3. Empty hostname falls back to discovered host matching selectedHost
+        viewModel.selectedHostname = ""
+        viewModel.selectedHost = "192.168.1.30"
+        #expect(viewModel.resolvedFinalHostname() == "Backup Server")
+
+        // 4. Empty hostname with unknown/manual IP falls back to nil
+        viewModel.selectedHost = "10.0.0.99"
+        viewModel.selectedHostname = ""
+        #expect(viewModel.resolvedFinalHostname() == nil)
     }
 
-    @Test("errorMessage surfaces discovery error when smbManager has no error")
-    func errorMessagePropagation() {
-        let discovery = StubSMBHostDiscovery(errorMessage: "Discovery failed")
+    @Test("connect sanitizes password from memory after execution")
+    func passwordSanitizationOnConnect() async {
+        let manager = StorageLocationManager()
         let viewModel = SMBConnectViewModel(
-            smbManager: StorageLocationManager(),
+            smbManager: manager,
+            discovery: StubSMBHostDiscovery()
+        )
+
+        viewModel.selectedHost = "192.168.1.50"
+        viewModel.username = "admin"
+        viewModel.password = "secret_password_123"
+
+        #expect(viewModel.password == "secret_password_123")
+
+        await viewModel.connect()
+
+        #expect(viewModel.password.isEmpty)
+    }
+
+    @Test("derived state forwards loading, connection, and errors appropriately")
+    func stateForwarding() {
+        let manager = StorageLocationManager()
+        let discovery = StubSMBHostDiscovery()
+        let viewModel = SMBConnectViewModel(
+            smbManager: manager,
             discovery: discovery
         )
 
-        #expect(viewModel.errorMessage == "Discovery failed")
+        // Loading forwarding
+        manager.isLoading = true
+        #expect(viewModel.isLoading)
+        manager.isLoading = false
+        #expect(!viewModel.isLoading)
+
+        // Connection forwarding
+        manager.isConnected = true
+        #expect(viewModel.isConnected)
+        manager.isConnected = false
+        #expect(!viewModel.isConnected)
+
+        // Error message forwarding: manager error takes precedence
+        manager.errorMessage = "Auth failed"
+        discovery.errorMessage = "DNS error"
+        #expect(viewModel.errorMessage == "Auth failed")
+
+        // Falls back to discovery error when manager has no error
+        manager.errorMessage = nil
+        #expect(viewModel.errorMessage == "DNS error")
+
+        // Nil when neither has an error
+        discovery.errorMessage = nil
+        #expect(viewModel.errorMessage == nil)
     }
 }
