@@ -18,6 +18,13 @@ final class PDFDetailViewModel {
 
     let manager: StorageLocationManager
     let documents: [MediaItem]
+    let initialItem: MediaItem
+
+    // MARK: - Derived State
+
+    var currentIndex: Int {
+        documents.firstIndex(where: { $0.id == currentItem.id }) ?? 0
+    }
 
     // MARK: - Document & Loading State
 
@@ -49,7 +56,12 @@ final class PDFDetailViewModel {
         initialItem: MediaItem
     ) {
         self.manager = manager
-        self.documents = documents
+        var pdfs = documents.filter(\.isPDF)
+        if !pdfs.contains(where: { $0.id == initialItem.id }) {
+            pdfs.append(initialItem)
+        }
+        self.documents = pdfs.isEmpty ? [initialItem] : pdfs
+        self.initialItem = initialItem
         self.currentItem = initialItem
     }
 

@@ -17,6 +17,7 @@ final class PictureDetailViewModel {
 
     let manager: StorageLocationManager
     let pictures: [MediaItem]
+    let initialItem: MediaItem
 
     // MARK: - Presentation & Slideshow State
 
@@ -51,6 +52,7 @@ final class PictureDetailViewModel {
         self.manager = manager
         let photos = pictures.filter(\.isImage)
         self.pictures = photos.isEmpty ? [initialItem] : photos
+        self.initialItem = initialItem
         self.currentItem = initialItem
         self.isPlayingSlideshow = autoStartSlideshow
     }

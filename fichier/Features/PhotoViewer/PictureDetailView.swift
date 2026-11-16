@@ -18,18 +18,6 @@ import FichierKit
 ///   to eliminate loading pauses during manual paging or rapid slideshow playback.
 /// - **Hardware Keyboard Support**: Complete iPad / Mac keyboard shortcuts (Arrow keys, Space for play/pause, `F` for favorite, `I` for info, `Esc` to close).
 public struct PictureDetailView: View {
-    /// Shared storage location manager providing media streaming and caching.
-    var manager: StorageLocationManager
-    
-    /// Collection of photo items available for navigation in this session.
-    let pictures: [MediaItem]
-    
-    /// The initial photo item focused when the viewer opened.
-    let initialItem: MediaItem
-    
-    /// Flag indicating whether the slideshow should begin running automatically on appear.
-    let autoStartSlideshow: Bool
-    
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: PictureDetailViewModel
@@ -40,7 +28,6 @@ public struct PictureDetailView: View {
     /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
 
-    
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -54,11 +41,9 @@ public struct PictureDetailView: View {
         initialItem: MediaItem,
         autoStartSlideshow: Bool = false
     ) {
-        self.manager = manager
-        let photos = pictures.filter(\.isImage)
-        self.pictures = photos.isEmpty ? [initialItem] : photos
-        self.initialItem = initialItem
-        self.autoStartSlideshow = autoStartSlideshow
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         self._viewModel = State(
             initialValue: PictureDetailViewModel(
                 manager: manager,
@@ -69,11 +54,6 @@ public struct PictureDetailView: View {
         )
     }
     
-    /// Zero-based index of the current photo within the active collection.
-    private var currentIndex: Int {
-        viewModel.currentIndex
-    }
-    
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -82,9 +62,9 @@ public struct PictureDetailView: View {
                 // Slideshow Mode: Simultaneous cross-dissolve with subtle scale
                 ZStack {
                     ZoomablePicturePageView(
-                        manager: manager,
+                        manager: viewModel.manager,
                         item: viewModel.currentItem,
-                        initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == initialItem.id ? viewModel.currentImage : nil),
+                        initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
                         onImageLoaded: { loadedImg in
                             self.viewModel.currentImage = loadedImg
                             self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
@@ -123,9 +103,9 @@ public struct PictureDetailView: View {
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
                 TabView(selection: $viewModel.currentItem) {
-                    ForEach(pictures) { pic in
+                    ForEach(viewModel.pictures) { pic in
                         ZoomablePicturePageView(
-                            manager: manager,
+                            manager: viewModel.manager,
                             item: pic,
                             onImageLoaded: { loadedImg in
                                 if pic.id == viewModel.currentItem.id {
@@ -149,8 +129,8 @@ public struct PictureDetailView: View {
                 VStack {
                     PictureViewerTopBarView(
                         item: viewModel.currentItem,
-                        currentIndex: currentIndex,
-                        totalCount: pictures.count,
+                        currentIndex: viewModel.currentIndex,
+                        totalCount: viewModel.pictures.count,
                         frameSize: viewModel.activeMetadata?.dimensions,
                         onDismiss: { dismiss() }
                     )
@@ -158,7 +138,7 @@ public struct PictureDetailView: View {
                     Spacer()
                     
                     PictureViewerBottomBarView(
-                        hasMultiplePictures: pictures.count > 1,
+                        hasMultiplePictures: viewModel.pictures.count > 1,
                         isPlayingSlideshow: $viewModel.isPlayingSlideshow,
                         slideshowInterval: $slideshowInterval,
                         transitionStyle: $transitionStyle,
@@ -172,7 +152,7 @@ public struct PictureDetailView: View {
                         onShowInfo: {
                             Task {
                                 if viewModel.activeMetadata == nil {
-                                    self.viewModel.activeMetadata = await manager.fetchMetadata(for: viewModel.currentItem)
+                                    self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                                 }
                                 viewModel.showingInfoSheet = true
                             }
@@ -221,7 +201,7 @@ public struct PictureDetailView: View {
         }
         // Automatic Slideshow loop (Resets timer cleanly whenever user swipes or changes picture)
         .task(id: "\(viewModel.isPlayingSlideshow)-\(viewModel.currentItem.id)-\(slideshowInterval)") {
-            guard viewModel.isPlayingSlideshow, pictures.count > 1 else { return }
+            guard viewModel.isPlayingSlideshow, viewModel.pictures.count > 1 else { return }
             do {
                 try await Task.sleep(for: .seconds(slideshowInterval))
             } catch {
@@ -230,10 +210,10 @@ public struct PictureDetailView: View {
             guard viewModel.isPlayingSlideshow && !Task.isCancelled else { return }
             
             // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve
-            let nextIndex = (currentIndex + 1) % pictures.count
-            let nextItem = pictures[nextIndex]
+            let nextIndex = (viewModel.currentIndex + 1) % viewModel.pictures.count
+            let nextItem = viewModel.pictures[nextIndex]
             if viewModel.slideImageCache[nextItem.id] == nil, !nextItem.isVideo {
-                if let loaded = await manager.downloadImage(for: nextItem) {
+                if let loaded = await viewModel.manager.downloadImage(for: nextItem) {
                     viewModel.slideImageCache[nextItem.id] = loaded
                 }
             }
@@ -252,13 +232,13 @@ public struct PictureDetailView: View {
             
             await withTaskGroup(of: (isMeta: Bool, meta: PictureEXIFData?, image: UIImage?).self) { group in
                 group.addTask {
-                    let meta = await manager.fetchMetadata(for: viewModel.currentItem)
+                    let meta = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                     return (true, meta, nil)
                 }
                 
                 if !viewModel.currentItem.isVideo {
                     group.addTask {
-                        let img = await manager.downloadImage(for: viewModel.currentItem)
+                        let img = await viewModel.manager.downloadImage(for: viewModel.currentItem)
                         return (false, nil, img)
                     }
                 }
@@ -300,7 +280,7 @@ public struct PictureDetailView: View {
                 Button("") {
                     Task {
                         if viewModel.activeMetadata == nil {
-                            self.viewModel.activeMetadata = await manager.fetchMetadata(for: viewModel.currentItem)
+                            self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                         }
                         viewModel.showingInfoSheet.toggle()
                     }
@@ -365,30 +345,24 @@ public struct PictureDetailView: View {
     
     /// Navigates forward to the next image in the sequence, wrapping to index 0 at the end.
     private func goToNext() {
-        guard !pictures.isEmpty else { return }
-        viewModel.slideDirection = .forward
-        let nextIndex = (currentIndex + 1) % pictures.count
-        viewModel.currentItem = pictures[nextIndex]
+        viewModel.advanceToNext()
     }
     
     /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
-        guard !pictures.isEmpty else { return }
-        viewModel.slideDirection = .backward
-        let prevIndex = (currentIndex - 1 + pictures.count) % pictures.count
-        viewModel.currentItem = pictures[prevIndex]
+        viewModel.goToPrevious()
     }
     
     /// Dispatches an asynchronous prefetch task for the next upcoming photo into memory/disk cache.
     ///
     /// - Parameter item: Current media item.
     private func prefetchNext(after item: MediaItem) {
-        guard let idx = pictures.firstIndex(where: { $0.id == item.id }), pictures.count > 1 else { return }
-        let nextIdx = (idx + 1) % pictures.count
-        let nextItem = pictures[nextIdx]
+        guard let idx = viewModel.pictures.firstIndex(where: { $0.id == item.id }), viewModel.pictures.count > 1 else { return }
+        let nextIdx = (idx + 1) % viewModel.pictures.count
+        let nextItem = viewModel.pictures[nextIdx]
         guard !nextItem.isVideo else { return }
         Task {
-            if let img = await manager.downloadImage(for: nextItem) {
+            if let img = await viewModel.manager.downloadImage(for: nextItem) {
                 viewModel.slideImageCache[nextItem.id] = img
             }
         }

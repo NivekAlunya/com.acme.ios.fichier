@@ -22,10 +22,6 @@ struct MediaGridView: View {
     
     // MARK: - Injected Dependencies
     
-    /// The centralized storage and connectivity manager responsible for folder enumeration,
-    /// thumbnail caching, file downloads, and remote share traversal.
-    var manager: StorageLocationManager
-    
     /// Optional closure invoked when the user selects a subfolder to navigate into.
     /// If `nil`, the view defaults to driving folder navigation directly through `manager.selectAndLoadFolder(_:)`.
     var onSelectFolder: ((MediaItem) -> Void)?
@@ -45,10 +41,12 @@ struct MediaGridView: View {
         onStartSlideshow: (([MediaItem]) -> Void)? = nil,
         onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void
     ) {
-        self.manager = manager
         self.onSelectFolder = onSelectFolder
         self.onStartSlideshow = onStartSlideshow
         self.onSelectPicture = onSelectPicture
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(initialValue: MediaGridViewModel(manager: manager))
     }
     
@@ -90,16 +88,7 @@ struct MediaGridView: View {
     
     /// Minimum time delay (in seconds) required between consecutive discrete pinch-to-zoom step evaluations, preventing visual stutter.
     private static let pinchCooldownSeconds: TimeInterval = 0.30
-    
-    // MARK: - ViewModel Forwarding
-    
-    
-    // MARK: - Directory Identification
-    
-    private var currentDirectoryID: String {
-        viewModel.currentDirectoryID
-    }
-    
+
     // MARK: - Filtered and Sorted Data Pipeline
     
     @ViewBuilder
@@ -132,10 +121,9 @@ struct MediaGridView: View {
     }
 
     private func beginRenameSelected() {
-        if let first = viewModel.selectedItems.first {
-            viewModel.itemToRename = first
-            viewModel.renameText = first.name
-        }
+        guard viewModel.selectedItems.count == 1, let item = viewModel.selectedItems.first else { return }
+        viewModel.itemToRename = item
+        viewModel.renameText = item.name
     }
 
     private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
@@ -164,16 +152,16 @@ struct MediaGridView: View {
         
         ZStack(alignment: .bottom) {
             Group {
-                if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
+                if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
                     MediaGridEmptyStateView(
-                        isLoading: manager.isLoading,
-                        errorMessage: manager.errorMessage,
+                        isLoading: viewModel.manager.isLoading,
+                        errorMessage: viewModel.manager.errorMessage,
                         searchText: viewModel.searchText,
-                        selectedFolderName: manager.selectedFolder?.name,
-                        hasSelectedFolder: manager.selectedFolder != nil,
+                        selectedFolderName: viewModel.manager.selectedFolder?.name,
+                        hasSelectedFolder: viewModel.manager.selectedFolder != nil,
                         onRetry: {
-                            if let folder = manager.selectedFolder {
-                                Task { await manager.selectAndLoadFolder(folder) }
+                            if let folder = viewModel.manager.selectedFolder {
+                                Task { await viewModel.manager.selectAndLoadFolder(folder) }
                             }
                         }
                     )
@@ -184,7 +172,7 @@ struct MediaGridView: View {
                         switch viewMode {
                         case .grid:
                             MediaGridModeView(
-                                manager: manager,
+                                manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
                                 gridColumns: gridColumns,
@@ -192,7 +180,7 @@ struct MediaGridView: View {
                                 sortOption: sortOption,
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
-                                currentDirectoryID: currentDirectoryID,
+                                currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: { onSelectPicture($0, $1) },
                                 onToggleSelection: { toggleSelection(for: $0) },
@@ -204,10 +192,10 @@ struct MediaGridView: View {
                                     AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
-                                    if let folder = manager.selectedFolder {
-                                        await manager.selectAndLoadFolder(folder)
+                                    if let folder = viewModel.manager.selectedFolder {
+                                        await viewModel.manager.selectAndLoadFolder(folder)
                                     } else {
-                                        await manager.refreshSharesAndFolders()
+                                        await viewModel.manager.refreshSharesAndFolders()
                                     }
                                 },
                                 onRequestRename: { item in
@@ -227,12 +215,12 @@ struct MediaGridView: View {
                             .transition(.opacity)
                         case .list:
                             MediaListModeView(
-                                manager: manager,
+                                manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
-                                currentDirectoryID: currentDirectoryID,
+                                currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: { onSelectPicture($0, $1) },
                                 onToggleSelection: { toggleSelection(for: $0) },
@@ -244,10 +232,10 @@ struct MediaGridView: View {
                                     AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
-                                    if let folder = manager.selectedFolder {
-                                        await manager.selectAndLoadFolder(folder)
+                                    if let folder = viewModel.manager.selectedFolder {
+                                        await viewModel.manager.selectAndLoadFolder(folder)
                                     } else {
-                                        await manager.refreshSharesAndFolders()
+                                        await viewModel.manager.refreshSharesAndFolders()
                                     }
                                 },
                                 onRequestRename: { item in
@@ -279,8 +267,8 @@ struct MediaGridView: View {
                     isAllFavorites: !viewModel.selectedItems.isEmpty && viewModel.selectedItems.allSatisfy { FavoritesManager.shared.isFavorite($0) },
                     isProcessing: viewModel.isBatchProcessing,
                     progressMessage: viewModel.batchProgressMessage,
-                    showSaveToPhotos: manager.currentLocation?.kind != .photos,
-                    showFileManagement: manager.canManageCurrentFolder,
+                    showSaveToPhotos: viewModel.manager.currentLocation?.kind != .photos,
+                    showFileManagement: viewModel.manager.canManageCurrentFolder,
                     onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
@@ -343,7 +331,7 @@ struct MediaGridView: View {
         )) {
             if let items = viewModel.itemsPendingMove {
                 FolderPickerSheetView(
-                    manager: manager,
+                    manager: viewModel.manager,
                     itemsToMove: items,
                     onMoveTo: { destination in
                         viewModel.itemsPendingMove = nil
@@ -388,7 +376,7 @@ struct MediaGridView: View {
             }
             .disabled(viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
-            if let folder = manager.selectedFolder {
+            if let folder = viewModel.manager.selectedFolder {
                 let displayName = folder.name.isEmpty ? folder.rootName : folder.name
                 Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
             }
@@ -434,7 +422,7 @@ struct MediaGridView: View {
             galleryToolbarContent(displayPictures: displayPictures, hasImages: hasImages)
         }
         .task {
-            await manager.refreshMediaCacheSize()
+            await viewModel.manager.refreshMediaCacheSize()
         }
         .onDisappear {
             viewModel.batchTask?.cancel()
@@ -447,7 +435,7 @@ struct MediaGridView: View {
                 // Cmd+Option+R: Invalidate thumbnails for current folder
                 Button("") {
                     Task {
-                        await manager.invalidateCurrentFolderThumbnails()
+                        await viewModel.manager.invalidateCurrentFolderThumbnails()
                         viewModel.thumbnailReloadToken = UUID()
                     }
                 }
@@ -490,7 +478,7 @@ struct MediaGridView: View {
 
                 // Cmd+Delete (⌘⌫): Delete selected items
                 Button("") {
-                    if !viewModel.selectedItems.isEmpty && manager.canManageCurrentFolder {
+                    if !viewModel.selectedItems.isEmpty && viewModel.manager.canManageCurrentFolder {
                         viewModel.itemsPendingDelete = Array(viewModel.selectedItems)
                     }
                 }
@@ -498,7 +486,7 @@ struct MediaGridView: View {
 
                 // Cmd+M (⌘M): Move selected items to destination folder
                 Button("") {
-                    if !viewModel.selectedItems.isEmpty && manager.canManageCurrentFolder {
+                    if !viewModel.selectedItems.isEmpty && viewModel.manager.canManageCurrentFolder {
                         viewModel.itemsPendingMove = Array(viewModel.selectedItems)
                     }
                 }
@@ -520,7 +508,7 @@ struct MediaGridView: View {
             onSelectFolder(folder)
         } else {
             Task {
-                await manager.selectAndLoadFolder(folder)
+                await viewModel.manager.selectAndLoadFolder(folder)
             }
         }
     }
@@ -692,7 +680,7 @@ struct MediaGridView: View {
             if total == 1, let item = items.first {
                 viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
                 let throttler = DownloadProgressThrottler()
-                let success = await Self.saveSingleMediaItemToPhotos(item, manager: manager) { bytes, totalBytes in
+                let success = await Self.saveSingleMediaItemToPhotos(item, manager: viewModel.manager) { bytes, totalBytes in
                     Task {
                         guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                         await MainActor.run {
@@ -719,7 +707,7 @@ struct MediaGridView: View {
                     // Seed initial workers
                     for _ in 0..<min(maxConcurrent, total) {
                         if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.manager] in
+                            group.addTask { [manager = self.viewModel.manager] in
                                 await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                             }
                         }
@@ -737,7 +725,7 @@ struct MediaGridView: View {
                         viewModel.batchProgressMessage = String(localized: .Strings.galleryBatchSavingToPhotos(completedCount, total))
                         
                         if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.manager] in
+                            group.addTask { [manager = self.viewModel.manager] in
                                 await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                             }
                         }
@@ -794,7 +782,7 @@ struct MediaGridView: View {
                 viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
                 let throttler = DownloadProgressThrottler()
                 do {
-                    let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                    let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
                         Task {
                             guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                             await MainActor.run {
@@ -816,7 +804,7 @@ struct MediaGridView: View {
                     viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
                     let throttler = DownloadProgressThrottler()
                     do {
-                        let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                        let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
                             Task {
                                 guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                                 await MainActor.run {
@@ -935,7 +923,7 @@ struct MediaGridView: View {
                 for _ in 0..<min(maxConcurrent, total) where queueIndex < itemQueue.count {
                     let (idx, item) = itemQueue[queueIndex]
                     queueIndex += 1
-                    group.addTask { [manager = self.manager] in
+                    group.addTask { [manager = self.viewModel.manager] in
                         let result = await Self.prepareSingleItemForShare(item, manager: manager)
                         return (idx, result)
                     }
@@ -954,7 +942,7 @@ struct MediaGridView: View {
                     if queueIndex < itemQueue.count {
                         let (nextIdx, nextItem) = itemQueue[queueIndex]
                         queueIndex += 1
-                        group.addTask { [manager = self.manager] in
+                        group.addTask { [manager = self.viewModel.manager] in
                             let nextResult = await Self.prepareSingleItemForShare(nextItem, manager: manager)
                             return (nextIdx, nextResult)
                         }
@@ -1041,7 +1029,7 @@ struct MediaGridView: View {
     private func executeDelete(items: [MediaItem]) async {
         do {
             let wasSMB = items.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty })
-            try await manager.deleteItems(items)
+            try await viewModel.manager.deleteItems(items)
             if viewModel.isSelectionMode {
                 withAnimation {
                     viewModel.isSelectionMode = false
@@ -1062,7 +1050,7 @@ struct MediaGridView: View {
     private func executeMove(items: [MediaItem], to destination: MediaItem) {
         Task {
             do {
-                try await manager.moveItems(items, to: destination)
+                try await viewModel.manager.moveItems(items, to: destination)
                 if viewModel.isSelectionMode {
                     withAnimation {
                         viewModel.isSelectionMode = false
@@ -1083,7 +1071,7 @@ struct MediaGridView: View {
         guard !trimmed.isEmpty else { return }
         Task {
             do {
-                try await manager.createFolder(named: trimmed)
+                try await viewModel.manager.createFolder(named: trimmed)
                 showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
             } catch {
                 viewModel.fileOpErrorMessage = error.localizedDescription
@@ -1097,7 +1085,7 @@ struct MediaGridView: View {
         guard !trimmed.isEmpty else { return }
         Task {
             do {
-                let renamed = try await manager.renameItem(item, to: trimmed)
+                let renamed = try await viewModel.manager.renameItem(item, to: trimmed)
                 if viewModel.isSelectionMode {
                     withAnimation {
                         viewModel.selectedItems.remove(item)
@@ -1155,19 +1143,19 @@ struct MediaGridView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 8) {
                         Button {
-                            if let parent = manager.parentFolder {
+                            if let parent = viewModel.manager.parentFolder {
                                 navigateToFolder(parent)
                             }
                         } label: {
                             Image(systemName: "arrow.up.folder")
                                 .fontWeight(.semibold)
-                                .foregroundColor(manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
+                                .foregroundColor(viewModel.manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
                         }
                         .tint(.blue)
-                        .disabled(manager.parentFolder == nil)
+                        .disabled(viewModel.manager.parentFolder == nil)
                         .accessibilityLabel(parentFolderAccessibilityLabel)
                         
-                        if manager.canManageCurrentFolder {
+                        if viewModel.manager.canManageCurrentFolder {
                             Button {
                                 viewModel.newFolderName = ""
                                 viewModel.isShowingNewFolderAlert = true
@@ -1213,8 +1201,6 @@ struct MediaGridView: View {
                                     Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
                                     Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
                                     Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                     Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
                                     Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                 }
@@ -1267,16 +1253,14 @@ struct MediaGridView: View {
                                     Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
                                     Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
                                     Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                     Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
                                     Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
                                 }
                             }
                             
-                            Section(String(localized: .Strings.gallerySectionDiskCache(manager.mediaCacheSize))) {
+                            Section(String(localized: .Strings.gallerySectionDiskCache(viewModel.manager.mediaCacheSize))) {
                                 Button(role: .destructive) {
-                                    manager.clearMediaCache()
+                                    viewModel.manager.clearMediaCache()
                                 } label: {
                                     Label(.Strings.galleryButtonClearCache, systemImage: "trash")
                                 }
@@ -1286,7 +1270,7 @@ struct MediaGridView: View {
                             Section("Debug") {
                                 Button(role: .destructive) {
                                     Task {
-                                        await manager.invalidateCurrentFolderThumbnails()
+                                        await viewModel.manager.invalidateCurrentFolderThumbnails()
                                         viewModel.thumbnailReloadToken = UUID()
                                     }
                                 } label: {
@@ -1309,8 +1293,8 @@ struct MediaGridView: View {
                         }
                         
                         Button {
-                            if let folder = manager.selectedFolder {
-                                Task { await manager.selectAndLoadFolder(folder) }
+                            if let folder = viewModel.manager.selectedFolder {
+                                Task { await viewModel.manager.selectAndLoadFolder(folder) }
                             }
                         } label: {
                             Image(systemName: "arrow.clockwise")

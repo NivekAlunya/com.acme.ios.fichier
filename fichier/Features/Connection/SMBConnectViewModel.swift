@@ -84,6 +84,7 @@ final class SMBConnectViewModel {
     }
 
     func connect() async {
+        defer { password = "" }
         await smbManager.connect(
             host: selectedHost,
             user: username,

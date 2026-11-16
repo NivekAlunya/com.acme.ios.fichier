@@ -19,6 +19,9 @@ struct SMBConnectWithDiscoveryView: View {
     @State private var viewModel: SMBConnectViewModel
 
     init(smbManager: StorageLocationManager) {
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(initialValue: SMBConnectViewModel(smbManager: smbManager))
     }
     

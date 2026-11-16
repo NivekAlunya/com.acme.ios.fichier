@@ -20,15 +20,6 @@ import FichierKit
 ///   via `manager.fetchDocumentURL`, throttling UI progress updates to 128 KB byte intervals.
 /// - **Hardware Keyboard Support**: Complete iPad / Mac shortcuts (`Esc` to dismiss, `B` to toggle book mode, Arrow keys to turn pages).
 struct PDFDetailView: View {
-    /// Shared storage location manager handling viewModel.document streaming and caching.
-    var manager: StorageLocationManager
-    
-    /// Playlist of viewModel.document items available in this browsing session.
-    let documents: [MediaItem]
-    
-    /// The initial viewModel.document item focused when the viewer opened.
-    let initialItem: MediaItem
-    
     @Environment(\.dismiss) private var dismiss
 
     @State private var viewModel: PDFDetailViewModel
@@ -46,7 +37,6 @@ struct PDFDetailView: View {
         readingMode.displaysAsBook
     }
 
-    
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -58,25 +48,16 @@ struct PDFDetailView: View {
         documents: [MediaItem] = [],
         initialItem: MediaItem
     ) {
-        self.manager = manager
-        var pdfs = documents.filter(\.isPDF)
-        if !pdfs.contains(where: { $0.id == initialItem.id }) {
-            pdfs.append(initialItem)
-        }
-        self.documents = pdfs.isEmpty ? [initialItem] : pdfs
-        self.initialItem = initialItem
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         self._viewModel = State(
             initialValue: PDFDetailViewModel(
                 manager: manager,
-                documents: self.documents,
+                documents: documents,
                 initialItem: initialItem
             )
         )
-    }
-    
-    /// Zero-based index of the current viewModel.document within the active playlist.
-    private var currentIndex: Int {
-        documents.firstIndex(where: { $0.id == viewModel.currentItem.id }) ?? 0
     }
     
     /// Ordered array of page spreads synthesized for the current viewModel.document.
@@ -219,13 +200,13 @@ struct PDFDetailView: View {
                 VStack {
                     PDFViewerTopBarView(
                         item: viewModel.currentItem,
-                        currentIndex: currentIndex,
-                        totalCount: documents.count,
+                        currentIndex: viewModel.currentIndex,
+                        totalCount: viewModel.documents.count,
                         onDismiss: { dismiss() }
                     )
                     Spacer()
                     PDFViewerBottomBarView(
-                        hasMultipleDocuments: documents.count > 1,
+                        hasMultipleDocuments: viewModel.documents.count > 1,
                         readingMode: $readingMode,
                         pageInfoText: pageInfoText,
                         isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
@@ -304,24 +285,24 @@ struct PDFDetailView: View {
     
     /// Navigates to the next PDF viewModel.document in the queue with cyclic wrapping.
     private func goToNextDocument() {
-        guard !documents.isEmpty else { return }
-        let nextIndex = (currentIndex + 1) % documents.count
+        guard !viewModel.documents.isEmpty else { return }
+        let nextIndex = (viewModel.currentIndex + 1) % viewModel.documents.count
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            viewModel.currentItem = documents[nextIndex]
+            viewModel.currentItem = viewModel.documents[nextIndex]
             resetDocumentState()
         }
     }
     
     /// Navigates to the previous PDF viewModel.document in the queue with cyclic wrapping.
     private func goToPreviousDocument() {
-        guard !documents.isEmpty else { return }
-        let prevIndex = (currentIndex - 1 + documents.count) % documents.count
+        guard !viewModel.documents.isEmpty else { return }
+        let prevIndex = (viewModel.currentIndex - 1 + viewModel.documents.count) % viewModel.documents.count
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            viewModel.currentItem = documents[prevIndex]
+            viewModel.currentItem = viewModel.documents[prevIndex]
             resetDocumentState()
         }
     }
@@ -426,7 +407,7 @@ struct PDFDetailView: View {
         
         // Asynchronously generate or upgrade the thumbnail from the in-memory viewModel.document while reading
         Task {
-            await manager.upgradePDFThumbnail(for: viewModel.currentItem, from: doc)
+            await viewModel.manager.upgradePDFThumbnail(for: viewModel.currentItem, from: doc)
         }
     }
     
@@ -460,7 +441,7 @@ struct PDFDetailView: View {
         
         // Fetch/download via manager
         do {
-            let url = try await manager.fetchDocumentURL(for: viewModel.currentItem) { received, total in
+            let url = try await viewModel.manager.fetchDocumentURL(for: viewModel.currentItem) { received, total in
                 Task { @MainActor in
                     if received == total || (received - self.viewModel.lastReportedBytes) > 131_072 {
                         self.viewModel.bytesReceived = received

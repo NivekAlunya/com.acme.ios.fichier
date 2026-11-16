@@ -15,10 +15,6 @@ import FichierKit
 /// - **Play / Pause**: Starts / stops automated slideshow.
 /// - **Menu**: Closes overlay if open, otherwise dismisses viewer back to browser without exiting the app.
 public struct TVImageViewerView: View {
-    public let initialItem: MediaSourceItem
-    public let items: [MediaSourceItem]
-    public let paginationContext: TVViewerPaginationContext?
-
     @State private var viewModel: TVImageViewerViewModel
     @FocusState private var isViewerFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -29,9 +25,9 @@ public struct TVImageViewerView: View {
         items: [MediaSourceItem],
         paginationContext: TVViewerPaginationContext? = nil
     ) {
-        self.initialItem = initialItem
-        self.items = items
-        self.paginationContext = paginationContext
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(wrappedValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(
             wrappedValue: TVImageViewerViewModel(
                 initialItem: initialItem,
@@ -41,10 +37,7 @@ public struct TVImageViewerView: View {
         )
     }
 
-    init(viewModel: TVImageViewerViewModel, paginationContext: TVViewerPaginationContext? = nil) {
-        self.initialItem = viewModel.currentItem
-        self.items = viewModel.items
-        self.paginationContext = paginationContext
+    init(viewModel: TVImageViewerViewModel) {
         _viewModel = State(wrappedValue: viewModel)
     }
 

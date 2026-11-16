@@ -18,9 +18,6 @@ import FichierKit
 /// Features include folder import via security-scoped bookmarks, swipe-to-delete removal,
 /// connection progress spinners, and quick access to application settings.
 public struct LocationsSidebarView: View {
-    /// Two-way bindable reference to the centralized storage location manager.
-    @Bindable var manager: StorageLocationManager
-    
     /// Binding controlling presentation of the new SMB connection sheet.
     @Binding var showingAddRemote: Bool
     
@@ -50,18 +47,20 @@ public struct LocationsSidebarView: View {
         connectingLocationID: String?,
         onSelectLocation: @escaping (StorageLocation) -> Void
     ) {
-        self.manager = manager
         self._showingAddRemote = showingAddRemote
         self._showingSettings = showingSettings
         self.connectingLocationID = connectingLocationID
         self.onSelectLocation = onSelectLocation
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         self._viewModel = State(initialValue: LocationsSidebarViewModel(manager: manager))
     }
     
     public var body: some View {
         List {
             Section {
-                if manager.allLocations.isEmpty {
+                if viewModel.manager.allLocations.isEmpty {
                     ContentUnavailableView {
                         Label(
                             String(localized: .Strings.sidebarNoSavedLocationsTitle),
@@ -78,7 +77,7 @@ public struct LocationsSidebarView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    ForEach(manager.allLocations) { location in
+                    ForEach(viewModel.manager.allLocations) { location in
                         HStack(spacing: 12) {
                             Button {
                                 onSelectLocation(location)
@@ -121,7 +120,7 @@ public struct LocationsSidebarView: View {
                                         
                                         Button {
                                             Task {
-                                                await manager.disconnect()
+                                                await viewModel.manager.disconnect()
                                             }
                                         } label: {
                                             Image(systemName: "eject.fill")
@@ -143,7 +142,7 @@ public struct LocationsSidebarView: View {
                             if isCurrentLocation(location) && location.kind == .smb {
                                 Button(role: .destructive) {
                                     Task {
-                                        await manager.disconnect()
+                                        await viewModel.manager.disconnect()
                                     }
                                 } label: {
                                     Label(.Strings.connectionButtonDisconnect, systemImage: "eject")
@@ -152,7 +151,7 @@ public struct LocationsSidebarView: View {
                             if location.kind != .photos {
                                 Button(role: .destructive) {
                                     Task {
-                                        await manager.removeLocation(location)
+                                        await viewModel.manager.removeLocation(location)
                                     }
                                 } label: {
                                     Label(String(localized: "Remove Location"), systemImage: "trash")
@@ -161,10 +160,10 @@ public struct LocationsSidebarView: View {
                         }
                     }
                     .onDelete { indexSet in
-                        let locationsToRemove = indexSet.map { manager.allLocations[$0] }
+                        let locationsToRemove = indexSet.map { viewModel.manager.allLocations[$0] }
                         for loc in locationsToRemove where loc.kind != .photos {
                             Task {
-                                await manager.removeLocation(loc)
+                                await viewModel.manager.removeLocation(loc)
                             }
                         }
                     }
@@ -211,7 +210,7 @@ public struct LocationsSidebarView: View {
                 guard let url = urls.first else { return }
                 do {
                     let saved = try LocalStorageActor.createSavedFolderLocation(from: url)
-                    manager.addSavedFolderLocation(saved)
+                    viewModel.manager.addSavedFolderLocation(saved)
                     let loc = StorageLocation(folder: saved)
                     onSelectLocation(loc)
                 } catch {
@@ -260,7 +259,7 @@ public struct LocationsSidebarView: View {
     
     /// Tests whether the given location is currently active and connected.
     private func isCurrentLocation(_ location: StorageLocation) -> Bool {
-        manager.isConnected && manager.currentLocation?.id == location.id
+        viewModel.manager.isConnected && viewModel.manager.currentLocation?.id == location.id
     }
     
     /// Tests whether the given location is currently establishing an asynchronous connection.
