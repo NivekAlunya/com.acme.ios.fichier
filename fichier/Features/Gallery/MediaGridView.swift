@@ -182,7 +182,10 @@ struct MediaGridView: View {
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
-                                onSelectPicture: { onSelectPicture($0, $1) },
+                                onSelectPicture: {
+                                    AppKeyboardDismissal.dismiss()
+                                    onSelectPicture($0, $1)
+                                },
                                 onToggleSelection: { toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {
@@ -222,7 +225,10 @@ struct MediaGridView: View {
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
-                                onSelectPicture: { onSelectPicture($0, $1) },
+                                onSelectPicture: {
+                                    AppKeyboardDismissal.dismiss()
+                                    onSelectPicture($0, $1)
+                                },
                                 onToggleSelection: { toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {

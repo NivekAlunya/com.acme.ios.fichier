@@ -68,6 +68,9 @@ public struct MediaBrowserSplitView: View {
                 connectingLocationID: connectingLocationID,
                 onSelectLocation: { location in
                     selectLocation(location)
+                },
+                onSelectShare: { share in
+                    selectShare(share)
                 }
             )
         } content: {
@@ -95,6 +98,7 @@ public struct MediaBrowserSplitView: View {
                             }
                         },
                         onStartSlideshow: { currentDisplayPictures in
+                            AppKeyboardDismissal.dismiss()
                             let photosOnly = currentDisplayPictures.filter(\.isImage)
                             if let first = photosOnly.first {
                                 activePictureContext = MediaViewerContext(
@@ -105,6 +109,7 @@ public struct MediaBrowserSplitView: View {
                             }
                         },
                         onSelectPicture: { item, currentDisplayPictures in
+                            AppKeyboardDismissal.dismiss()
                             let context = MediaViewerContext(
                                 item: item,
                                 contextItems: currentDisplayPictures
@@ -194,7 +199,7 @@ public struct MediaBrowserSplitView: View {
     /// - Parameter location: The target location selected by the user.
     private func selectLocation(_ location: StorageLocation) {
         if storageManager.isConnected && storageManager.currentLocation?.id == location.id {
-            preferredCompactColumn = .content
+            preferredCompactColumn = location.kind == .smb ? .sidebar : .content
             return
         }
         
@@ -207,9 +212,24 @@ public struct MediaBrowserSplitView: View {
             guard !Task.isCancelled else { return }
             connectingLocationID = nil
             if storageManager.isConnected {
-                // If a folder was automatically restored or loaded, navigate directly to detail on compact layouts
-                preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .content
+                if location.kind == .smb {
+                    // Keep sidebar focused so the expanded shares list is immediately visible
+                    preferredCompactColumn = .sidebar
+                } else {
+                    preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .content
+                }
             }
+        }
+    }
+    
+    /// Selects an SMB share as the active browsing source with haptic feedback.
+    ///
+    /// - Parameter share: The target SMB share selected from the sidebar.
+    private func selectShare(_ share: MediaItem) {
+        AppHapticFeedback.light()
+        Task {
+            await storageManager.selectShare(share)
+            preferredCompactColumn = .content
         }
     }
 }

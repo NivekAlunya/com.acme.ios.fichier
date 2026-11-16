@@ -49,6 +49,15 @@ public final class StorageLocationManager {
     /// The currently selected storage location (SMB share, local/iCloud folder, or Photos Library).
     public var currentLocation: StorageLocation?
     
+    /// Discovered top-level SMB shares on the currently active connection.
+    public var serverShares: [MediaItem] {
+        guard currentLocation?.kind == .smb else { return [] }
+        return folderTree
+    }
+    
+    /// The currently selected SMB share (root of the displayed folder tree).
+    public var selectedShare: MediaItem?
+    
     /// Hierarchical tree of folders and shares used to populate the navigation sidebar.
     ///
     /// Updating this tree automatically recalculates `parentFolder` for O(1) breadcrumb navigation.
@@ -442,21 +451,13 @@ public final class StorageLocationManager {
                 self.currentLocation = StorageLocation(smb: saved)
             }
             
+            self.selectedShare = nil
             self.selectedFolder = nil
             self.activeFolderID = nil
             self.currentFolders = []
             self.pictures = []
             self.folderTree = discoveredShares
             self.isConnected = true
-            
-            // Auto-restore previously selected folder for this location, or auto-select if only 1 share
-            let locID = currentLocation?.id ?? connID
-            if let remembered = lastSelectedFolderPerLocation[locID],
-               discoveredShares.contains(where: { $0.shareName == remembered.shareName || $0.name == remembered.name }) {
-                await selectAndLoadFolder(remembered)
-            } else if discoveredShares.count == 1, let singleShare = discoveredShares.first {
-                await selectAndLoadFolder(singleShare)
-            }
         } catch is CancellationError {
             await worker.disconnect()
             self.errorMessage = nil
@@ -550,6 +551,16 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - Select Share
+    
+    /// Selects an SMB share as the active source and loads its contents.
+    ///
+    /// - Parameter share: The target SMB share to browse.
+    public func selectShare(_ share: MediaItem) async {
+        self.selectedShare = share
+        await selectAndLoadFolder(share)
+    }
+
     // MARK: - Select Folder & Load Both Subfolders + Pictures
     
     /// Selects a folder item and asynchronously enumerates its child subfolders and media files.
@@ -566,6 +577,26 @@ public final class StorageLocationManager {
         // Record this folder as the last active selection for the current location
         if let locID = currentLocation?.id, !locID.isEmpty {
             lastSelectedFolderPerLocation[locID] = folder
+        }
+
+        if currentLocation?.kind == .smb {
+            if selectedShare == nil || selectedShare?.shareName != folder.shareName {
+                let matchingShare = folderTree.first(where: { $0.shareName == folder.shareName })
+                if let matchingShare {
+                    selectedShare = matchingShare
+                } else if folder.path.isEmpty {
+                    selectedShare = folder
+                } else if let shareName = folder.shareName, !shareName.isEmpty {
+                    selectedShare = MediaItem(
+                        locationID: folder.locationID,
+                        name: shareName,
+                        rootName: shareName,
+                        path: "",
+                        isDirectory: true,
+                        shareName: shareName
+                    )
+                }
+            }
         }
 
         // 1. Advance generation and cancel any ongoing folder scan task immediately
@@ -825,6 +856,7 @@ public final class StorageLocationManager {
         isConnected = false
         isLoading = false
         errorMessage = nil
+        selectedShare = nil
         folderTree = []
         currentFolders = []
         selectedFolder = nil

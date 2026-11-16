@@ -223,6 +223,9 @@ struct MediaGridModeView: View {
                 }
                 .padding(.vertical, 12)
             }
+            #if !os(tvOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
             .id(currentDirectoryID)
             .onChange(of: currentDirectoryID) { _, _ in
                 proxy.scrollTo("topOfGrid", anchor: .top)

@@ -225,5 +225,78 @@ final class StorageLocationManagerTests: XCTestCase {
         let updatedVersion = manager.thumbnailVersions[item.id] ?? 0
         XCTAssertEqual(updatedVersion, initialVersion + 1, "Invalidating current folder thumbnails must increment thumbnail version tokens")
     }
+    
+    func testSelectShareUpdatesState() async {
+        let manager = StorageLocationManager()
+        let share = MediaItem(
+            locationID: "smb_1",
+            name: "Documents",
+            rootName: "Documents",
+            path: "",
+            isDirectory: true,
+            shareName: "Documents"
+        )
+        
+        await manager.selectShare(share)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Documents")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Documents")
+        XCTAssertEqual(manager.selectedFolder?.name, "Documents")
+    }
+    
+    func testSelectAndLoadFolderFallsBackToRootShareWhenTreeEmpty() async {
+        let manager = StorageLocationManager()
+        let smbLoc = StorageLocation(
+            id: "smb_server_1",
+            name: "HomeServer",
+            subtitle: "192.168.1.10",
+            kind: .smb,
+            systemIcon: "server.rack"
+        )
+        manager.currentLocation = smbLoc
+        manager.folderTree = []
+        
+        let rootShare = MediaItem(
+            locationID: "smb_server_1",
+            name: "Media",
+            rootName: "Media",
+            path: "",
+            isDirectory: true,
+            shareName: "Media"
+        )
+        
+        await manager.selectAndLoadFolder(rootShare)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Media")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Media")
+    }
+    
+    func testSelectAndLoadFolderSynthesizesRootShareForSubfolderWhenTreeEmpty() async {
+        let manager = StorageLocationManager()
+        let smbLoc = StorageLocation(
+            id: "smb_server_1",
+            name: "HomeServer",
+            subtitle: "192.168.1.10",
+            kind: .smb,
+            systemIcon: "server.rack"
+        )
+        manager.currentLocation = smbLoc
+        manager.folderTree = []
+        
+        let subfolder = MediaItem(
+            locationID: "smb_server_1",
+            name: "Photos",
+            rootName: "Media",
+            path: "/Photos",
+            isDirectory: true,
+            shareName: "Media"
+        )
+        
+        await manager.selectAndLoadFolder(subfolder)
+        
+        XCTAssertEqual(manager.selectedShare?.name, "Media")
+        XCTAssertEqual(manager.selectedShare?.shareName, "Media")
+        XCTAssertEqual(manager.selectedShare?.path, "")
+    }
 }
 #endif

@@ -65,6 +65,7 @@ public struct VideoDetailView: View {
         .statusBarHidden(true)
         #endif
         .onAppear {
+            AppKeyboardDismissal.dismiss()
             if controller == nil {
                 controller = VideoPlayerController(
                     manager: manager,

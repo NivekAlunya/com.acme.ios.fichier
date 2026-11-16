@@ -259,6 +259,9 @@ public struct PictureDetailView: View {
                 }
             }
         }
+        .onAppear {
+            AppKeyboardDismissal.dismiss()
+        }
         #if !os(tvOS)
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac

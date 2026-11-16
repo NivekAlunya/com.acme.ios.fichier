@@ -16,6 +16,24 @@ final class LocationsSidebarViewModel {
 
     let manager: StorageLocationManager
 
+    // MARK: - Navigation Items
+    
+    /// Flattened collection of storage locations and discovered SMB shares for sidebar rendering.
+    var sidebarItems: [SidebarItem] {
+        var items: [SidebarItem] = []
+        for location in manager.allLocations {
+            items.append(.location(location))
+            if location.kind == .smb,
+               manager.isConnected,
+               manager.currentLocation?.id == location.id {
+                for share in manager.serverShares {
+                    items.append(.share(share))
+                }
+            }
+        }
+        return items
+    }
+
     // MARK: - Presentation & Error State
 
     var showingFolderPicker = false
