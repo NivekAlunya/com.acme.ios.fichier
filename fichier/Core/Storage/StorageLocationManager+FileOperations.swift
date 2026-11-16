@@ -162,6 +162,181 @@ extension StorageLocationManager {
         }
     }
     
+    // MARK: - Rename Item
+    
+    /// Renames a media item (file or subfolder) within its parent directory and updates the UI state in-place.
+    ///
+    /// - Parameters:
+    ///   - item: The target `MediaItem` to rename.
+    ///   - newName: The new name (with extension for files).
+    /// - Returns: The mutated `MediaItem` with updated identifiers and filesystem path.
+    /// - Throws: `FileOperationError` if the name is invalid, storage is unsupported, or a name collision occurs.
+    @discardableResult
+    public func renameItem(_ item: MediaItem, to newName: String) async throws -> MediaItem {
+        guard canManageItem(item) else {
+            throw FileOperationError.unsupportedStorage
+        }
+        
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
+              !trimmed.hasSuffix(".") else {
+            throw FileOperationError.invalidName(newName)
+        }
+        
+        guard trimmed != item.name else {
+            return item
+        }
+        
+        let renamedItem: MediaItem
+        if item.localURL != nil {
+            renamedItem = try await localWorker.renameItem(item, to: trimmed)
+            await MediaCacheManager.shared.migrateThumbnailCache(from: item, to: renamedItem)
+            let oldMemoryKey = "\(item.id)_thumb" as NSString
+            let newMemoryKey = "\(renamedItem.id)_thumb" as NSString
+            if let memCached = worker.getCachedThumbnail(forKey: oldMemoryKey) {
+                worker.cacheThumbnail(memCached, forKey: newMemoryKey)
+            }
+        } else if !item.shareName.isEmpty {
+            renamedItem = try await worker.renameItem(item, to: trimmed)
+        } else {
+            throw FileOperationError.unsupportedStorage
+        }
+
+        // Migrate metadata detail and video resume positions
+        if let detail = MediaDetailStore.shared.cachedDetail(for: item.id) {
+            MediaDetailStore.shared.registerDetail(detail, for: renamedItem.id)
+        }
+        if item.isVideo {
+            VideoPlaybackStore.shared.migratePosition(from: item.id, to: renamedItem.id)
+        }
+        
+        // Update in-place in pictures and currentFolders to preserve scroll position
+        withAnimation(.snappy) {
+            if let idx = self.pictures.firstIndex(where: { $0.id == item.id }) {
+                self.pictures[idx] = renamedItem
+            }
+            if let idx = self.currentFolders.firstIndex(where: { $0.id == item.id }) {
+                self.currentFolders[idx] = renamedItem
+            }
+        }
+
+        self.thumbnailVersions[renamedItem.id, default: 0] += 1
+        
+        // Update favorite if present
+        if FavoritesManager.shared.isFavorite(item) {
+            FavoritesManager.shared.toggleFavorite(item)
+            FavoritesManager.shared.toggleFavorite(renamedItem)
+        }
+        
+        if item.isDirectory {
+            self.folderTree = renameNodeInTree(in: self.folderTree, targetID: item.id, renamedItem: renamedItem)
+            if let currentSelected = self.selectedFolder {
+                if currentSelected.id == item.id {
+                    self.selectedFolder = renamedItem
+                } else if currentSelected.path.hasPrefix(item.path + "/") {
+                    let relativeSuffix = String(currentSelected.path.dropFirst(item.path.count + 1))
+                    let newSelectedPath = "\(renamedItem.path)/\(relativeSuffix)"
+                    let newSelectedURL = renamedItem.localURL?.appendingPathComponent(relativeSuffix, isDirectory: true)
+                    self.selectedFolder = MediaItem(
+                        locationID: currentSelected.locationID,
+                        name: currentSelected.name,
+                        rootName: currentSelected.rootName,
+                        path: newSelectedPath,
+                        isDirectory: currentSelected.isDirectory,
+                        size: currentSelected.size,
+                        modifiedDate: currentSelected.modifiedDate,
+                        children: currentSelected.children,
+                        localURL: newSelectedURL,
+                        phAssetIdentifier: currentSelected.phAssetIdentifier,
+                        isMediaVideo: currentSelected.isMediaVideo,
+                        folderIconName: currentSelected.folderIconName
+                    )
+                }
+            }
+            recordMutation()
+            await refreshExpandedTreeBranches()
+        }
+        
+        return renamedItem
+    }
+    
+    /// Recursively renames a directory node inside the hierarchical folder tree and updates descendant paths.
+    private func renameNodeInTree(in nodes: [MediaItem], targetID: String, renamedItem: MediaItem) -> [MediaItem] {
+        var updated = nodes
+        for idx in updated.indices {
+            if updated[idx].id == targetID {
+                let oldItem = updated[idx]
+                var replacement = renamedItem
+                if let children = oldItem.children {
+                    replacement.children = updateDescendantPaths(
+                        in: children,
+                        oldPathPrefix: oldItem.path,
+                        newPathPrefix: renamedItem.path,
+                        newParentURL: renamedItem.localURL
+                    )
+                }
+                updated[idx] = replacement
+                return updated
+            }
+            if let children = updated[idx].children {
+                updated[idx].children = renameNodeInTree(in: children, targetID: targetID, renamedItem: renamedItem)
+            }
+        }
+        return updated
+    }
+
+    /// Recursively updates relative paths and local file URLs for all descendants of a renamed directory node.
+    func updateDescendantPaths(
+        in nodes: [MediaItem],
+        oldPathPrefix: String,
+        newPathPrefix: String,
+        newParentURL: URL?
+    ) -> [MediaItem] {
+        nodes.map { item in
+            let updatedPath: String
+            if item.path == oldPathPrefix {
+                updatedPath = newPathPrefix
+            } else if item.path.hasPrefix(oldPathPrefix + "/") {
+                let relativeSuffix = String(item.path.dropFirst(oldPathPrefix.count + 1))
+                updatedPath = "\(newPathPrefix)/\(relativeSuffix)"
+            } else {
+                updatedPath = item.path
+            }
+
+            let updatedLocalURL = newParentURL?.appendingPathComponent(item.name, isDirectory: item.isDirectory)
+            let updatedChildren: [MediaItem]?
+            if let children = item.children {
+                updatedChildren = updateDescendantPaths(
+                    in: children,
+                    oldPathPrefix: oldPathPrefix,
+                    newPathPrefix: newPathPrefix,
+                    newParentURL: updatedLocalURL
+                )
+            } else {
+                updatedChildren = nil
+            }
+
+            return MediaItem(
+                locationID: item.locationID,
+                name: item.name,
+                rootName: item.rootName,
+                path: updatedPath,
+                isDirectory: item.isDirectory,
+                size: item.size,
+                modifiedDate: item.modifiedDate,
+                children: updatedChildren,
+                localURL: updatedLocalURL,
+                phAssetIdentifier: item.phAssetIdentifier,
+                isMediaVideo: item.isMediaVideo,
+                folderIconName: item.folderIconName
+            )
+        }
+    }
+    
     // MARK: - Folder Picker Hierarchy
     
     /// Loads the root directory tree for picking destination folders in the move sheet.

@@ -24,7 +24,7 @@ struct ZoomablePicturePageView: View {
     let onTap: () -> Void
     
     /// Optional pre-decoded image provided by parent slideshow preloader.
-    var initialImage: UIImage? = nil
+    var initialImage: UIImage?
     
     /// Successfully downloaded and decoded full-resolution image.
     @State private var image: UIImage?

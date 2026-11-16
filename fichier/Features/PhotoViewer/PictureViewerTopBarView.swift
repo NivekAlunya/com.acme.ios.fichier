@@ -30,7 +30,7 @@ public struct PictureViewerTopBarView: View {
     public let onDismiss: () -> Void
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @State private var resolvedFrameSize: String? = nil
+    @State private var resolvedFrameSize: String?
     
     /// Designated public initializer.
     ///

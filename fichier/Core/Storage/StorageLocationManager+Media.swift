@@ -79,8 +79,12 @@ extension StorageLocationManager {
         
         let currentActive = activeFolderID
         // Early discard if folder already changed
-        if let current = selectedFolder, item.shareName != current.shareName || !item.path.hasPrefix(current.path) {
-            return nil
+        if let current = selectedFolder {
+            let cleanCurrentPath = current.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let cleanItemPath = item.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if item.shareName != current.shareName || (!cleanCurrentPath.isEmpty && cleanItemPath != cleanCurrentPath && !cleanItemPath.hasPrefix(cleanCurrentPath + "/")) {
+                return nil
+            }
         }
         
         // Video thumbnail streaming & caching
@@ -457,6 +461,23 @@ extension StorageLocationManager {
             return localURL
         }
         return try await worker.fetchDocumentURL(for: item, progress: progress)
+    }
+    
+    /// Downloads or resolves the local on-disk file URL for any media item with progress reporting.
+    ///
+    /// - Parameters:
+    ///   - item: Target media item.
+    ///   - progress: Optional progress reporting callback (`Sendable`).
+    /// - Returns: Local file `URL` ready for sharing, exporting, or offline viewing.
+    public func downloadItemToFile(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        if item.phAssetIdentifier != nil {
+            return try await photosWorker.fetchVideoURL(for: item)
+        }
+        if let localURL = item.localURL {
+            progress?(item.size, item.size)
+            return localURL
+        }
+        return try await worker.downloadItemToFile(for: item, progress: progress)
     }
     
     /// Queries `MediaCacheManager` and updates `mediaCacheSize` on the `@MainActor`.

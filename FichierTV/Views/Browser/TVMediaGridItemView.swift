@@ -10,7 +10,7 @@ import FichierKit
 public struct TVMediaGridItemView: View {
     public let item: MediaSourceItem
 
-    @State private var mediaDetail: String? = nil
+    @State private var mediaDetail: String?
 
     private var displayedDetail: String? {
         MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail

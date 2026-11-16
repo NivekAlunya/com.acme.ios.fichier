@@ -185,6 +185,11 @@ public struct MediaThumbnailView: View {
         .onChange(of: manager.thumbnailVersions[item.id]) { _, _ in
             startLoading(force: true)
         }
+        .onChange(of: item.id) { _, _ in
+            if self.image == nil {
+                startLoading()
+            }
+        }
     }
     
     // MARK: - Lightweight PDF Placeholder View

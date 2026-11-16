@@ -594,5 +594,387 @@ final class FileOperationsTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testRenameItemLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("old_name.txt")
+        try Data("content".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "old_name.txt",
+            rootName: "TempRoot",
+            path: "old_name.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "renamed.txt")
+        XCTAssertEqual(renamed.name, "renamed.txt")
+        XCTAssertEqual(renamed.path, "renamed.txt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    func testRenameFolderLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let folderURL = tempDirectory.appendingPathComponent("OldFolder")
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "OldFolder",
+            rootName: "TempRoot",
+            path: "OldFolder",
+            isDirectory: true,
+            localURL: folderURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "NewFolder")
+        XCTAssertEqual(renamed.name, "NewFolder")
+        XCTAssertEqual(renamed.path, "NewFolder")
+        XCTAssertTrue(renamed.isDirectory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folderURL.path))
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    func testRenameItemInvalidNames() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("test.txt")
+        try Data("test".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "test.txt",
+            rootName: "TempRoot",
+            path: "test.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let invalidNames = ["", "  ", "sub/folder", "invalid:name", ".", "..", "sub\\folder", "star*file", "query?file", "quote\"file", "less<file", "greater>file", "pipe|file", "trailing."]
+        for invalidName in invalidNames {
+            do {
+                _ = try await actor.renameItem(item, to: invalidName)
+                XCTFail("Expected invalidName error for '\(invalidName)'")
+            } catch let error as FileOperationError {
+                if case .invalidName = error {
+                    // Expected
+                } else {
+                    XCTFail("Expected invalidName but got \(error)")
+                }
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testRenameItemCollisionThrows() async throws {
+        let actor = LocalStorageActor()
+        let file1 = tempDirectory.appendingPathComponent("file1.txt")
+        let file2 = tempDirectory.appendingPathComponent("file2.txt")
+        try Data("1".utf8).write(to: file1)
+        try Data("2".utf8).write(to: file2)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "file1.txt",
+            rootName: "TempRoot",
+            path: "file1.txt",
+            isDirectory: false,
+            localURL: file1
+        )
+
+        do {
+            _ = try await actor.renameItem(item, to: "file2.txt")
+            XCTFail("Expected itemAlreadyExists error")
+        } catch let error as FileOperationError {
+            if case .itemAlreadyExists = error {
+                // Expected
+            } else {
+                XCTFail("Expected itemAlreadyExists but got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRenameItemSMB() async throws {
+        let mockClient = MockSMBClient(shares: ["Media"])
+        let server = SavedSMBConnection(host: "192.168.1.50", username: "admin", lastConnected: Date())
+        let actor = SMBClientActor { _, _ in mockClient }
+
+        _ = try await actor.connectAndListShares(server: server, password: "test")
+
+        let sourceFile = MediaItem(
+            locationID: server.id,
+            name: "old_photo.jpg",
+            rootName: "Media",
+            path: "old_photo.jpg",
+            isDirectory: false
+        )
+
+        let renamed = try await actor.renameItem(sourceFile, to: "new_photo.jpg")
+        XCTAssertEqual(renamed.name, "new_photo.jpg")
+        XCTAssertEqual(renamed.path, "new_photo.jpg")
+
+        let moved = await mockClient.movedItems
+        XCTAssertEqual(moved.count, 1)
+        XCTAssertEqual(moved.first?.from, "old_photo.jpg")
+        XCTAssertEqual(moved.first?.to, "new_photo.jpg")
+    }
+
+    func testRenameItemCaseOnlyLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("lowercase.txt")
+        try Data("case-content".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "lowercase.txt",
+            rootName: "TempRoot",
+            path: "lowercase.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "LowerCase.txt")
+        XCTAssertEqual(renamed.name, "LowerCase.txt")
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertEqual(newURL.lastPathComponent, "LowerCase.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    @MainActor
+    func testRenameFolderTreeDescendantPaths() async throws {
+        let folderA = tempDirectory.appendingPathComponent("FolderA")
+        let subFolder = folderA.appendingPathComponent("SubFolder")
+        let subSubFolder = subFolder.appendingPathComponent("SubSubFolder")
+        try FileManager.default.createDirectory(at: subSubFolder, withIntermediateDirectories: true)
+
+        let subSubFolderItem = MediaItem(
+            locationID: "loc1",
+            name: "SubSubFolder",
+            rootName: "TempRoot",
+            path: "FolderA/SubFolder/SubSubFolder",
+            isDirectory: true,
+            localURL: subSubFolder
+        )
+        let subFolderItem = MediaItem(
+            locationID: "loc1",
+            name: "SubFolder",
+            rootName: "TempRoot",
+            path: "FolderA/SubFolder",
+            isDirectory: true,
+            children: [subSubFolderItem],
+            localURL: subFolder
+        )
+        let folderAItem = MediaItem(
+            locationID: "loc1",
+            name: "FolderA",
+            rootName: "TempRoot",
+            path: "FolderA",
+            isDirectory: true,
+            children: [subFolderItem],
+            localURL: folderA
+        )
+
+        let actor = LocalStorageActor()
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: actor)
+        let savedFolder = SavedFolderLocation(name: "TempRoot", bookmarkData: Data(), isICloud: false)
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.folderTree = [folderAItem]
+
+        let renamed = try await manager.renameItem(folderAItem, to: "FolderB")
+        XCTAssertEqual(renamed.name, "FolderB")
+        XCTAssertEqual(renamed.path, "FolderB")
+
+        let updatedTree = manager.folderTree
+        let updatedRoot = try XCTUnwrap(updatedTree.first)
+        XCTAssertEqual(updatedRoot.name, "FolderB")
+        XCTAssertEqual(updatedRoot.path, "FolderB")
+
+        let updatedChildren = try XCTUnwrap(updatedRoot.children)
+        let updatedSub = try XCTUnwrap(updatedChildren.first)
+        XCTAssertEqual(updatedSub.path, "FolderB/SubFolder")
+        XCTAssertEqual(updatedSub.localURL?.lastPathComponent, "SubFolder")
+
+        let updatedSubSub = try XCTUnwrap(updatedSub.children?.first)
+        XCTAssertEqual(updatedSubSub.path, "FolderB/SubFolder/SubSubFolder")
+        XCTAssertEqual(updatedSubSub.localURL?.lastPathComponent, "SubSubFolder")
+    }
+
+    func testDownloadProgressThrottler() async {
+        let throttler = DownloadProgressThrottler(minimumInterval: .milliseconds(50), minimumPercentDelta: 5)
+        
+        // Initial micro-step
+        let report0 = await throttler.shouldReport(bytes: 10, total: 1000) // 1% < 5%
+        XCTAssertFalse(report0)
+
+        // Jump to 10%
+        let report10 = await throttler.shouldReport(bytes: 100, total: 1000)
+        XCTAssertTrue(report10)
+
+        // Micro-step to 11% immediately
+        let report11 = await throttler.shouldReport(bytes: 110, total: 1000)
+        XCTAssertFalse(report11)
+
+        // Completion always reports
+        let reportComplete = await throttler.shouldReport(bytes: 1000, total: 1000)
+        XCTAssertTrue(reportComplete)
+    }
+
+    @MainActor
+    func testRenameItemMigratesThumbnailCache() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("pic.jpg")
+        try Data("dummy".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "test_loc",
+            name: "pic.jpg",
+            rootName: "TempRoot",
+            path: "pic.jpg",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10))
+        let sampleImage = renderer.image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
+
+        let (oldDiskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: item.connectionID
+        )
+        MediaCacheManager.shared.saveThumbnail(sampleImage, for: oldDiskKey)
+        XCTAssertTrue(MediaCacheManager.shared.hasThumbnail(for: oldDiskKey))
+
+        let worker = SMBClientActor()
+        let oldMemoryKey = "\(item.id)_thumb" as NSString
+        worker.cacheThumbnail(sampleImage, forKey: oldMemoryKey)
+        MediaDetailStore.shared.registerDetail("100x100", for: item.id)
+
+        let actor = LocalStorageActor()
+        let manager = StorageLocationManager(worker: worker, localWorker: actor)
+        let savedFolder = SavedFolderLocation(name: "TempRoot", bookmarkData: Data(), isICloud: false)
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.pictures = [item]
+
+        let renamed = try await manager.renameItem(item, to: "pic2.jpg")
+        XCTAssertEqual(renamed.name, "pic2.jpg")
+        XCTAssertEqual(renamed.path, "pic2.jpg")
+
+        // 1. Verify thumbnail versions was incremented
+        XCTAssertEqual(manager.thumbnailVersions[renamed.id], 1)
+
+        // 2. Verify MediaDetailStore was migrated
+        XCTAssertEqual(MediaDetailStore.shared.cachedDetail(for: renamed.id), "100x100")
+
+        // 3. Verify in-memory cache was migrated
+        let newMemoryKey = "\(renamed.id)_thumb" as NSString
+        XCTAssertNotNil(worker.getCachedThumbnail(forKey: newMemoryKey))
+
+        // 4. Verify disk cache was migrated
+        let (newDiskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: renamed.shareName,
+            path: renamed.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: renamed.connectionID
+        )
+        XCTAssertTrue(MediaCacheManager.shared.hasThumbnail(for: newDiskKey))
+
+        // 5. Verify downloadThumbnail succeeds and returns migrated thumbnail
+        let loaded = await manager.downloadThumbnail(for: renamed)
+        XCTAssertNotNil(loaded)
+    }
+
+    @MainActor
+    func testUpdateDescendantPathsDeepHierarchy() {
+        let manager = StorageLocationManager()
+        let locationID = UUID().uuidString
+        let baseURL = tempDirectory.appendingPathComponent("NewParent", isDirectory: true)
+
+        let leafFile = MediaItem(
+            locationID: locationID,
+            name: "photo.jpg",
+            rootName: "Root",
+            path: "OldParent/Sub/Deep/photo.jpg",
+            isDirectory: false,
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub/Deep/photo.jpg")
+        )
+        let deepFolder = MediaItem(
+            locationID: locationID,
+            name: "Deep",
+            rootName: "Root",
+            path: "OldParent/Sub/Deep",
+            isDirectory: true,
+            children: [leafFile],
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub/Deep", isDirectory: true)
+        )
+        let subFolder = MediaItem(
+            locationID: locationID,
+            name: "Sub",
+            rootName: "Root",
+            path: "OldParent/Sub",
+            isDirectory: true,
+            children: [deepFolder],
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub", isDirectory: true)
+        )
+
+        let updated = manager.updateDescendantPaths(
+            in: [subFolder],
+            oldPathPrefix: "OldParent",
+            newPathPrefix: "NewParent",
+            newParentURL: baseURL
+        )
+
+        XCTAssertEqual(updated.count, 1)
+        XCTAssertEqual(updated[0].path, "NewParent/Sub")
+        XCTAssertEqual(updated[0].localURL, baseURL.appendingPathComponent("Sub", isDirectory: true))
+        XCTAssertEqual(updated[0].children?[0].path, "NewParent/Sub/Deep")
+        XCTAssertEqual(updated[0].children?[0].children?[0].path, "NewParent/Sub/Deep/photo.jpg")
+        XCTAssertEqual(
+            updated[0].children?[0].children?[0].localURL,
+            baseURL.appendingPathComponent("Sub/Deep/photo.jpg", isDirectory: false)
+        )
+    }
+
+    func testRenameItemRejectsForbiddenCharacters() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("valid.txt")
+        try Data("hello".utf8).write(to: fileURL)
+
+        let localActor = LocalStorageActor()
+        let item = MediaItem(
+            locationID: UUID().uuidString,
+            name: "valid.txt",
+            rootName: "Temp",
+            path: "valid.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let forbiddenNames = [
+            "bad\\name.txt",
+            "bad:name.txt",
+            "bad?name.txt",
+            "bad*name.txt",
+            "bad/name.txt"
+        ]
+
+        for badName in forbiddenNames {
+            do {
+                _ = try await localActor.renameItem(item, to: badName)
+                XCTFail("Expected renameItem to throw for forbidden name: \(badName)")
+            } catch {
+                // Expected to fail sanitization
+            }
+        }
+    }
 }
 #endif

@@ -40,11 +40,17 @@ struct MediaSelectionBottomBar: View {
     /// Handler invoked to save all selected items to the Photos library.
     let onSaveToPhotos: () -> Void
     
+    /// Handler invoked to download selected items and export them to the iOS Files app.
+    var onDownloadToFiles: (() -> Void)?
+    
     /// Handler invoked to export selected items to the system activity share sheet.
     let onShare: () -> Void
     
     /// Handler invoked to move selected items to another folder.
     var onMove: (() -> Void)?
+    
+    /// Handler invoked to rename a single selected item.
+    var onRename: (() -> Void)?
     
     /// Handler invoked to delete (trash) selected items.
     var onDelete: (() -> Void)?
@@ -96,24 +102,55 @@ struct MediaSelectionBottomBar: View {
                 .accessibilityLabel(isAllFavorites ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite selected items") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite selected items"))
                 .accessibilityHint(String(localized: "Applies to \(selectedCount) selected items", comment: "Accessibility hint indicating selected count"))
                 
-                if showSaveToPhotos {
-                    // 2. Save to Photos Button
-                    Button {
-                        onSaveToPhotos()
-                    } label: {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
-                            .frame(width: 28, height: 28)
+                // 2. Download Options (Save to Photos & Download to Files)
+                Menu {
+                    if showSaveToPhotos {
+                        Button {
+                            onSaveToPhotos()
+                        } label: {
+                            Label(
+                                .Strings.galleryActionSaveToPhotos,
+                                systemImage: "photo"
+                            )
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(selectedCount == 0 || isProcessing)
-                    .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save selected items to Photos"))
-                    .accessibilityHint(String(localized: "Downloads and exports \(selectedCount) selected items to your photo library", comment: "Accessibility hint for batch save"))
+                    if let onDownloadToFiles {
+                        Button {
+                            onDownloadToFiles()
+                        } label: {
+                            Label(
+                                .Strings.galleryActionDownloadToFiles,
+                                systemImage: "arrow.down.doc"
+                            )
+                        }
+                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(selectedCount > 0 ? Color.primary : Color.secondary)
+                        .frame(width: 28, height: 28)
                 }
+                .disabled(selectedCount == 0 || isProcessing)
+                .accessibilityLabel(.Strings.galleryActionDownloadOptionsAccessibility)
                 
                 if showFileManagement {
-                    // 3. Move Button
+                    // 3. Rename Button (for single selected item)
+                    if selectedCount == 1, let onRename {
+                        Button {
+                            onRename()
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Color.accentColor)
+                                .frame(width: 28, height: 28)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isProcessing)
+                        .accessibilityLabel(.Strings.galleryActionRenameAccessibility)
+                        .accessibilityHint(.Strings.galleryActionRenameHint)
+                    }
+                    
+                    // 4. Move Button
                     Button {
                         onMove?()
                     } label: {
@@ -127,7 +164,7 @@ struct MediaSelectionBottomBar: View {
                     .accessibilityLabel(String(localized: "Move Items", comment: "Accessibility label to move selected items"))
                     .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to another folder", comment: "Accessibility hint for batch move"))
                     
-                    // 4. Delete / Trash Button
+                    // 5. Delete / Trash Button
                     Button {
                         onDelete?()
                     } label: {

@@ -23,6 +23,7 @@ struct MediaGridModeView: View {
     let onToggleSelection: (MediaItem) -> Void
     let onEnterSelectionMode: (MediaItem) -> Void
     let onRefresh: () async -> Void
+    var onRequestRename: ((MediaItem) -> Void)?
     var onRequestMove: ((MediaItem) -> Void)?
     var onRequestDelete: ((MediaItem) -> Void)?
     
@@ -41,6 +42,7 @@ struct MediaGridModeView: View {
         onToggleSelection: @escaping (MediaItem) -> Void,
         onEnterSelectionMode: @escaping (MediaItem) -> Void,
         onRefresh: @escaping () async -> Void,
+        onRequestRename: ((MediaItem) -> Void)? = nil,
         onRequestMove: ((MediaItem) -> Void)? = nil,
         onRequestDelete: ((MediaItem) -> Void)? = nil
     ) {
@@ -58,6 +60,7 @@ struct MediaGridModeView: View {
         self.onToggleSelection = onToggleSelection
         self.onEnterSelectionMode = onEnterSelectionMode
         self.onRefresh = onRefresh
+        self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
     }
@@ -107,6 +110,12 @@ struct MediaGridModeView: View {
                                     .buttonStyle(.plain)
                                     .contextMenu(isSelectionMode ? nil : ContextMenu {
                                         if manager.canManageItem(subfolder) {
+                                            Button {
+                                                onRequestRename?(subfolder)
+                                            } label: {
+                                                Label(.Strings.galleryActionRename, systemImage: "pencil")
+                                            }
+                                            
                                             Button {
                                                 onRequestMove?(subfolder)
                                             } label: {
@@ -170,6 +179,12 @@ struct MediaGridModeView: View {
                                         }
                                         
                                         if manager.canManageItem(pic) {
+                                            Button {
+                                                onRequestRename?(pic)
+                                            } label: {
+                                                Label(.Strings.galleryActionRename, systemImage: "pencil")
+                                            }
+                                            
                                             Button {
                                                 onRequestMove?(pic)
                                             } label: {
