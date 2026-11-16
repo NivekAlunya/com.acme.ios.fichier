@@ -194,10 +194,24 @@ extension StorageLocationManager {
         let renamedItem: MediaItem
         if item.localURL != nil {
             renamedItem = try await localWorker.renameItem(item, to: trimmed)
+            await MediaCacheManager.shared.migrateThumbnailCache(from: item, to: renamedItem)
+            let oldMemoryKey = "\(item.id)_thumb" as NSString
+            let newMemoryKey = "\(renamedItem.id)_thumb" as NSString
+            if let memCached = worker.getCachedThumbnail(forKey: oldMemoryKey) {
+                worker.cacheThumbnail(memCached, forKey: newMemoryKey)
+            }
         } else if !item.shareName.isEmpty {
             renamedItem = try await worker.renameItem(item, to: trimmed)
         } else {
             throw FileOperationError.unsupportedStorage
+        }
+
+        // Migrate metadata detail and video resume positions
+        if let detail = MediaDetailStore.shared.cachedDetail(for: item.id) {
+            MediaDetailStore.shared.registerDetail(detail, for: renamedItem.id)
+        }
+        if item.isVideo {
+            VideoPlaybackStore.shared.migratePosition(from: item.id, to: renamedItem.id)
         }
         
         // Update in-place in pictures and currentFolders to preserve scroll position
@@ -209,6 +223,8 @@ extension StorageLocationManager {
                 self.currentFolders[idx] = renamedItem
             }
         }
+
+        self.thumbnailVersions[renamedItem.id, default: 0] += 1
         
         // Update favorite if present
         if FavoritesManager.shared.isFavorite(item) {

@@ -826,6 +826,72 @@ final class FileOperationsTests: XCTestCase {
         XCTAssertTrue(reportComplete)
     }
 
+    @MainActor
+    func testRenameItemMigratesThumbnailCache() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("pic.jpg")
+        try Data("dummy".utf8).write(to: fileURL)
 
+        let item = MediaItem(
+            locationID: "test_loc",
+            name: "pic.jpg",
+            rootName: "TempRoot",
+            path: "pic.jpg",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10))
+        let sampleImage = renderer.image { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 10, height: 10))
+        }
+
+        let (oldDiskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: item.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: item.connectionID
+        )
+        MediaCacheManager.shared.saveThumbnail(sampleImage, for: oldDiskKey)
+        XCTAssertTrue(MediaCacheManager.shared.hasThumbnail(for: oldDiskKey))
+
+        let worker = SMBClientActor()
+        let oldMemoryKey = "\(item.id)_thumb" as NSString
+        worker.cacheThumbnail(sampleImage, forKey: oldMemoryKey)
+        MediaDetailStore.shared.registerDetail("100x100", for: item.id)
+
+        let actor = LocalStorageActor()
+        let manager = StorageLocationManager(worker: worker, localWorker: actor)
+        let savedFolder = SavedFolderLocation(name: "TempRoot", bookmarkData: Data(), isICloud: false)
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.pictures = [item]
+
+        let renamed = try await manager.renameItem(item, to: "pic2.jpg")
+        XCTAssertEqual(renamed.name, "pic2.jpg")
+        XCTAssertEqual(renamed.path, "pic2.jpg")
+
+        // 1. Verify thumbnail versions was incremented
+        XCTAssertEqual(manager.thumbnailVersions[renamed.id], 1)
+
+        // 2. Verify MediaDetailStore was migrated
+        XCTAssertEqual(MediaDetailStore.shared.cachedDetail(for: renamed.id), "100x100")
+
+        // 3. Verify in-memory cache was migrated
+        let newMemoryKey = "\(renamed.id)_thumb" as NSString
+        XCTAssertNotNil(worker.getCachedThumbnail(forKey: newMemoryKey))
+
+        // 4. Verify disk cache was migrated
+        let (newDiskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
+            for: renamed.shareName,
+            path: renamed.path,
+            dimension: MediaCacheManager.standardThumbnailDimension,
+            connectionID: renamed.connectionID
+        )
+        XCTAssertTrue(MediaCacheManager.shared.hasThumbnail(for: newDiskKey))
+
+        // 5. Verify downloadThumbnail succeeds and returns migrated thumbnail
+        let loaded = await manager.downloadThumbnail(for: renamed)
+        XCTAssertNotNil(loaded)
+    }
 }
 #endif

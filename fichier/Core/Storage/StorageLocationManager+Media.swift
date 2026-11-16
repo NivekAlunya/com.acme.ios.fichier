@@ -79,8 +79,12 @@ extension StorageLocationManager {
         
         let currentActive = activeFolderID
         // Early discard if folder already changed
-        if let current = selectedFolder, item.shareName != current.shareName || !item.path.hasPrefix(current.path) {
-            return nil
+        if let current = selectedFolder {
+            let cleanCurrentPath = current.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let cleanItemPath = item.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if item.shareName != current.shareName || (!cleanCurrentPath.isEmpty && cleanItemPath != cleanCurrentPath && !cleanItemPath.hasPrefix(cleanCurrentPath + "/")) {
+                return nil
+            }
         }
         
         // Video thumbnail streaming & caching

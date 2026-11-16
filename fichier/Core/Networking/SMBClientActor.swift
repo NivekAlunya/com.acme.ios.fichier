@@ -507,18 +507,14 @@ actor SMBClientActor {
 
         try await client.moveItem(share: item.shareName, fromPath: sourcePath, toPath: targetPath)
 
-        // Evict in-memory and disk caches
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        thumbnailCache.removeObject(forKey: memoryCacheKey)
-        fullImageCache.removeObject(forKey: "\(item.id)_full" as NSString)
-        metadataCache.removeObject(forKey: item.id as NSString)
-        await MediaCacheManager.shared.invalidateThumbnailCache(for: [item])
+        let canonicalTargetPath = targetPath.hasPrefix("/") ? targetPath : "/\(targetPath)"
+        let finalPath = item.path.hasPrefix("/") ? canonicalTargetPath : targetPath
 
-        return MediaItem(
+        let renamedItem = MediaItem(
             locationID: item.locationID,
             name: trimmed,
             rootName: item.rootName,
-            path: targetPath,
+            path: finalPath,
             isDirectory: item.isDirectory,
             size: item.size,
             modifiedDate: Date(),
@@ -528,6 +524,21 @@ actor SMBClientActor {
             isMediaVideo: item.isMediaVideo,
             folderIconName: item.folderIconName
         )
+
+        // Migrate in-memory thumbnail cache
+        let oldMemoryKey = "\(item.id)_thumb" as NSString
+        let newMemoryKey = "\(renamedItem.id)_thumb" as NSString
+        if let cachedThumb = thumbnailCache.object(forKey: oldMemoryKey) {
+            thumbnailCache.setObject(cachedThumb, forKey: newMemoryKey)
+            thumbnailCache.removeObject(forKey: oldMemoryKey)
+        }
+        fullImageCache.removeObject(forKey: "\(item.id)_full" as NSString)
+        metadataCache.removeObject(forKey: item.id as NSString)
+
+        // Migrate disk thumbnail cache
+        await MediaCacheManager.shared.migrateThumbnailCache(from: item, to: renamedItem)
+
+        return renamedItem
     }
 
     /// Lists immediate child subfolders in the given directory of an SMB share.

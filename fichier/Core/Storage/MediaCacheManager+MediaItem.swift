@@ -69,6 +69,45 @@ nonisolated extension MediaCacheManager {
         await diskActor.removeFiles(at: targets)
     }
 
+    /// Asynchronously migrates thumbnail, video, and document disk caches when an item is renamed.
+    ///
+    /// - Parameters:
+    ///   - source: Original `MediaItem` before rename.
+    ///   - destination: Mutated `MediaItem` after rename.
+    public func migrateThumbnailCache(from source: MediaItem, to destination: MediaItem) async {
+        let sourceSubPath = source.isVideo ? "\(source.path)_vidstream_v7" : source.path
+        let destSubPath = destination.isVideo ? "\(destination.path)_vidstream_v7" : destination.path
+
+        let sourceKey = cacheKey(
+            for: source.shareName,
+            path: sourceSubPath,
+            dimension: Self.standardThumbnailDimension,
+            connectionID: source.connectionID
+        )
+        let destKey = cacheKey(
+            for: destination.shareName,
+            path: destSubPath,
+            dimension: Self.standardThumbnailDimension,
+            connectionID: destination.connectionID
+        )
+
+        let sourceURL = thumbnailsDirectory.appendingPathComponent("\(sourceKey).jpg")
+        let destURL = thumbnailsDirectory.appendingPathComponent("\(destKey).jpg")
+
+        await diskActor.migrateFile(from: sourceURL, to: destURL)
+
+        if source.isPDF {
+            let sourceDocURL = localDocumentURL(for: source)
+            let destDocURL = localDocumentURL(for: destination)
+            await diskActor.migrateFile(from: sourceDocURL, to: destDocURL)
+        }
+
+        if source.isVideo {
+            let sourceVideoURL = localVideoURL(for: source)
+            let destVideoURL = localVideoURL(for: destination)
+            await diskActor.migrateFile(from: sourceVideoURL, to: destVideoURL)
+        }
+    }
 
     /// Dispatches invalidation of disk thumbnail and cached document copies to `MediaDiskCacheActor`.
     ///
