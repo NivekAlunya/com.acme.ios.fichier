@@ -290,7 +290,7 @@ extension StorageLocationManager {
     }
 
     /// Recursively updates relative paths and local file URLs for all descendants of a renamed directory node.
-    private func updateDescendantPaths(
+    func updateDescendantPaths(
         in nodes: [MediaItem],
         oldPathPrefix: String,
         newPathPrefix: String,

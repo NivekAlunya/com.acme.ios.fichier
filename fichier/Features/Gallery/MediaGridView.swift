@@ -773,14 +773,6 @@ struct MediaGridView: View {
                 }
                 .keyboardShortcut("a", modifiers: [.command])
 
-                // Delete key: Move selected items to trash or delete from SMB
-                Button("") {
-                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
-                        itemsPendingDelete = Array(selectedItems)
-                    }
-                }
-                .keyboardShortcut(.delete, modifiers: [])
-
                 // Cmd+Delete (⌘⌫): Delete selected items
                 Button("") {
                     if !selectedItems.isEmpty && manager.canManageCurrentFolder {

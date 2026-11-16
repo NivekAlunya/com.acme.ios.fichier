@@ -538,7 +538,12 @@ public actor LocalStorageActor {
         if isCaseOnlyRename {
             let tempURL = parentURL.appendingPathComponent(".rename_\(UUID().uuidString).tmp", isDirectory: item.isDirectory)
             try fileManager.moveItem(at: sourceURL, to: tempURL)
-            try fileManager.moveItem(at: tempURL, to: targetURL)
+            do {
+                try fileManager.moveItem(at: tempURL, to: targetURL)
+            } catch {
+                try? fileManager.moveItem(at: tempURL, to: sourceURL)
+                throw error
+            }
         } else {
             try fileManager.moveItem(at: sourceURL, to: targetURL)
         }

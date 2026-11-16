@@ -893,5 +893,88 @@ final class FileOperationsTests: XCTestCase {
         let loaded = await manager.downloadThumbnail(for: renamed)
         XCTAssertNotNil(loaded)
     }
+
+    @MainActor
+    func testUpdateDescendantPathsDeepHierarchy() {
+        let manager = StorageLocationManager()
+        let locationID = UUID().uuidString
+        let baseURL = tempDirectory.appendingPathComponent("NewParent", isDirectory: true)
+
+        let leafFile = MediaItem(
+            locationID: locationID,
+            name: "photo.jpg",
+            rootName: "Root",
+            path: "OldParent/Sub/Deep/photo.jpg",
+            isDirectory: false,
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub/Deep/photo.jpg")
+        )
+        let deepFolder = MediaItem(
+            locationID: locationID,
+            name: "Deep",
+            rootName: "Root",
+            path: "OldParent/Sub/Deep",
+            isDirectory: true,
+            children: [leafFile],
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub/Deep", isDirectory: true)
+        )
+        let subFolder = MediaItem(
+            locationID: locationID,
+            name: "Sub",
+            rootName: "Root",
+            path: "OldParent/Sub",
+            isDirectory: true,
+            children: [deepFolder],
+            localURL: tempDirectory.appendingPathComponent("OldParent/Sub", isDirectory: true)
+        )
+
+        let updated = manager.updateDescendantPaths(
+            in: [subFolder],
+            oldPathPrefix: "OldParent",
+            newPathPrefix: "NewParent",
+            newParentURL: baseURL
+        )
+
+        XCTAssertEqual(updated.count, 1)
+        XCTAssertEqual(updated[0].path, "NewParent/Sub")
+        XCTAssertEqual(updated[0].localURL, baseURL.appendingPathComponent("Sub", isDirectory: true))
+        XCTAssertEqual(updated[0].children?[0].path, "NewParent/Sub/Deep")
+        XCTAssertEqual(updated[0].children?[0].children?[0].path, "NewParent/Sub/Deep/photo.jpg")
+        XCTAssertEqual(
+            updated[0].children?[0].children?[0].localURL,
+            baseURL.appendingPathComponent("Sub/Deep/photo.jpg", isDirectory: false)
+        )
+    }
+
+    func testRenameItemRejectsForbiddenCharacters() async throws {
+        let fileURL = tempDirectory.appendingPathComponent("valid.txt")
+        try Data("hello".utf8).write(to: fileURL)
+
+        let localActor = LocalStorageActor()
+        let item = MediaItem(
+            locationID: UUID().uuidString,
+            name: "valid.txt",
+            rootName: "Temp",
+            path: "valid.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let forbiddenNames = [
+            "bad\\name.txt",
+            "bad:name.txt",
+            "bad?name.txt",
+            "bad*name.txt",
+            "bad/name.txt"
+        ]
+
+        for badName in forbiddenNames {
+            do {
+                _ = try await localActor.renameItem(item, to: badName)
+                XCTFail("Expected renameItem to throw for forbidden name: \(badName)")
+            } catch {
+                // Expected to fail sanitization
+            }
+        }
+    }
 }
 #endif
