@@ -31,42 +31,55 @@ public struct PictureDetailView: View {
     let autoStartSlideshow: Bool
     
     @Environment(\.dismiss) private var dismiss
-    
-    /// The currently displayed photo media item.
-    @State private var currentItem: MediaItem
-    
-    /// Controls whether the automated slideshow timer is actively running.
-    @State private var isPlayingSlideshow: Bool
-    
-    /// Trajectory direction of the most recent photo transition, driving asymmetric slide animations.
-    @State private var slideDirection: SlideDirection = .forward
+
+    @State private var viewModel: PictureDetailViewModel
     
     /// Duration in seconds between automatic slideshow photo transitions.
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
     
     /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
-    
-    /// Controls visibility of floating top and bottom HUD overlay toolbars.
-    @State private var showControls: Bool = true
-    
-    /// Full-resolution image decoded for the currently active photo.
-    @State private var currentImage: UIImage?
-    
-    /// In-memory cache holding preloaded full-resolution slides for seamless slideshow cross-dissolving.
-    @State private var slideImageCache: [String: UIImage] = [:]
-    
-    /// Parsed EXIF metadata for the currently active photo.
-    @State private var activeMetadata: PictureEXIFData?
-    
-    /// Controls presentation of the EXIF information sheet.
-    @State private var showingInfoSheet = false
-    
-    /// Temporary toast message displayed after saving to Camera Roll.
-    @State private var saveStatusMessage: String?
-    
-    /// Indicates whether saving to the photo library is currently in flight.
-    @State private var isSaving = false
+
+    private var currentItem: MediaItem {
+        get { viewModel.currentItem }
+        nonmutating set { viewModel.currentItem = newValue }
+    }
+    private var isPlayingSlideshow: Bool {
+        get { viewModel.isPlayingSlideshow }
+        nonmutating set { viewModel.isPlayingSlideshow = newValue }
+    }
+    private var slideDirection: SlideDirection {
+        get { viewModel.slideDirection }
+        nonmutating set { viewModel.slideDirection = newValue }
+    }
+    private var showControls: Bool {
+        get { viewModel.showControls }
+        nonmutating set { viewModel.showControls = newValue }
+    }
+    private var currentImage: UIImage? {
+        get { viewModel.currentImage }
+        nonmutating set { viewModel.currentImage = newValue }
+    }
+    private var slideImageCache: [String: UIImage] {
+        get { viewModel.slideImageCache }
+        nonmutating set { viewModel.slideImageCache = newValue }
+    }
+    private var activeMetadata: PictureEXIFData? {
+        get { viewModel.activeMetadata }
+        nonmutating set { viewModel.activeMetadata = newValue }
+    }
+    private var showingInfoSheet: Bool {
+        get { viewModel.showingInfoSheet }
+        nonmutating set { viewModel.showingInfoSheet = newValue }
+    }
+    private var saveStatusMessage: String? {
+        get { viewModel.saveStatusMessage }
+        nonmutating set { viewModel.saveStatusMessage = newValue }
+    }
+    private var isSaving: Bool {
+        get { viewModel.isSaving }
+        nonmutating set { viewModel.isSaving = newValue }
+    }
     
     /// Designated public initializer.
     ///
@@ -86,13 +99,19 @@ public struct PictureDetailView: View {
         self.pictures = photos.isEmpty ? [initialItem] : photos
         self.initialItem = initialItem
         self.autoStartSlideshow = autoStartSlideshow
-        self._currentItem = State(initialValue: initialItem)
-        self._isPlayingSlideshow = State(initialValue: autoStartSlideshow)
+        self._viewModel = State(
+            initialValue: PictureDetailViewModel(
+                manager: manager,
+                pictures: pictures,
+                initialItem: initialItem,
+                autoStartSlideshow: autoStartSlideshow
+            )
+        )
     }
     
     /// Zero-based index of the current photo within the active collection.
     private var currentIndex: Int {
-        pictures.firstIndex(where: { $0.id == currentItem.id }) ?? 0
+        viewModel.currentIndex
     }
     
     public var body: some View {
@@ -143,7 +162,7 @@ public struct PictureDetailView: View {
                 #endif
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
-                TabView(selection: $currentItem) {
+                TabView(selection: $viewModel.currentItem) {
                     ForEach(pictures) { pic in
                         ZoomablePicturePageView(
                             manager: manager,
@@ -180,7 +199,7 @@ public struct PictureDetailView: View {
                     
                     PictureViewerBottomBarView(
                         hasMultiplePictures: pictures.count > 1,
-                        isPlayingSlideshow: $isPlayingSlideshow,
+                        isPlayingSlideshow: $viewModel.isPlayingSlideshow,
                         slideshowInterval: $slideshowInterval,
                         transitionStyle: $transitionStyle,
                         isFavorite: FavoritesManager.shared.isFavorite(currentItem),
@@ -230,7 +249,7 @@ public struct PictureDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingInfoSheet) {
+        .sheet(isPresented: $viewModel.showingInfoSheet) {
             if let meta = activeMetadata {
                 PictureInfoSheet(metadata: meta, item: currentItem)
             } else {
