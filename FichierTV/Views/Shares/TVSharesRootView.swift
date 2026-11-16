@@ -13,6 +13,9 @@ public struct TVSharesRootView: View {
     @State private var editingServer: SavedSMBConnection?
 
     public init() {
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(wrappedValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(wrappedValue: TVSharesViewModel())
     }
 

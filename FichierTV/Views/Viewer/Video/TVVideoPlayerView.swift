@@ -15,23 +15,19 @@ import FichierKit
 /// - Play/Pause toggles playback unconditionally.
 /// - Menu follows a 3-step cancellation hierarchy: abort scrub -> dismiss overlay -> pop navigation stack.
 public struct TVVideoPlayerView: View {
-    public let initialItem: MediaSourceItem
-    public let videos: [MediaSourceItem]
-
     @State private var viewModel: TVVideoPlayerViewModel
     @FocusState private var isPlayerFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(initialItem: MediaSourceItem, videos: [MediaSourceItem]) {
-        self.initialItem = initialItem
-        self.videos = videos
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(wrappedValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(wrappedValue: TVVideoPlayerViewModel(initialItem: initialItem, videos: videos))
     }
 
     init(viewModel: TVVideoPlayerViewModel) {
-        self.initialItem = viewModel.currentItem
-        self.videos = viewModel.videos
         _viewModel = State(wrappedValue: viewModel)
     }
 

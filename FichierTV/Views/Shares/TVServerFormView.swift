@@ -19,6 +19,9 @@ public struct TVServerFormView: View {
         discovery: (any SMBHostDiscoveryProtocol)? = nil,
         resolver: any MediaSourceResolverProtocol = DefaultMediaSourceResolver.shared
     ) {
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(wrappedValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
         _viewModel = State(wrappedValue: TVServerFormViewModel(
             mode: mode,
             store: store,

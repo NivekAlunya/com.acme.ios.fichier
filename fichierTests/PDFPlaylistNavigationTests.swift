@@ -24,14 +24,14 @@ final class PDFPlaylistNavigationTests: XCTestCase {
         let manager = StorageLocationManager()
         let doc1 = createTestMediaItem(name: "doc1.pdf")
         
-        let view = PDFDetailView(
+        let viewModel = PDFDetailViewModel(
             manager: manager,
             documents: [doc1],
             initialItem: doc1
         )
         
-        XCTAssertEqual(view.documents.count, 1)
-        XCTAssertEqual(view.documents.first?.id, doc1.id)
+        XCTAssertEqual(viewModel.documents.count, 1)
+        XCTAssertEqual(viewModel.documents.first?.id, doc1.id)
     }
     
     func testMultipleDocumentsPlaylistFiltersPDFsOnly() {
@@ -40,14 +40,14 @@ final class PDFPlaylistNavigationTests: XCTestCase {
         let image = createTestMediaItem(name: "photo.jpg")
         let doc2 = createTestMediaItem(name: "guide.pdf")
         
-        let view = PDFDetailView(
+        let viewModel = PDFDetailViewModel(
             manager: manager,
             documents: [doc1, image, doc2],
             initialItem: doc1
         )
         
-        XCTAssertEqual(view.documents.count, 2)
-        XCTAssertEqual(view.documents.map(\.name), ["report.pdf", "guide.pdf"])
+        XCTAssertEqual(viewModel.documents.count, 2)
+        XCTAssertEqual(viewModel.documents.map(\.name), ["report.pdf", "guide.pdf"])
     }
     
     func testContextContainsTargetPDFResolvesFilteredSublist() {
@@ -60,16 +60,10 @@ final class PDFPlaylistNavigationTests: XCTestCase {
         let filteredContext = [doc1, doc2]
         
         let source = filteredContext.contains(where: { $0.id == doc1.id }) ? filteredContext : folderPictures
-        let activeDocuments = source.filter(\.isPDF)
-        var documents = activeDocuments.isEmpty ? [doc1] : activeDocuments
-        if !documents.contains(where: { $0.id == doc1.id }) {
-            documents.append(doc1)
-        }
-        
         let manager = StorageLocationManager()
-        let view = PDFDetailView(manager: manager, documents: documents, initialItem: doc1)
-        XCTAssertEqual(view.documents.count, 2)
-        XCTAssertEqual(view.documents.map(\.name), ["invoice_2025.pdf", "invoice_2026.pdf"])
+        let viewModel = PDFDetailViewModel(manager: manager, documents: source, initialItem: doc1)
+        XCTAssertEqual(viewModel.documents.count, 2)
+        XCTAssertEqual(viewModel.documents.map(\.name), ["invoice_2025.pdf", "invoice_2026.pdf"])
     }
     
     func testContextEmptyOrMissingTargetPDFResolvesAllFolderPDFs() {
@@ -83,16 +77,10 @@ final class PDFPlaylistNavigationTests: XCTestCase {
         let emptyContext: [MediaItem] = []
         
         let source = emptyContext.contains(where: { $0.id == doc1.id }) ? emptyContext : folderPictures
-        let activeDocuments = source.filter(\.isPDF)
-        var documents = activeDocuments.isEmpty ? [doc1] : activeDocuments
-        if !documents.contains(where: { $0.id == doc1.id }) {
-            documents.append(doc1)
-        }
-        
         let manager = StorageLocationManager()
-        let view = PDFDetailView(manager: manager, documents: documents, initialItem: doc1)
-        XCTAssertEqual(view.documents.count, 3)
-        XCTAssertEqual(view.documents.map(\.name), ["file1.pdf", "file2.pdf", "file3.pdf"])
+        let viewModel = PDFDetailViewModel(manager: manager, documents: source, initialItem: doc1)
+        XCTAssertEqual(viewModel.documents.count, 3)
+        XCTAssertEqual(viewModel.documents.map(\.name), ["file1.pdf", "file2.pdf", "file3.pdf"])
     }
 }
 #endif

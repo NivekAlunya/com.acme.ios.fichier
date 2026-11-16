@@ -22,10 +22,6 @@ struct MediaGridView: View {
     
     // MARK: - Injected Dependencies
     
-    /// The centralized storage and connectivity manager responsible for folder enumeration,
-    /// thumbnail caching, file downloads, and remote share traversal.
-    var manager: StorageLocationManager
-    
     /// Optional closure invoked when the user selects a subfolder to navigate into.
     /// If `nil`, the view defaults to driving folder navigation directly through `manager.selectAndLoadFolder(_:)`.
     var onSelectFolder: ((MediaItem) -> Void)?
@@ -36,6 +32,23 @@ struct MediaGridView: View {
     /// Callback closure invoked when an individual picture is tapped to open fullscreen viewer,
     /// providing the tapped item alongside the contextual list of all sibling pictures for swiping.
     let onSelectPicture: (MediaItem, [MediaItem]) -> Void
+
+    @State private var viewModel: MediaGridViewModel
+
+    init(
+        manager: StorageLocationManager,
+        onSelectFolder: ((MediaItem) -> Void)? = nil,
+        onStartSlideshow: (([MediaItem]) -> Void)? = nil,
+        onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void
+    ) {
+        self.onSelectFolder = onSelectFolder
+        self.onStartSlideshow = onStartSlideshow
+        self.onSelectPicture = onSelectPicture
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
+        _viewModel = State(initialValue: MediaGridViewModel(manager: manager))
+    }
     
     // MARK: - Environment & Persistent Settings
     
@@ -59,9 +72,6 @@ struct MediaGridView: View {
     
     // MARK: - Search & Gesture State
     
-    /// Live search query string bound to the SwiftUI `.searchable` modifier.
-    @State private var searchText = ""
-    
     /// Tracks the magnification scale at the end of the previous discrete gesture step to compute relative zoom ratios.
     @State private var lastPinchScale: CGFloat = 1.0
     
@@ -78,146 +88,50 @@ struct MediaGridView: View {
     
     /// Minimum time delay (in seconds) required between consecutive discrete pinch-to-zoom step evaluations, preventing visual stutter.
     private static let pinchCooldownSeconds: TimeInterval = 0.30
-    
-    // MARK: - Filtering & Batch Selection State
-    
-    /// Flag indicating whether the media list should be restricted exclusively to items marked as favorites.
-    @State private var showFavoritesOnly = false
-    
-    /// Active media category filter applied to display items (e.g. photos, videos, documents, or all).
-    @State private var mediaFilter: MediaFilter = .all
-    
-    /// Toggles multi-selection mode for performing batch operations (favoriting, saving to Photos, or sharing).
-    @State private var isSelectionMode = false
-    
-    /// The set of uniquely selected `MediaItem` instances currently highlighted in selection mode.
-    @State private var selectedItems: Set<MediaItem> = []
-    
-    /// Flag indicating that a background batch export or share preparation task is currently executing.
-    @State private var isBatchProcessing = false
-    
-    /// User-facing status string displayed in the selection bottom bar indicating current batch progress (e.g., "Saving (2/10)").
-    @State private var batchProgressMessage: String?
-    
-    /// Transient status message displayed inside an animated toast capsule upon batch operation completion.
-    @State private var batchStatusToast: String?
-    
-    /// Active structured asynchronous task handle executing batch processing, cancellable by user action or view dismissal.
-    @State private var batchTask: Task<Void, Never>?
-    
-    /// Holds the prepared shareable items (images/URLs) passed to `MediaActivityShareSheet` when ready to present.
-    @State private var shareSheetItems: [Any]?
-    
-    /// Controls presentation of the application settings sheet on compact size classes.
-    @State private var showingSettings = false
-    
-    /// Presentation flag for the "New Folder" alert prompt.
-    @State private var isShowingNewFolderAlert = false
-    
-    /// User input text buffer for a new folder name.
-    @State private var newFolderName = ""
-    
-    /// Item pending user renaming.
-    @State private var itemToRename: MediaItem?
-    
-    /// User input text buffer for renaming an item.
-    @State private var renameText = ""
-    
-    /// Items selected or contextualized for moving to another folder.
-    @State private var itemsPendingMove: [MediaItem]?
-    
-    /// Items pending user confirmation for deletion to the system Trash.
-    @State private var itemsPendingDelete: [MediaItem]?
-    
-    /// Staged local file URLs pending export to the iOS Files app via UIDocumentPickerViewController.
-    @State private var itemsPendingFileExport: [URL]?
-    
-    /// Error message captured during file management actions.
-    @State private var fileOpErrorMessage: String?
-    
-    /// Unique identity token incremented or refreshed to force complete invalidation and reload of visible thumbnail cells.
-    @State private var thumbnailReloadToken = UUID()
-    
-    // MARK: - Directory Identification
-    
-    /// Stable identifier representing the current browsing scope, used to reset scroll positions when switching folders.
-    private var currentDirectoryID: String {
-        manager.selectedFolder?.id ?? "root"
-    }
-    
+
     // MARK: - Filtered and Sorted Data Pipeline
     
-    /// Applies search filtering, favorites filtering, media kind classification, and ordering to the current folder's contents.
-    ///
-    /// - Returns: A tuple containing sorted subfolders and sorted media items ready for presentation.
-    ///
-    /// ### Complex Logic Breakdown:
-    /// 1. **Search**: Case-insensitive substring matching using `localizedCaseInsensitiveContains` on folder and media item names.
-    /// 2. **Favorites Discrimination**: Queries the high-performance `FavoritesManager` cache when `showFavoritesOnly` is active.
-    /// 3. **Type Segregation**: Categorizes items into photos, videos, or documents based on MIME type and file extension flags.
-    /// 4. **Natural Ordering**: Applies `sortItems(_:)` to ensure natural alphanumeric sorting (e.g. "File 2" before "File 10").
+    @ViewBuilder
+    private var slideshowDurationSection: some View {
+        Section(.Strings.slideshowSectionSlideDuration) {
+            Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
+                Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var filterMenuSection: some View {
+        Section(.Strings.galleryMenuFilter) {
+            Picker(.Strings.galleryPickerMediaType, selection: $viewModel.mediaFilter) {
+                ForEach(MediaFilter.allCases) { filter in
+                    Label(filter.localizedTitle, systemImage: filter.iconName).tag(filter)
+                }
+            }
+
+            Toggle(isOn: $viewModel.showFavoritesOnly) {
+                Label(.Strings.galleryFilterFavoritesOnly, systemImage: "heart.fill")
+            }
+        }
+    }
+
+    private func beginRenameSelected() {
+        guard viewModel.selectedItems.count == 1, let item = viewModel.selectedItems.first else { return }
+        viewModel.itemToRename = item
+        viewModel.renameText = item.name
+    }
+
     private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
-        let listFolders = searchText.isEmpty ? manager.currentFolders : manager.currentFolders.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-        }
-        let sortedFolders = sortItems(listFolders)
-        
-        var listPictures = searchText.isEmpty ? manager.pictures : manager.pictures.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
-        }
-        if showFavoritesOnly {
-            listPictures = listPictures.filter { FavoritesManager.shared.isFavorite($0) }
-        }
-        switch mediaFilter {
-        case .all:
-            break
-        case .photos:
-            listPictures = listPictures.filter(\.isImage)
-        case .videos:
-            listPictures = listPictures.filter { $0.isVideo }
-        #if !os(tvOS)
-        case .documents:
-            listPictures = listPictures.filter { $0.isPDF }
-        #endif
-        }
-        let sortedPictures = sortItems(listPictures)
-        return (sortedFolders, sortedPictures)
+        viewModel.filterAndSortData(sortOption: sortOption)
     }
     
-    /// Produces a localized section header string dynamically reflecting the active media filter and count.
-    ///
-    /// - Parameter count: The number of media items present in the section.
-    /// - Returns: A localized string resource configured with the item count.
     private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        switch mediaFilter {
-        case .all: return .Strings.gallerySectionMediaCount(count)
-        case .photos: return .Strings.gallerySectionPhotosCount(count)
-        case .videos: return .Strings.gallerySectionVideosCount(count)
-        #if !os(tvOS)
-        case .documents: return LocalizedStringResource("gallery_section_documents_count", defaultValue: "\(count) Documents")
-        #endif
-        }
-    }
-    
-    /// Sorts an array of `MediaItem` instances according to the user's selected `sortOption`.
-    ///
-    /// - Parameter items: The unsorted media items.
-    /// - Returns: The stably sorted media items.
-    private func sortItems(_ items: [MediaItem]) -> [MediaItem] {
-        switch sortOption {
-        case .nameAsc:
-            return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        case .nameDesc:
-            return items.sorted { $0.name.localizedStandardCompare($1.name) == .orderedDescending }
-        case .dateDesc:
-            return items.sorted { ($0.modifiedDate ?? .distantPast) > ($1.modifiedDate ?? .distantPast) }
-        case .dateAsc:
-            return items.sorted { ($0.modifiedDate ?? .distantPast) < ($1.modifiedDate ?? .distantPast) }
-        case .sizeDesc:
-            return items.sorted { $0.size > $1.size }
-        case .sizeAsc:
-            return items.sorted { $0.size < $1.size }
-        }
+        viewModel.mediaSectionHeader(for: count)
     }
     
     /// Dynamic grid layout specification computed from the active `gridSize`.
@@ -226,14 +140,8 @@ struct MediaGridView: View {
         [GridItem(.adaptive(minimum: gridSize.minDimension, maximum: gridSize.minDimension * 1.45), spacing: 10)]
     }
     
-    /// Accessibility label for the parent folder navigation button, dynamically reflecting the parent folder name when available.
-    /// Extracted as a dedicated property to avoid complex nested expression evaluation inside the SwiftUI toolbar ViewBuilder.
     private var parentFolderAccessibilityLabel: String {
-        if let parentName = manager.parentFolder?.name {
-            String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
-        } else {
-            String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
-        }
+        viewModel.parentFolderAccessibilityLabel
     }
     
     // MARK: - Body View Hierarchy
@@ -244,61 +152,61 @@ struct MediaGridView: View {
         
         ZStack(alignment: .bottom) {
             Group {
-                if manager.pictures.isEmpty && manager.currentFolders.isEmpty {
+                if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
                     MediaGridEmptyStateView(
-                        isLoading: manager.isLoading,
-                        errorMessage: manager.errorMessage,
-                        searchText: searchText,
-                        selectedFolderName: manager.selectedFolder?.name,
-                        hasSelectedFolder: manager.selectedFolder != nil,
+                        isLoading: viewModel.manager.isLoading,
+                        errorMessage: viewModel.manager.errorMessage,
+                        searchText: viewModel.searchText,
+                        selectedFolderName: viewModel.manager.selectedFolder?.name,
+                        hasSelectedFolder: viewModel.manager.selectedFolder != nil,
                         onRetry: {
-                            if let folder = manager.selectedFolder {
-                                Task { await manager.selectAndLoadFolder(folder) }
+                            if let folder = viewModel.manager.selectedFolder {
+                                Task { await viewModel.manager.selectAndLoadFolder(folder) }
                             }
                         }
                     )
-                } else if !searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                } else if !viewModel.searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
+                    ContentUnavailableView.search(text: viewModel.searchText)
                 } else {
                     Group {
                         switch viewMode {
                         case .grid:
                             MediaGridModeView(
-                                manager: manager,
+                                manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
                                 gridColumns: gridColumns,
                                 gridSize: gridSize,
                                 sortOption: sortOption,
-                                isSelectionMode: isSelectionMode,
-                                selectedItems: selectedItems,
-                                currentDirectoryID: currentDirectoryID,
+                                isSelectionMode: viewModel.isSelectionMode,
+                                selectedItems: viewModel.selectedItems,
+                                currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: { onSelectPicture($0, $1) },
                                 onToggleSelection: { toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {
-                                        isSelectionMode = true
-                                        selectedItems.insert(item)
+                                        viewModel.isSelectionMode = true
+                                        viewModel.selectedItems.insert(item)
                                     }
                                     AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
-                                    if let folder = manager.selectedFolder {
-                                        await manager.selectAndLoadFolder(folder)
+                                    if let folder = viewModel.manager.selectedFolder {
+                                        await viewModel.manager.selectAndLoadFolder(folder)
                                     } else {
-                                        await manager.refreshSharesAndFolders()
+                                        await viewModel.manager.refreshSharesAndFolders()
                                     }
                                 },
                                 onRequestRename: { item in
-                                    itemToRename = item
-                                    renameText = item.name
+                                    viewModel.itemToRename = item
+                                    viewModel.renameText = item.name
                                 },
                                 onRequestMove: { item in
-                                    itemsPendingMove = [item]
+                                    viewModel.itemsPendingMove = [item]
                                 },
                                 onRequestDelete: { item in
-                                    itemsPendingDelete = [item]
+                                    viewModel.itemsPendingDelete = [item]
                                 }
                             )
                             #if !os(tvOS)
@@ -307,38 +215,38 @@ struct MediaGridView: View {
                             .transition(.opacity)
                         case .list:
                             MediaListModeView(
-                                manager: manager,
+                                manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
-                                isSelectionMode: isSelectionMode,
-                                selectedItems: selectedItems,
-                                currentDirectoryID: currentDirectoryID,
+                                isSelectionMode: viewModel.isSelectionMode,
+                                selectedItems: viewModel.selectedItems,
+                                currentDirectoryID: viewModel.currentDirectoryID,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: { onSelectPicture($0, $1) },
                                 onToggleSelection: { toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {
-                                        isSelectionMode = true
-                                        selectedItems.insert(item)
+                                        viewModel.isSelectionMode = true
+                                        viewModel.selectedItems.insert(item)
                                     }
                                     AppHapticFeedback.medium()
                                 },
                                 onRefresh: {
-                                    if let folder = manager.selectedFolder {
-                                        await manager.selectAndLoadFolder(folder)
+                                    if let folder = viewModel.manager.selectedFolder {
+                                        await viewModel.manager.selectAndLoadFolder(folder)
                                     } else {
-                                        await manager.refreshSharesAndFolders()
+                                        await viewModel.manager.refreshSharesAndFolders()
                                     }
                                 },
                                 onRequestRename: { item in
-                                    itemToRename = item
-                                    renameText = item.name
+                                    viewModel.itemToRename = item
+                                    viewModel.renameText = item.name
                                 },
                                 onRequestMove: { item in
-                                    itemsPendingMove = [item]
+                                    viewModel.itemsPendingMove = [item]
                                 },
                                 onRequestDelete: { item in
-                                    itemsPendingDelete = [item]
+                                    viewModel.itemsPendingDelete = [item]
                                 }
                             )
                             #if !os(tvOS)
@@ -347,72 +255,69 @@ struct MediaGridView: View {
                             .transition(.opacity)
                         }
                     }
-                    .id(thumbnailReloadToken)
+                    .id(viewModel.thumbnailReloadToken)
                 }
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
             
             // Bottom Action Bar when in Selection Mode
-            if isSelectionMode {
+            if viewModel.isSelectionMode {
                 MediaSelectionBottomBar(
-                    selectedCount: selectedItems.count,
-                    isAllFavorites: !selectedItems.isEmpty && selectedItems.allSatisfy { FavoritesManager.shared.isFavorite($0) },
-                    isProcessing: isBatchProcessing,
-                    progressMessage: batchProgressMessage,
-                    showSaveToPhotos: manager.currentLocation?.kind != .photos,
-                    showFileManagement: manager.canManageCurrentFolder,
+                    selectedCount: viewModel.selectedItems.count,
+                    isAllFavorites: !viewModel.selectedItems.isEmpty && viewModel.selectedItems.allSatisfy { FavoritesManager.shared.isFavorite($0) },
+                    isProcessing: viewModel.isBatchProcessing,
+                    progressMessage: viewModel.batchProgressMessage,
+                    showSaveToPhotos: viewModel.manager.currentLocation?.kind != .photos,
+                    showFileManagement: viewModel.manager.canManageCurrentFolder,
                     onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
                     onDownloadToFiles: { batchDownloadToFiles() },
                     onShare: { batchShare() },
                     onMove: {
-                        itemsPendingMove = Array(selectedItems)
+                        viewModel.itemsPendingMove = Array(viewModel.selectedItems)
                     },
                     onRename: {
-                        if let first = selectedItems.first {
-                            itemToRename = first
-                            renameText = first.name
-                        }
+                        beginRenameSelected()
                     },
                     onDelete: {
-                        itemsPendingDelete = Array(selectedItems)
+                        viewModel.itemsPendingDelete = Array(viewModel.selectedItems)
                     }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .statusToast(message: $batchStatusToast)
-        .searchable(text: $searchText, prompt: .Strings.gallerySearchPrompt)
+        .statusToast(message: $viewModel.batchStatusToast)
+        .searchable(text: $viewModel.searchText, prompt: .Strings.gallerySearchPrompt)
         .sheet(isPresented: Binding(
-            get: { shareSheetItems != nil },
-            set: { if !$0 { shareSheetItems = nil } }
+            get: { viewModel.shareSheetItems != nil },
+            set: { if !$0 { viewModel.shareSheetItems = nil } }
         )) {
-            if let shareSheetItems {
+            if let shareSheetItems = viewModel.shareSheetItems {
                 MediaActivityShareSheet(activityItems: shareSheetItems)
             }
         }
-        .sheet(isPresented: $showingSettings) {
+        .sheet(isPresented: $viewModel.showingSettings) {
             AppSettingsView()
         }
         #if !os(tvOS)
         .sheet(isPresented: Binding(
-            get: { itemsPendingFileExport != nil },
-            set: { if !$0 { itemsPendingFileExport = nil } }
+            get: { viewModel.itemsPendingFileExport != nil },
+            set: { if !$0 { viewModel.itemsPendingFileExport = nil } }
         )) {
-            if let urls = itemsPendingFileExport {
+            if let urls = viewModel.itemsPendingFileExport {
                 DocumentPickerExportView(urls: urls) { success in
-                    itemsPendingFileExport = nil
+                    viewModel.itemsPendingFileExport = nil
                     if success {
                         withAnimation {
-                            batchStatusToast = String(localized: .Strings.galleryBatchSavedToFiles(urls.count))
-                            isSelectionMode = false
-                            selectedItems.removeAll()
+                            viewModel.batchStatusToast = String(localized: .Strings.galleryBatchSavedToFiles(urls.count))
+                            viewModel.isSelectionMode = false
+                            viewModel.selectedItems.removeAll()
                         }
                         Task {
                             try? await Task.sleep(for: .seconds(2.5))
                             withAnimation {
-                                batchStatusToast = nil
+                                viewModel.batchStatusToast = nil
                             }
                         }
                     }
@@ -421,19 +326,19 @@ struct MediaGridView: View {
         }
         #endif
         .sheet(isPresented: Binding(
-            get: { itemsPendingMove != nil },
-            set: { if !$0 { itemsPendingMove = nil } }
+            get: { viewModel.itemsPendingMove != nil },
+            set: { if !$0 { viewModel.itemsPendingMove = nil } }
         )) {
-            if let items = itemsPendingMove {
+            if let items = viewModel.itemsPendingMove {
                 FolderPickerSheetView(
-                    manager: manager,
+                    manager: viewModel.manager,
                     itemsToMove: items,
                     onMoveTo: { destination in
-                        itemsPendingMove = nil
+                        viewModel.itemsPendingMove = nil
                         executeMove(items: items, to: destination)
                     },
                     onDismiss: {
-                        itemsPendingMove = nil
+                        viewModel.itemsPendingMove = nil
                     }
                 )
             }
@@ -441,289 +346,87 @@ struct MediaGridView: View {
         .confirmationDialog(
             deleteConfirmationTitle,
             isPresented: Binding(
-                get: { itemsPendingDelete != nil },
-                set: { if !$0 { itemsPendingDelete = nil } }
+                get: { viewModel.itemsPendingDelete != nil },
+                set: { if !$0 { viewModel.itemsPendingDelete = nil } }
             ),
             titleVisibility: .visible
         ) {
             Button(deleteConfirmationButtonTitle, role: .destructive) {
-                if let items = itemsPendingDelete {
-                    itemsPendingDelete = nil
+                if let items = viewModel.itemsPendingDelete {
+                    viewModel.itemsPendingDelete = nil
                     Task {
                         await executeDelete(items: items)
                     }
                 }
             }
             Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
-                itemsPendingDelete = nil
+                viewModel.itemsPendingDelete = nil
             }
         } message: {
-            Text(deleteConfirmationMessage)
+            Text(verbatim: deleteConfirmationMessage)
         }
         .alert(
             String(localized: "New Folder", comment: "Alert title for creating new folder"),
-            isPresented: $isShowingNewFolderAlert
+            isPresented: $viewModel.isShowingNewFolderAlert
         ) {
-            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $newFolderName)
+            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $viewModel.newFolderName)
             Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
             Button(String(localized: "Create", comment: "Create button")) {
                 executeCreateFolder()
             }
-            .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
-            if let folder = manager.selectedFolder {
+            if let folder = viewModel.manager.selectedFolder {
                 let displayName = folder.name.isEmpty ? folder.rootName : folder.name
                 Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
             }
         }
         .alert(
-            itemToRename?.isDirectory == true
+            viewModel.itemToRename?.isDirectory == true
                 ? String(localized: .Strings.galleryRenameFolderTitle)
                 : String(localized: .Strings.galleryRenameFileTitle),
             isPresented: Binding(
-                get: { itemToRename != nil },
-                set: { if !$0 { itemToRename = nil } }
+                get: { viewModel.itemToRename != nil },
+                set: { if !$0 { viewModel.itemToRename = nil } }
             )
         ) {
-            TextField(String(localized: .Strings.galleryRenameFieldPlaceholder), text: $renameText)
+            TextField(String(localized: .Strings.galleryRenameFieldPlaceholder), text: $viewModel.renameText)
             Button(String(localized: .Strings.commonCancel), role: .cancel) {
-                itemToRename = nil
+                viewModel.itemToRename = nil
             }
             Button(String(localized: .Strings.galleryRenameButton)) {
-                if let item = itemToRename {
-                    executeRename(item: item, to: renameText)
+                if let item = viewModel.itemToRename {
+                    executeRename(item: item, to: viewModel.renameText)
                 }
             }
-            .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || renameText == itemToRename?.name)
+            .disabled(viewModel.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.renameText == viewModel.itemToRename?.name)
         } message: {
-            if let item = itemToRename {
+            if let item = viewModel.itemToRename {
                 Text(String(localized: .Strings.galleryRenamePrompt(item.name)))
             }
         }
         .alert(
             String(localized: "File Operation Failed", comment: "Error alert title"),
             isPresented: Binding(
-                get: { fileOpErrorMessage != nil },
-                set: { if !$0 { fileOpErrorMessage = nil } }
+                get: { viewModel.fileOpErrorMessage != nil },
+                set: { if !$0 { viewModel.fileOpErrorMessage = nil } }
             )
         ) {
             Button(String(localized: "OK", comment: "Dismiss button"), role: .cancel) {}
         } message: {
-            if let fileOpErrorMessage {
+            if let fileOpErrorMessage = viewModel.fileOpErrorMessage {
                 Text(fileOpErrorMessage)
             }
         }
         .toolbar {
-            if isSelectionMode {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(selectedItems.count == displayPictures.count && !displayPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
-                        toggleAllSelection(for: displayPictures)
-                    }
-                }
-                
-                ToolbarItem(placement: .principal) {
-                    Text(selectedItems.isEmpty ? .Strings.gallerySelectionPrompt : .Strings.gallerySelectionCount(selectedItems.count))
-                        .font(.headline)
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(.Strings.commonDone) {
-                        withAnimation {
-                            isSelectionMode = false
-                            selectedItems.removeAll()
-                        }
-                    }
-                    .font(.body.bold())
-                }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 8) {
-                        Button {
-                            if let parent = manager.parentFolder {
-                                navigateToFolder(parent)
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up.folder")
-                                .fontWeight(.semibold)
-                                .foregroundColor(manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
-                        }
-                        .tint(.blue)
-                        .disabled(manager.parentFolder == nil)
-                        .accessibilityLabel(parentFolderAccessibilityLabel)
-                        
-                        if manager.canManageCurrentFolder {
-                            Button {
-                                newFolderName = ""
-                                isShowingNewFolderAlert = true
-                            } label: {
-                                Image(systemName: "folder.badge.plus")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.blue)
-                            }
-                            .tint(.blue)
-                            .accessibilityLabel(String(localized: "New Folder", comment: "Accessibility label for create folder button"))
-                        }
-                        
-                        if !displayPictures.isEmpty {
-                            Button {
-                                withAnimation {
-                                    isSelectionMode = true
-                                }
-                            } label: {
-                                Image(systemName: viewMode.selectionIconName)
-                            }
-                            .accessibilityLabel(.Strings.galleryButtonSelect)
-                        }
-                        
-                        // Slideshow trigger & duration menu
-                        Menu {
-                            Button {
-                                onStartSlideshow?(displayPictures)
-                            } label: {
-                                Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
-                            }
-                            
-                            Section(.Strings.slideshowSectionTransitionStyle) {
-                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
-                                    ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.slideshowSectionSlideDuration) {
-                                Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
-                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                }
-                            }
-                        } label: {
-                            Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
-                        } primaryAction: {
-                            onStartSlideshow?(displayPictures)
-                        }
-                        .disabled(!hasImages)
-                        
-                        // Unified View, Sort & Grid Size Menu
-                        Menu {
-                            Section(.Strings.galleryMenuLayout) {
-                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
-                                    Label(.Strings.galleryViewModeGrid, systemImage: "square.grid.2x2").tag(ViewMode.grid)
-                                    Label(.Strings.galleryViewModeList, systemImage: "list.bullet").tag(ViewMode.list)
-                                }
-                            }
-                            
-                            if viewMode == .grid {
-                                Section(.Strings.galleryMenuGridDensity) {
-                                    Picker(.Strings.galleryPickerGridSize, selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
-                                        ForEach(GridSize.allCases) { size in
-                                            Label(size.localizedTitle, systemImage: size.iconName).tag(size)
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.galleryMenuFilter) {
-                                Picker(.Strings.galleryPickerMediaType, selection: $mediaFilter) {
-                                    ForEach(MediaFilter.allCases) { filter in
-                                        Label(filter.localizedTitle, systemImage: filter.iconName).tag(filter)
-                                    }
-                                }
-                                
-                                Toggle(isOn: $showFavoritesOnly) {
-                                    Label(.Strings.galleryFilterFavoritesOnly, systemImage: "heart.fill")
-                                }
-                            }
-                            
-                            Section(.Strings.galleryMenuSortBy) {
-                                Picker(.Strings.galleryMenuSortBy, selection: $sortOption) {
-                                    ForEach(SortOption.allCases) { option in
-                                        Label(option.localizedTitle, systemImage: option.iconName).tag(option)
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.galleryMenuSlideshow) {
-                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
-                                    ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                    }
-                                }
-                                
-                                Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
-                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                }
-                            }
-                            
-                            Section(String(localized: .Strings.gallerySectionDiskCache(manager.mediaCacheSize))) {
-                                Button(role: .destructive) {
-                                    manager.clearMediaCache()
-                                } label: {
-                                    Label(.Strings.galleryButtonClearCache, systemImage: "trash")
-                                }
-                            }
-                            
-                            #if DEBUG
-                            Section("Debug") {
-                                Button(role: .destructive) {
-                                    Task {
-                                        await manager.invalidateCurrentFolderThumbnails()
-                                        thumbnailReloadToken = UUID()
-                                    }
-                                } label: {
-                                    Label("Invalidate Folder Thumbnails", systemImage: "arrow.triangle.2.circlepath.circle")
-                                }
-                            }
-                            #endif
-                            
-                            if horizontalSizeClass == .compact {
-                                Section {
-                                    Button {
-                                        showingSettings = true
-                                    } label: {
-                                        Label(.Strings.settingsTitle, systemImage: "gearshape")
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: (mediaFilter != .all || showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                        }
-                        
-                        Button {
-                            if let folder = manager.selectedFolder {
-                                Task { await manager.selectAndLoadFolder(folder) }
-                            }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        
-                        if horizontalSizeClass == .compact {
-                            Button {
-                                showingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityLabel(.Strings.settingsTitle)
-                        }
-                    }.padding(.horizontal)
-                }
-            }
+            galleryToolbarContent(displayPictures: displayPictures, hasImages: hasImages)
         }
         .task {
-            await manager.refreshMediaCacheSize()
+            await viewModel.manager.refreshMediaCacheSize()
         }
         .onDisappear {
-            batchTask?.cancel()
-            batchTask = nil
+            viewModel.batchTask?.cancel()
+            viewModel.batchTask = nil
         }
         .background {
             // Hardware Keyboard & Remote Shortcuts for iPadOS, macOS, and tvOS
@@ -732,8 +435,8 @@ struct MediaGridView: View {
                 // Cmd+Option+R: Invalidate thumbnails for current folder
                 Button("") {
                     Task {
-                        await manager.invalidateCurrentFolderThumbnails()
-                        thumbnailReloadToken = UUID()
+                        await viewModel.manager.invalidateCurrentFolderThumbnails()
+                        viewModel.thumbnailReloadToken = UUID()
                     }
                 }
                 .keyboardShortcut("r", modifiers: [.command, .option])
@@ -750,10 +453,10 @@ struct MediaGridView: View {
                 
                 // Escape: Cancel batch selection mode
                 Button("") {
-                    if isSelectionMode {
+                    if viewModel.isSelectionMode {
                         withAnimation {
-                            isSelectionMode = false
-                            selectedItems.removeAll()
+                            viewModel.isSelectionMode = false
+                            viewModel.selectedItems.removeAll()
                             cancelBatchTask()
                         }
                     }
@@ -762,12 +465,12 @@ struct MediaGridView: View {
                 
                 // Cmd+A: Select All / Deselect All (when in selection mode)
                 Button("") {
-                    if isSelectionMode {
+                    if viewModel.isSelectionMode {
                         toggleAllSelection(for: displayPictures)
                     } else if !displayPictures.isEmpty {
                         withAnimation {
-                            isSelectionMode = true
-                            selectedItems = Set(displayPictures)
+                            viewModel.isSelectionMode = true
+                            viewModel.selectedItems = Set(displayPictures)
                         }
                     }
                 }
@@ -775,16 +478,16 @@ struct MediaGridView: View {
 
                 // Cmd+Delete (⌘⌫): Delete selected items
                 Button("") {
-                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
-                        itemsPendingDelete = Array(selectedItems)
+                    if !viewModel.selectedItems.isEmpty && viewModel.manager.canManageCurrentFolder {
+                        viewModel.itemsPendingDelete = Array(viewModel.selectedItems)
                     }
                 }
                 .keyboardShortcut(.delete, modifiers: [.command])
 
                 // Cmd+M (⌘M): Move selected items to destination folder
                 Button("") {
-                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
-                        itemsPendingMove = Array(selectedItems)
+                    if !viewModel.selectedItems.isEmpty && viewModel.manager.canManageCurrentFolder {
+                        viewModel.itemsPendingMove = Array(viewModel.selectedItems)
                     }
                 }
                 .keyboardShortcut("m", modifiers: [.command])
@@ -805,7 +508,7 @@ struct MediaGridView: View {
             onSelectFolder(folder)
         } else {
             Task {
-                await manager.selectAndLoadFolder(folder)
+                await viewModel.manager.selectAndLoadFolder(folder)
             }
         }
     }
@@ -899,12 +602,12 @@ struct MediaGridView: View {
     
     /// Toggles the selection status of a single media item, triggering light haptic feedback.
     ///
-    /// - Parameter item: The `MediaItem` to add to or remove from `selectedItems`.
+    /// - Parameter item: The `MediaItem` to add to or remove from `viewModel.selectedItems`.
     private func toggleSelection(for item: MediaItem) {
-        if selectedItems.contains(item) {
-            selectedItems.remove(item)
+        if viewModel.selectedItems.contains(item) {
+            viewModel.selectedItems.remove(item)
         } else {
-            selectedItems.insert(item)
+            viewModel.selectedItems.insert(item)
         }
         AppHapticFeedback.light()
     }
@@ -913,10 +616,10 @@ struct MediaGridView: View {
     ///
     /// - Parameter pictures: The currently visible array of pictures subject to selection.
     private func toggleAllSelection(for pictures: [MediaItem]) {
-        if selectedItems.count == pictures.count && !pictures.isEmpty {
-            selectedItems.removeAll()
+        if viewModel.selectedItems.count == pictures.count && !pictures.isEmpty {
+            viewModel.selectedItems.removeAll()
         } else {
-            selectedItems = Set(pictures)
+            viewModel.selectedItems = Set(pictures)
         }
         AppHapticFeedback.medium()
     }
@@ -924,7 +627,7 @@ struct MediaGridView: View {
     /// Toggles the favorite status across all selected items.
     /// If all selected items are already marked as favorites, unmarks all of them; otherwise, marks any un-favorited items as favorite.
     private func batchToggleFavorites() {
-        let items = Array(selectedItems)
+        let items = Array(viewModel.selectedItems)
         guard !items.isEmpty else { return }
         let allAreFavs = items.allSatisfy { FavoritesManager.shared.isFavorite($0) }
         for item in items {
@@ -943,10 +646,10 @@ struct MediaGridView: View {
     
     /// Cancels any currently active batch save or batch share operation and resets progress flags.
     private func cancelBatchTask() {
-        batchTask?.cancel()
-        batchTask = nil
-        isBatchProcessing = false
-        batchProgressMessage = nil
+        viewModel.batchTask?.cancel()
+        viewModel.batchTask = nil
+        viewModel.isBatchProcessing = false
+        viewModel.batchProgressMessage = nil
     }
     
     // MARK: - Batch Export to Photos
@@ -963,21 +666,21 @@ struct MediaGridView: View {
     /// - **Transient Toast Timer**: Displays a result summary in a top capsule banner and schedules an auto-dismissing
     ///   timer using structured `Task.sleep(for: .seconds(2.5))`.
     private func batchSaveToPhotos() {
-        let items = Array(selectedItems)
+        let items = Array(viewModel.selectedItems)
         guard !items.isEmpty else { return }
-        isBatchProcessing = true
-        batchTask?.cancel()
+        viewModel.isBatchProcessing = true
+        viewModel.batchTask?.cancel()
         
-        batchTask = Task { @MainActor in
+        viewModel.batchTask = Task { @MainActor in
             var completedCount = 0
             var savedCount = 0
             var failedCount = 0
             let total = items.count
             
             if total == 1, let item = items.first {
-                batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
                 let throttler = DownloadProgressThrottler()
-                let success = await Self.saveSingleMediaItemToPhotos(item, manager: manager) { bytes, totalBytes in
+                let success = await Self.saveSingleMediaItemToPhotos(item, manager: viewModel.manager) { bytes, totalBytes in
                     Task {
                         guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                         await MainActor.run {
@@ -985,7 +688,7 @@ struct MediaGridView: View {
                             let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                             let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
                             let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                            self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                            self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
                         }
                     }
                 }
@@ -1004,7 +707,7 @@ struct MediaGridView: View {
                     // Seed initial workers
                     for _ in 0..<min(maxConcurrent, total) {
                         if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.manager] in
+                            group.addTask { [manager = self.viewModel.manager] in
                                 await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                             }
                         }
@@ -1019,10 +722,10 @@ struct MediaGridView: View {
                         } else {
                             failedCount += 1
                         }
-                        batchProgressMessage = String(localized: .Strings.galleryBatchSavingToPhotos(completedCount, total))
+                        viewModel.batchProgressMessage = String(localized: .Strings.galleryBatchSavingToPhotos(completedCount, total))
                         
                         if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.manager] in
+                            group.addTask { [manager = self.viewModel.manager] in
                                 await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
                             }
                         }
@@ -1031,32 +734,32 @@ struct MediaGridView: View {
             }
             
             guard !Task.isCancelled else {
-                isBatchProcessing = false
-                batchProgressMessage = nil
+                viewModel.isBatchProcessing = false
+                viewModel.batchProgressMessage = nil
                 return
             }
             
-            isBatchProcessing = false
-            batchProgressMessage = nil
+            viewModel.isBatchProcessing = false
+            viewModel.batchProgressMessage = nil
             
             withAnimation {
                 if failedCount > 0 && savedCount > 0 {
-                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
+                    viewModel.batchStatusToast = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
                 } else if failedCount > 0 && savedCount == 0 {
-                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosFailed)
+                    viewModel.batchStatusToast = String(localized: .Strings.gallerySavedToPhotosFailed)
                 } else {
-                    batchStatusToast = savedCount == 1
+                    viewModel.batchStatusToast = savedCount == 1
                         ? String(localized: .Strings.gallerySavedToPhotosSingle)
                         : String(localized: .Strings.gallerySavedToPhotosMultiple(savedCount))
                 }
-                isSelectionMode = false
-                selectedItems.removeAll()
+                viewModel.isSelectionMode = false
+                viewModel.selectedItems.removeAll()
             }
             
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
             withAnimation {
-                batchStatusToast = nil
+                viewModel.batchStatusToast = nil
             }
         }
     }
@@ -1066,20 +769,20 @@ struct MediaGridView: View {
     /// Downloads selected media items directly to local files and presents the native document picker
     /// so the user can choose where to export or save them (e.g., iCloud Drive, Downloads, On My iPhone).
     private func batchDownloadToFiles() {
-        let items = Array(selectedItems)
+        let items = Array(viewModel.selectedItems)
         guard !items.isEmpty else { return }
-        isBatchProcessing = true
-        batchTask?.cancel()
+        viewModel.isBatchProcessing = true
+        viewModel.batchTask?.cancel()
         
-        batchTask = Task { @MainActor in
+        viewModel.batchTask = Task { @MainActor in
             var downloadedURLs: [URL] = []
             let total = items.count
             
             if total == 1, let item = items.first {
-                batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
                 let throttler = DownloadProgressThrottler()
                 do {
-                    let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                    let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
                         Task {
                             guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                             await MainActor.run {
@@ -1087,7 +790,7 @@ struct MediaGridView: View {
                                 let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                                 let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
                                 let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                                self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                                self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
                             }
                         }
                     }
@@ -1098,10 +801,10 @@ struct MediaGridView: View {
             } else {
                 for (index, item) in items.enumerated() {
                     guard !Task.isCancelled else { break }
-                    batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
+                    viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
                     let throttler = DownloadProgressThrottler()
                     do {
-                        let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                        let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
                             Task {
                                 guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
                                 await MainActor.run {
@@ -1109,7 +812,7 @@ struct MediaGridView: View {
                                     let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                                     let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
                                     let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                                    self.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
+                                    self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
                                 }
                             }
                         }
@@ -1121,28 +824,28 @@ struct MediaGridView: View {
             }
             
             guard !Task.isCancelled else {
-                isBatchProcessing = false
-                batchProgressMessage = nil
+                viewModel.isBatchProcessing = false
+                viewModel.batchProgressMessage = nil
                 return
             }
             
-            isBatchProcessing = false
-            batchProgressMessage = nil
+            viewModel.isBatchProcessing = false
+            viewModel.batchProgressMessage = nil
             
             if downloadedURLs.isEmpty {
                 withAnimation {
-                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadFailed)
+                    viewModel.batchStatusToast = String(localized: .Strings.galleryBatchDownloadFailed)
                 }
                 try? await Task.sleep(for: .seconds(2.5))
                 withAnimation {
-                    batchStatusToast = nil
+                    viewModel.batchStatusToast = nil
                 }
             } else {
                 #if !os(tvOS)
-                itemsPendingFileExport = downloadedURLs
+                viewModel.itemsPendingFileExport = downloadedURLs
                 #else
                 withAnimation {
-                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count))
+                    viewModel.batchStatusToast = String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count))
                 }
                 #endif
             }
@@ -1200,13 +903,13 @@ struct MediaGridView: View {
     /// - **Bounded Worker Concurrency**: Employs the same sliding window pattern as `batchSaveToPhotos()` (`maxConcurrent = 3`)
     ///   to avoid memory bloat when buffering multiple full-resolution images or videos simultaneously.
     private func batchShare() {
-        let items = Array(selectedItems)
+        let items = Array(viewModel.selectedItems)
         guard !items.isEmpty else { return }
-        isBatchProcessing = true
-        batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
-        batchTask?.cancel()
+        viewModel.isBatchProcessing = true
+        viewModel.batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
+        viewModel.batchTask?.cancel()
         
-        batchTask = Task { @MainActor in
+        viewModel.batchTask = Task { @MainActor in
             var shareables: [Any] = []
             let total = items.count
             var completedCount = 0
@@ -1220,7 +923,7 @@ struct MediaGridView: View {
                 for _ in 0..<min(maxConcurrent, total) where queueIndex < itemQueue.count {
                     let (idx, item) = itemQueue[queueIndex]
                     queueIndex += 1
-                    group.addTask { [manager = self.manager] in
+                    group.addTask { [manager = self.viewModel.manager] in
                         let result = await Self.prepareSingleItemForShare(item, manager: manager)
                         return (idx, result)
                     }
@@ -1230,7 +933,7 @@ struct MediaGridView: View {
                 while let (idx, result) = await group.next() {
                     guard !Task.isCancelled else { break }
                     completedCount += 1
-                    batchProgressMessage = "\(String(localized: .Strings.galleryBatchPreparingShare)) (\(completedCount)/\(total))"
+                    viewModel.batchProgressMessage = "\(String(localized: .Strings.galleryBatchPreparingShare)) (\(completedCount)/\(total))"
                     
                     if let result {
                         indexedResults.append((idx, result))
@@ -1239,7 +942,7 @@ struct MediaGridView: View {
                     if queueIndex < itemQueue.count {
                         let (nextIdx, nextItem) = itemQueue[queueIndex]
                         queueIndex += 1
-                        group.addTask { [manager = self.manager] in
+                        group.addTask { [manager = self.viewModel.manager] in
                             let nextResult = await Self.prepareSingleItemForShare(nextItem, manager: manager)
                             return (nextIdx, nextResult)
                         }
@@ -1251,16 +954,16 @@ struct MediaGridView: View {
             }
             
             guard !Task.isCancelled else {
-                isBatchProcessing = false
-                batchProgressMessage = nil
+                viewModel.isBatchProcessing = false
+                viewModel.batchProgressMessage = nil
                 return
             }
             
-            isBatchProcessing = false
-            batchProgressMessage = nil
+            viewModel.isBatchProcessing = false
+            viewModel.batchProgressMessage = nil
             
             if !shareables.isEmpty {
-                self.shareSheetItems = shareables
+                self.viewModel.shareSheetItems = shareables
             }
         }
     }
@@ -1285,12 +988,12 @@ struct MediaGridView: View {
     
     /// Indicates whether the currently pending delete batch targets items on an SMB network share.
     private var isDeletingFromSMB: Bool {
-        itemsPendingDelete?.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty }) ?? false
+        viewModel.itemsPendingDelete?.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty }) ?? false
     }
     
     /// Title presented inside the trash deletion confirmation dialog.
     private var deleteConfirmationTitle: String {
-        guard let items = itemsPendingDelete, !items.isEmpty else { return "" }
+        guard let items = viewModel.itemsPendingDelete, !items.isEmpty else { return "" }
         if isDeletingFromSMB {
             if items.count == 1, let first = items.first {
                 return String(localized: "Delete '\(first.name)' permanently?", comment: "Permanent delete single item confirmation title")
@@ -1326,11 +1029,11 @@ struct MediaGridView: View {
     private func executeDelete(items: [MediaItem]) async {
         do {
             let wasSMB = items.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty })
-            try await manager.deleteItems(items)
-            if isSelectionMode {
+            try await viewModel.manager.deleteItems(items)
+            if viewModel.isSelectionMode {
                 withAnimation {
-                    isSelectionMode = false
-                    selectedItems.removeAll()
+                    viewModel.isSelectionMode = false
+                    viewModel.selectedItems.removeAll()
                 }
             }
             if wasSMB {
@@ -1339,7 +1042,7 @@ struct MediaGridView: View {
                 showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
             }
         } catch {
-            fileOpErrorMessage = error.localizedDescription
+            viewModel.fileOpErrorMessage = error.localizedDescription
         }
     }
     
@@ -1347,31 +1050,31 @@ struct MediaGridView: View {
     private func executeMove(items: [MediaItem], to destination: MediaItem) {
         Task {
             do {
-                try await manager.moveItems(items, to: destination)
-                if isSelectionMode {
+                try await viewModel.manager.moveItems(items, to: destination)
+                if viewModel.isSelectionMode {
                     withAnimation {
-                        isSelectionMode = false
-                        selectedItems.removeAll()
+                        viewModel.isSelectionMode = false
+                        viewModel.selectedItems.removeAll()
                     }
                 }
                 let destName = destination.name.isEmpty ? destination.rootName : destination.name
                 showToastMessage(items.count == 1 ? String(localized: "Item moved to '\(destName)'", comment: "Toast when single item moved") : String(localized: "\(items.count) items moved to '\(destName)'", comment: "Toast when multiple items moved"))
             } catch {
-                fileOpErrorMessage = error.localizedDescription
+                viewModel.fileOpErrorMessage = error.localizedDescription
             }
         }
     }
     
     /// Creates a new directory inside the current folder.
     private func executeCreateFolder() {
-        let trimmed = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         Task {
             do {
-                try await manager.createFolder(named: trimmed)
+                try await viewModel.manager.createFolder(named: trimmed)
                 showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
             } catch {
-                fileOpErrorMessage = error.localizedDescription
+                viewModel.fileOpErrorMessage = error.localizedDescription
             }
         }
     }
@@ -1382,11 +1085,11 @@ struct MediaGridView: View {
         guard !trimmed.isEmpty else { return }
         Task {
             do {
-                let renamed = try await manager.renameItem(item, to: trimmed)
-                if isSelectionMode {
+                let renamed = try await viewModel.manager.renameItem(item, to: trimmed)
+                if viewModel.isSelectionMode {
                     withAnimation {
-                        selectedItems.remove(item)
-                        selectedItems.insert(renamed)
+                        viewModel.selectedItems.remove(item)
+                        viewModel.selectedItems.insert(renamed)
                     }
                 }
                 showToastMessage(
@@ -1395,7 +1098,7 @@ struct MediaGridView: View {
                         : String(localized: .Strings.galleryToastFileRenamed(renamed.name))
                 )
             } catch {
-                fileOpErrorMessage = error.localizedDescription
+                viewModel.fileOpErrorMessage = error.localizedDescription
             }
         }
     }
@@ -1403,13 +1106,210 @@ struct MediaGridView: View {
     /// Displays a transient animated notification pill at the top of the gallery.
     private func showToastMessage(_ message: String) {
         withAnimation {
-            batchStatusToast = message
+            viewModel.batchStatusToast = message
         }
         Task {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             withAnimation {
-                batchStatusToast = nil
+                viewModel.batchStatusToast = nil
             }
         }
+    }
+
+    @ToolbarContentBuilder
+    private func galleryToolbarContent(displayPictures: [MediaItem], hasImages: Bool) -> some ToolbarContent {
+            if viewModel.isSelectionMode {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(viewModel.selectedItems.count == displayPictures.count && !displayPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
+                        toggleAllSelection(for: displayPictures)
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    Text(viewModel.selectedItems.isEmpty ? .Strings.gallerySelectionPrompt : .Strings.gallerySelectionCount(viewModel.selectedItems.count))
+                        .font(.headline)
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(.Strings.commonDone) {
+                        withAnimation {
+                            viewModel.isSelectionMode = false
+                            viewModel.selectedItems.removeAll()
+                        }
+                    }
+                    .font(.body.bold())
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 8) {
+                        Button {
+                            if let parent = viewModel.manager.parentFolder {
+                                navigateToFolder(parent)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.folder")
+                                .fontWeight(.semibold)
+                                .foregroundColor(viewModel.manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
+                        }
+                        .tint(.blue)
+                        .disabled(viewModel.manager.parentFolder == nil)
+                        .accessibilityLabel(parentFolderAccessibilityLabel)
+                        
+                        if viewModel.manager.canManageCurrentFolder {
+                            Button {
+                                viewModel.newFolderName = ""
+                                viewModel.isShowingNewFolderAlert = true
+                            } label: {
+                                Image(systemName: "folder.badge.plus")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.blue)
+                            }
+                            .tint(.blue)
+                            .accessibilityLabel(String(localized: "New Folder", comment: "Accessibility label for create folder button"))
+                        }
+                        
+                        if !displayPictures.isEmpty {
+                            Button {
+                                withAnimation {
+                                    viewModel.isSelectionMode = true
+                                }
+                            } label: {
+                                Image(systemName: viewMode.selectionIconName)
+                            }
+                            .accessibilityLabel(.Strings.galleryButtonSelect)
+                        }
+                        
+                        // Slideshow trigger & duration menu
+                        Menu {
+                            Button {
+                                onStartSlideshow?(displayPictures)
+                            } label: {
+                                Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
+                            }
+                            
+                            Section(.Strings.slideshowSectionTransitionStyle) {
+                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
+                                    ForEach(SlideshowTransitionStyle.allCases) { style in
+                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
+                                    }
+                                }
+                            }
+                            
+                            Section(.Strings.slideshowSectionSlideDuration) {
+                                Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
+                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
+                                }
+                            }
+                        } label: {
+                            Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
+                        } primaryAction: {
+                            onStartSlideshow?(displayPictures)
+                        }
+                        .disabled(!hasImages)
+                        
+                        // Unified View, Sort & Grid Size Menu
+                        Menu {
+                            Section(.Strings.galleryMenuLayout) {
+                                Picker(.Strings.galleryMenuViewMode, selection: $viewMode.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
+                                    Label(.Strings.galleryViewModeGrid, systemImage: "square.grid.2x2").tag(ViewMode.grid)
+                                    Label(.Strings.galleryViewModeList, systemImage: "list.bullet").tag(ViewMode.list)
+                                }
+                            }
+                            
+                            if viewMode == .grid {
+                                Section(.Strings.galleryMenuGridDensity) {
+                                    Picker(.Strings.galleryPickerGridSize, selection: $gridSize.animation(.spring(response: 0.38, dampingFraction: 0.8))) {
+                                        ForEach(GridSize.allCases) { size in
+                                            Label(size.localizedTitle, systemImage: size.iconName).tag(size)
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            filterMenuSection
+                            
+                            Section(.Strings.galleryMenuSortBy) {
+                                Picker(.Strings.galleryMenuSortBy, selection: $sortOption) {
+                                    ForEach(SortOption.allCases) { option in
+                                        Label(option.localizedTitle, systemImage: option.iconName).tag(option)
+                                    }
+                                }
+                            }
+                            
+                            Section(.Strings.galleryMenuSlideshow) {
+                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
+                                    ForEach(SlideshowTransitionStyle.allCases) { style in
+                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
+                                    }
+                                }
+                                
+                                Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
+                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
+                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
+                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
+                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
+                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
+                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
+                                }
+                            }
+                            
+                            Section(String(localized: .Strings.gallerySectionDiskCache(viewModel.manager.mediaCacheSize))) {
+                                Button(role: .destructive) {
+                                    viewModel.manager.clearMediaCache()
+                                } label: {
+                                    Label(.Strings.galleryButtonClearCache, systemImage: "trash")
+                                }
+                            }
+                            
+                            #if DEBUG
+                            Section("Debug") {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.manager.invalidateCurrentFolderThumbnails()
+                                        viewModel.thumbnailReloadToken = UUID()
+                                    }
+                                } label: {
+                                    Label("Invalidate Folder Thumbnails", systemImage: "arrow.triangle.2.circlepath.circle")
+                                }
+                            }
+                            #endif
+                            
+                            if horizontalSizeClass == .compact {
+                                Section {
+                                    Button {
+                                        viewModel.showingSettings = true
+                                    } label: {
+                                        Label(.Strings.settingsTitle, systemImage: "gearshape")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        }
+                        
+                        Button {
+                            if let folder = viewModel.manager.selectedFolder {
+                                Task { await viewModel.manager.selectAndLoadFolder(folder) }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        
+                        if horizontalSizeClass == .compact {
+                            Button {
+                                viewModel.showingSettings = true
+                            } label: {
+                                Image(systemName: "gearshape")
+                            }
+                            .accessibilityLabel(.Strings.settingsTitle)
+                        }
+                    }.padding(.horizontal)
+                }
+            }
     }
 }

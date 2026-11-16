@@ -12,62 +12,22 @@ import FichierKit
 /// - **Dual Display Modes**:
 ///   1. *Manual Browsing*: Interactive 1:1 finger swipe `TabView` with page-style gestures.
 ///   2. *Automated Slideshow*: Timed auto-advancing slideshow with customizable transitions (`.slide`, `.dissolve`, `.kenBurns`).
-/// - **Structured Concurrency**: Spawns a structured `TaskGroup` upon photo change (`.task(id: currentItem.id)`)
+/// - **Structured Concurrency**: Spawns a structured `TaskGroup` upon photo change (`.task(id: viewModel.currentItem.id)`)
 ///   to fetch EXIF metadata and download full-resolution image bytes in parallel.
 /// - **Lookahead Prefetching**: Automatically schedules background download of the subsequent photo (`prefetchNext`)
 ///   to eliminate loading pauses during manual paging or rapid slideshow playback.
 /// - **Hardware Keyboard Support**: Complete iPad / Mac keyboard shortcuts (Arrow keys, Space for play/pause, `F` for favorite, `I` for info, `Esc` to close).
 public struct PictureDetailView: View {
-    /// Shared storage location manager providing media streaming and caching.
-    var manager: StorageLocationManager
-    
-    /// Collection of photo items available for navigation in this session.
-    let pictures: [MediaItem]
-    
-    /// The initial photo item focused when the viewer opened.
-    let initialItem: MediaItem
-    
-    /// Flag indicating whether the slideshow should begin running automatically on appear.
-    let autoStartSlideshow: Bool
-    
     @Environment(\.dismiss) private var dismiss
-    
-    /// The currently displayed photo media item.
-    @State private var currentItem: MediaItem
-    
-    /// Controls whether the automated slideshow timer is actively running.
-    @State private var isPlayingSlideshow: Bool
-    
-    /// Trajectory direction of the most recent photo transition, driving asymmetric slide animations.
-    @State private var slideDirection: SlideDirection = .forward
+
+    @State private var viewModel: PictureDetailViewModel
     
     /// Duration in seconds between automatic slideshow photo transitions.
     @AppStorage("slideshow_timer_interval") private var slideshowInterval: Double = 3.0
     
     /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
-    
-    /// Controls visibility of floating top and bottom HUD overlay toolbars.
-    @State private var showControls: Bool = true
-    
-    /// Full-resolution image decoded for the currently active photo.
-    @State private var currentImage: UIImage?
-    
-    /// In-memory cache holding preloaded full-resolution slides for seamless slideshow cross-dissolving.
-    @State private var slideImageCache: [String: UIImage] = [:]
-    
-    /// Parsed EXIF metadata for the currently active photo.
-    @State private var activeMetadata: PictureEXIFData?
-    
-    /// Controls presentation of the EXIF information sheet.
-    @State private var showingInfoSheet = false
-    
-    /// Temporary toast message displayed after saving to Camera Roll.
-    @State private var saveStatusMessage: String?
-    
-    /// Indicates whether saving to the photo library is currently in flight.
-    @State private var isSaving = false
-    
+
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -81,43 +41,42 @@ public struct PictureDetailView: View {
         initialItem: MediaItem,
         autoStartSlideshow: Bool = false
     ) {
-        self.manager = manager
-        let photos = pictures.filter(\.isImage)
-        self.pictures = photos.isEmpty ? [initialItem] : photos
-        self.initialItem = initialItem
-        self.autoStartSlideshow = autoStartSlideshow
-        self._currentItem = State(initialValue: initialItem)
-        self._isPlayingSlideshow = State(initialValue: autoStartSlideshow)
-    }
-    
-    /// Zero-based index of the current photo within the active collection.
-    private var currentIndex: Int {
-        pictures.firstIndex(where: { $0.id == currentItem.id }) ?? 0
+        // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
+        // While State(initialValue:) evaluates on every init, @State retains only the
+        // original state object across renders and discards transient allocations.
+        self._viewModel = State(
+            initialValue: PictureDetailViewModel(
+                manager: manager,
+                pictures: pictures,
+                initialItem: initialItem,
+                autoStartSlideshow: autoStartSlideshow
+            )
+        )
     }
     
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            if isPlayingSlideshow {
+            if viewModel.isPlayingSlideshow {
                 // Slideshow Mode: Simultaneous cross-dissolve with subtle scale
                 ZStack {
                     ZoomablePicturePageView(
-                        manager: manager,
-                        item: currentItem,
-                        initialImage: slideImageCache[currentItem.id] ?? (currentItem.id == initialItem.id ? currentImage : nil),
+                        manager: viewModel.manager,
+                        item: viewModel.currentItem,
+                        initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
                         onImageLoaded: { loadedImg in
-                            self.currentImage = loadedImg
-                            self.slideImageCache[currentItem.id] = loadedImg
+                            self.viewModel.currentImage = loadedImg
+                            self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
                         },
                         onTap: {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                showControls.toggle()
+                                viewModel.showControls.toggle()
                             }
                         }
                     )
                     .transition(activeTransition)
-                    .id(currentItem.id)
+                    .id(viewModel.currentItem.id)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
@@ -143,19 +102,19 @@ public struct PictureDetailView: View {
                 #endif
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
-                TabView(selection: $currentItem) {
-                    ForEach(pictures) { pic in
+                TabView(selection: $viewModel.currentItem) {
+                    ForEach(viewModel.pictures) { pic in
                         ZoomablePicturePageView(
-                            manager: manager,
+                            manager: viewModel.manager,
                             item: pic,
                             onImageLoaded: { loadedImg in
-                                if pic.id == currentItem.id {
-                                    self.currentImage = loadedImg
+                                if pic.id == viewModel.currentItem.id {
+                                    self.viewModel.currentImage = loadedImg
                                 }
                             },
                             onTap: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
-                                    showControls.toggle()
+                                    viewModel.showControls.toggle()
                                 }
                             }
                         )
@@ -166,40 +125,40 @@ public struct PictureDetailView: View {
             }
             
             // Floating HUD Overlays
-            if showControls {
+            if viewModel.showControls {
                 VStack {
                     PictureViewerTopBarView(
-                        item: currentItem,
-                        currentIndex: currentIndex,
-                        totalCount: pictures.count,
-                        frameSize: activeMetadata?.dimensions,
+                        item: viewModel.currentItem,
+                        currentIndex: viewModel.currentIndex,
+                        totalCount: viewModel.pictures.count,
+                        frameSize: viewModel.activeMetadata?.dimensions,
                         onDismiss: { dismiss() }
                     )
                     
                     Spacer()
                     
                     PictureViewerBottomBarView(
-                        hasMultiplePictures: pictures.count > 1,
-                        isPlayingSlideshow: $isPlayingSlideshow,
+                        hasMultiplePictures: viewModel.pictures.count > 1,
+                        isPlayingSlideshow: $viewModel.isPlayingSlideshow,
                         slideshowInterval: $slideshowInterval,
                         transitionStyle: $transitionStyle,
-                        isFavorite: FavoritesManager.shared.isFavorite(currentItem),
-                        canSaveToCameraRoll: !currentItem.isPhotoAsset,
-                        isSaving: isSaving,
-                        currentImage: currentImage,
-                        currentName: currentItem.name,
-                        onPrevious: { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
-                        onNext: { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
+                        isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
+                        canSaveToCameraRoll: !viewModel.currentItem.isPhotoAsset,
+                        isSaving: viewModel.isSaving,
+                        currentImage: viewModel.currentImage,
+                        currentName: viewModel.currentItem.name,
+                        onPrevious: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
+                        onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
                         onShowInfo: {
                             Task {
-                                if activeMetadata == nil {
-                                    self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+                                if viewModel.activeMetadata == nil {
+                                    self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                                 }
-                                showingInfoSheet = true
+                                viewModel.showingInfoSheet = true
                             }
                         },
                         onToggleFavorite: {
-                            FavoritesManager.shared.toggleFavorite(currentItem)
+                            FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
                         },
                         onSaveToCameraRoll: {
                             saveToCameraRoll()
@@ -211,7 +170,7 @@ public struct PictureDetailView: View {
             }
             
             // Visual toast banner when saved to photos
-            if let message = saveStatusMessage {
+            if let message = viewModel.saveStatusMessage {
                 VStack {
                     Spacer().frame(height: 70)
                     HStack(spacing: 10) {
@@ -230,9 +189,9 @@ public struct PictureDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showingInfoSheet) {
-            if let meta = activeMetadata {
-                PictureInfoSheet(metadata: meta, item: currentItem)
+        .sheet(isPresented: $viewModel.showingInfoSheet) {
+            if let meta = viewModel.activeMetadata {
+                PictureInfoSheet(metadata: meta, item: viewModel.currentItem)
             } else {
                 ProgressView(.Strings.photoViewerReadingMetadata)
                     #if !os(tvOS)
@@ -241,60 +200,60 @@ public struct PictureDetailView: View {
             }
         }
         // Automatic Slideshow loop (Resets timer cleanly whenever user swipes or changes picture)
-        .task(id: "\(isPlayingSlideshow)-\(currentItem.id)-\(slideshowInterval)") {
-            guard isPlayingSlideshow, pictures.count > 1 else { return }
+        .task(id: "\(viewModel.isPlayingSlideshow)-\(viewModel.currentItem.id)-\(slideshowInterval)") {
+            guard viewModel.isPlayingSlideshow, viewModel.pictures.count > 1 else { return }
             do {
                 try await Task.sleep(for: .seconds(slideshowInterval))
             } catch {
                 return
             }
-            guard isPlayingSlideshow && !Task.isCancelled else { return }
+            guard viewModel.isPlayingSlideshow && !Task.isCancelled else { return }
             
             // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve
-            let nextIndex = (currentIndex + 1) % pictures.count
-            let nextItem = pictures[nextIndex]
-            if slideImageCache[nextItem.id] == nil, !nextItem.isVideo {
-                if let loaded = await manager.downloadImage(for: nextItem) {
-                    slideImageCache[nextItem.id] = loaded
+            let nextIndex = (viewModel.currentIndex + 1) % viewModel.pictures.count
+            let nextItem = viewModel.pictures[nextIndex]
+            if viewModel.slideImageCache[nextItem.id] == nil, !nextItem.isVideo {
+                if let loaded = await viewModel.manager.downloadImage(for: nextItem) {
+                    viewModel.slideImageCache[nextItem.id] = loaded
                 }
             }
-            guard isPlayingSlideshow && !Task.isCancelled else { return }
+            guard viewModel.isPlayingSlideshow && !Task.isCancelled else { return }
 
             withAnimation(.easeInOut(duration: 0.8)) {
                 goToNext()
             }
         }
         // Photo loading, EXIF extraction, and prefetching with structured cancellation on photo switch
-        .task(id: currentItem.id) {
-            let targetID = currentItem.id
-            activeMetadata = nil
-            currentImage = nil
-            prefetchNext(after: currentItem)
+        .task(id: viewModel.currentItem.id) {
+            let targetID = viewModel.currentItem.id
+            viewModel.activeMetadata = nil
+            viewModel.currentImage = nil
+            prefetchNext(after: viewModel.currentItem)
             
             await withTaskGroup(of: (isMeta: Bool, meta: PictureEXIFData?, image: UIImage?).self) { group in
                 group.addTask {
-                    let meta = await manager.fetchMetadata(for: currentItem)
+                    let meta = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                     return (true, meta, nil)
                 }
                 
-                if !currentItem.isVideo {
+                if !viewModel.currentItem.isVideo {
                     group.addTask {
-                        let img = await manager.downloadImage(for: currentItem)
+                        let img = await viewModel.manager.downloadImage(for: viewModel.currentItem)
                         return (false, nil, img)
                     }
                 }
                 
                 for await result in group {
-                    guard !Task.isCancelled, self.currentItem.id == targetID else {
+                    guard !Task.isCancelled, self.viewModel.currentItem.id == targetID else {
                         group.cancelAll()
                         break
                     }
                     if result.isMeta {
-                        self.activeMetadata = result.meta
+                        self.viewModel.activeMetadata = result.meta
                     } else {
-                        self.currentImage = result.image
+                        self.viewModel.currentImage = result.image
                         if let img = result.image {
-                            self.slideImageCache[targetID] = img
+                            self.viewModel.slideImageCache[targetID] = img
                         }
                     }
                 }
@@ -306,24 +265,24 @@ public struct PictureDetailView: View {
             Group {
                 Button("") { dismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
-                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
                     .keyboardShortcut(.leftArrow, modifiers: [])
-                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
+                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut(.rightArrow, modifiers: [])
-                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
                     .keyboardShortcut("[", modifiers: [])
-                Button("") { withAnimation(isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
+                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut("]", modifiers: [])
-                Button("") { withAnimation { isPlayingSlideshow.toggle() } }
+                Button("") { withAnimation { viewModel.isPlayingSlideshow.toggle() } }
                     .keyboardShortcut(.space, modifiers: [])
-                Button("") { FavoritesManager.shared.toggleFavorite(currentItem) }
+                Button("") { FavoritesManager.shared.toggleFavorite(viewModel.currentItem) }
                     .keyboardShortcut("f", modifiers: [])
                 Button("") {
                     Task {
-                        if activeMetadata == nil {
-                            self.activeMetadata = await manager.fetchMetadata(for: currentItem)
+                        if viewModel.activeMetadata == nil {
+                            self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                         }
-                        showingInfoSheet.toggle()
+                        viewModel.showingInfoSheet.toggle()
                     }
                 }
                 .keyboardShortcut("i", modifiers: [])
@@ -340,9 +299,9 @@ public struct PictureDetailView: View {
         switch transitionStyle {
         case .slide:
             base = .asymmetric(
-                insertion: .move(edge: slideDirection == .forward ? .trailing : .leading)
+                insertion: .move(edge: viewModel.slideDirection == .forward ? .trailing : .leading)
                     .combined(with: .opacity),
-                removal: .move(edge: slideDirection == .forward ? .leading : .trailing)
+                removal: .move(edge: viewModel.slideDirection == .forward ? .leading : .trailing)
                     .combined(with: .opacity)
             )
         case .dissolve:
@@ -363,54 +322,48 @@ public struct PictureDetailView: View {
     
     /// Saves the currently rendered image to the system Photos library with progress feedback and toast banner.
     private func saveToCameraRoll() {
-        guard let img = currentImage else { return }
-        isSaving = true
+        guard let img = viewModel.currentImage else { return }
+        viewModel.isSaving = true
         Task {
             do {
                 try await PhotoLibrarySaver.saveImageToPhotos(img)
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
+                    viewModel.saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
                 }
             } catch {
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
+                    viewModel.saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
                 }
             }
-            isSaving = false
+            viewModel.isSaving = false
             try? await Task.sleep(for: .seconds(2.5))
             withAnimation {
-                saveStatusMessage = nil
+                viewModel.saveStatusMessage = nil
             }
         }
     }
     
     /// Navigates forward to the next image in the sequence, wrapping to index 0 at the end.
     private func goToNext() {
-        guard !pictures.isEmpty else { return }
-        slideDirection = .forward
-        let nextIndex = (currentIndex + 1) % pictures.count
-        currentItem = pictures[nextIndex]
+        viewModel.advanceToNext()
     }
     
     /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
-        guard !pictures.isEmpty else { return }
-        slideDirection = .backward
-        let prevIndex = (currentIndex - 1 + pictures.count) % pictures.count
-        currentItem = pictures[prevIndex]
+        viewModel.goToPrevious()
     }
     
     /// Dispatches an asynchronous prefetch task for the next upcoming photo into memory/disk cache.
     ///
     /// - Parameter item: Current media item.
     private func prefetchNext(after item: MediaItem) {
-        guard let idx = pictures.firstIndex(where: { $0.id == item.id }), pictures.count > 1 else { return }
-        let nextIdx = (idx + 1) % pictures.count
-        let nextItem = pictures[nextIdx]
+        guard let idx = viewModel.pictures.firstIndex(where: { $0.id == item.id }), viewModel.pictures.count > 1 else { return }
+        let nextIdx = (idx + 1) % viewModel.pictures.count
+        let nextItem = viewModel.pictures[nextIdx]
         guard !nextItem.isVideo else { return }
         Task {
-            if let img = await manager.downloadImage(for: nextItem) {
-                slideImageCache[nextItem.id] = img
+            if let img = await viewModel.manager.downloadImage(for: nextItem) {
+                viewModel.slideImageCache[nextItem.id] = img
             }
         }
     }
