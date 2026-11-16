@@ -15,52 +15,37 @@ import FichierKit
 /// 4. Validates connection against `StorageLocationManager` and dismisses upon successful authentication.
 struct SMBConnectWithDiscoveryView: View {
     @Environment(\.dismiss) private var dismiss
-    
-    /// Storage location manager receiving connection parameters.
-    var smbManager: StorageLocationManager
-    
-    /// Bonjour network service browser managing local host discovery.
-    @State private var discovery = SMBHostDiscovery()
-    
-    /// User-entered or Bonjour-selected server IP address / hostname.
-    @State private var selectedHost = ""
-    
-    /// Optional user-friendly display name for the server.
-    @State private var selectedHostname = ""
-    
-    /// SMB authentication username.
-    @State private var username = ""
-    
-    /// Plaintext SMB authentication password.
-    @State private var password = ""
+
+    @State private var viewModel: SMBConnectViewModel
+
+    init(smbManager: StorageLocationManager) {
+        _viewModel = State(initialValue: SMBConnectViewModel(smbManager: smbManager))
+    }
     
     var body: some View {
         NavigationStack {
             Form {
                 // 1. Bonjour Local Network Discovery Section
                 Section {
-                    if discovery.isScanning && discovery.discoveredHosts.isEmpty {
+                    if viewModel.discovery.isScanning && viewModel.discovery.discoveredHosts.isEmpty {
                         HStack(spacing: 12) {
                             ProgressView()
                             Text(.Strings.connectionSearchingLocalNetwork)
                                 .foregroundColor(.secondary)
                         }
-                    } else if discovery.discoveredHosts.isEmpty {
+                    } else if viewModel.discovery.discoveredHosts.isEmpty {
                         HStack {
                             Text(.Strings.connectionNoServersFound)
                                 .foregroundColor(.secondary)
                             Spacer()
                             Button(.Strings.connectionButtonScan) {
-                                discovery.startDiscovery()
+                                viewModel.startDiscovery()
                             }
                         }
                     } else {
-                        ForEach(discovery.discoveredHosts) { host in
+                        ForEach(viewModel.discovery.discoveredHosts) { host in
                             Button {
-                                if let ipv4 = host.resolvedHost {
-                                    selectedHost = ipv4
-                                    selectedHostname = host.name
-                                }
+                                viewModel.selectDiscoveredHost(host)
                             } label: {
                                 HStack {
                                     Image(systemName: "macmini.fill")
@@ -85,7 +70,7 @@ struct SMBConnectWithDiscoveryView: View {
                                     
                                     Spacer()
                                     
-                                    if let ipv4 = host.resolvedHost, selectedHost == ipv4 {
+                                    if let ipv4 = host.resolvedHost, viewModel.selectedHost == ipv4 {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundColor(.blue)
                                     }
@@ -99,7 +84,7 @@ struct SMBConnectWithDiscoveryView: View {
                         Text(.Strings.connectionSectionDiscoveredServers)
                         Spacer()
                         Button {
-                            discovery.startDiscovery()
+                            viewModel.startDiscovery()
                         } label: {
                             Label(.Strings.connectionButtonRefresh, systemImage: "arrow.clockwise")
                                 .font(.caption)
@@ -109,24 +94,24 @@ struct SMBConnectWithDiscoveryView: View {
                 
                 // 2. Credentials & Manual Host Input
                 Section(.Strings.connectionSectionServerCredentials) {
-                    TextField(.Strings.connectionFieldServerName, text: $selectedHostname)
+                    TextField(.Strings.connectionFieldServerName, text: $viewModel.selectedHostname)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                     
-                    TextField(.Strings.connectionFieldHostAddress, text: $selectedHost)
+                    TextField(.Strings.connectionFieldHostAddress, text: $viewModel.selectedHost)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.numbersAndPunctuation)
                     
-                    TextField(.Strings.connectionFieldMacUsername, text: $username)
+                    TextField(.Strings.connectionFieldMacUsername, text: $viewModel.username)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     
-                    SecureField(.Strings.connectionFieldMacPassword, text: $password)
+                    SecureField(.Strings.connectionFieldMacPassword, text: $viewModel.password)
                 }
                 
                 // 3. Error Display
-                if let error = smbManager.errorMessage ?? discovery.errorMessage {
+                if let error = viewModel.errorMessage {
                     Section {
                         Text(error)
                             .foregroundColor(.red)
@@ -137,24 +122,13 @@ struct SMBConnectWithDiscoveryView: View {
                 // 4. Connect Button
                 Section {
                     Button {
-                        let finalHostname: String? = {
-                            let trimmed = selectedHostname.trimmingCharacters(in: .whitespacesAndNewlines)
-                            if !trimmed.isEmpty { return trimmed }
-                            return discovery.discoveredHosts.first(where: { $0.resolvedHost == selectedHost })?.name
-                        }()
-                        
                         Task {
-                            await smbManager.connect(
-                                host: selectedHost,
-                                user: username,
-                                pass: password,
-                                hostname: finalHostname
-                            )
+                            await viewModel.connect()
                         }
                     } label: {
                         HStack {
                             Spacer()
-                            if smbManager.isLoading {
+                            if viewModel.isLoading {
                                 ProgressView()
                             } else {
                                 Text(.Strings.connectionButtonConnectListShares)
@@ -163,7 +137,7 @@ struct SMBConnectWithDiscoveryView: View {
                             Spacer()
                         }
                     }
-                    .disabled(selectedHost.isEmpty || username.isEmpty || smbManager.isLoading)
+                    .disabled(viewModel.isConnectDisabled)
                 }
             }
             .navigationTitle(.Strings.connectionTitleConnectToServer)
@@ -177,16 +151,16 @@ struct SMBConnectWithDiscoveryView: View {
                     .accessibilityLabel(.Strings.commonCancel)
                 }
             }
-            .onChange(of: smbManager.isConnected) { _, isConnected in
+            .onChange(of: viewModel.isConnected) { _, isConnected in
                 if isConnected {
                     dismiss()
                 }
             }
             .onAppear {
-                discovery.startDiscovery()
+                viewModel.startDiscovery()
             }
             .onDisappear {
-                discovery.stopDiscovery()
+                viewModel.stopDiscovery()
             }
         }
     }
