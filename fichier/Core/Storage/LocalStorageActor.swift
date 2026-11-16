@@ -505,11 +505,12 @@ public actor LocalStorageActor {
     /// - Throws: `FileOperationError` or filesystem errors.
     public func renameItem(_ item: MediaItem, to newName: String) throws -> MediaItem {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
         guard !trimmed.isEmpty,
               trimmed != ".",
               trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains(":") else {
+              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
+              !trimmed.hasSuffix(".") else {
             throw FileOperationError.invalidName(newName)
         }
         
@@ -528,12 +529,19 @@ public actor LocalStorageActor {
             throw FileOperationError.invalidName(newName)
         }
         
+        let isCaseOnlyRename = sourceURL.path.caseInsensitiveCompare(targetURL.path) == .orderedSame
         let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: targetURL.path) {
+        if !isCaseOnlyRename && fileManager.fileExists(atPath: targetURL.path) {
             throw FileOperationError.itemAlreadyExists(trimmed)
         }
         
-        try fileManager.moveItem(at: sourceURL, to: targetURL)
+        if isCaseOnlyRename {
+            let tempURL = parentURL.appendingPathComponent(".rename_\(UUID().uuidString).tmp", isDirectory: item.isDirectory)
+            try fileManager.moveItem(at: sourceURL, to: tempURL)
+            try fileManager.moveItem(at: tempURL, to: targetURL)
+        } else {
+            try fileManager.moveItem(at: sourceURL, to: targetURL)
+        }
         
         let parentRelativePath = (item.path as NSString).deletingLastPathComponent
         let normalizedParent = (parentRelativePath == "." ? "" : parentRelativePath)

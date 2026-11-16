@@ -654,7 +654,7 @@ final class FileOperationsTests: XCTestCase {
             localURL: fileURL
         )
 
-        let invalidNames = ["", "  ", "sub/folder", "invalid:name", ".", ".."]
+        let invalidNames = ["", "  ", "sub/folder", "invalid:name", ".", "..", "sub\\folder", "star*file", "query?file", "quote\"file", "less<file", "greater>file", "pipe|file", "trailing."]
         for invalidName in invalidNames {
             do {
                 _ = try await actor.renameItem(item, to: invalidName)
@@ -725,5 +725,107 @@ final class FileOperationsTests: XCTestCase {
         XCTAssertEqual(moved.first?.from, "old_photo.jpg")
         XCTAssertEqual(moved.first?.to, "new_photo.jpg")
     }
+
+    func testRenameItemCaseOnlyLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("lowercase.txt")
+        try Data("case-content".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "lowercase.txt",
+            rootName: "TempRoot",
+            path: "lowercase.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "LowerCase.txt")
+        XCTAssertEqual(renamed.name, "LowerCase.txt")
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertEqual(newURL.lastPathComponent, "LowerCase.txt")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    @MainActor
+    func testRenameFolderTreeDescendantPaths() async throws {
+        let folderA = tempDirectory.appendingPathComponent("FolderA")
+        let subFolder = folderA.appendingPathComponent("SubFolder")
+        let subSubFolder = subFolder.appendingPathComponent("SubSubFolder")
+        try FileManager.default.createDirectory(at: subSubFolder, withIntermediateDirectories: true)
+
+        let subSubFolderItem = MediaItem(
+            locationID: "loc1",
+            name: "SubSubFolder",
+            rootName: "TempRoot",
+            path: "FolderA/SubFolder/SubSubFolder",
+            isDirectory: true,
+            localURL: subSubFolder
+        )
+        let subFolderItem = MediaItem(
+            locationID: "loc1",
+            name: "SubFolder",
+            rootName: "TempRoot",
+            path: "FolderA/SubFolder",
+            isDirectory: true,
+            children: [subSubFolderItem],
+            localURL: subFolder
+        )
+        let folderAItem = MediaItem(
+            locationID: "loc1",
+            name: "FolderA",
+            rootName: "TempRoot",
+            path: "FolderA",
+            isDirectory: true,
+            children: [subFolderItem],
+            localURL: folderA
+        )
+
+        let actor = LocalStorageActor()
+        let manager = StorageLocationManager(worker: SMBClientActor(), localWorker: actor)
+        let savedFolder = SavedFolderLocation(name: "TempRoot", bookmarkData: Data(), isICloud: false)
+        manager.currentLocation = StorageLocation(folder: savedFolder)
+        manager.folderTree = [folderAItem]
+
+        let renamed = try await manager.renameItem(folderAItem, to: "FolderB")
+        XCTAssertEqual(renamed.name, "FolderB")
+        XCTAssertEqual(renamed.path, "FolderB")
+
+        let updatedTree = manager.folderTree
+        let updatedRoot = try XCTUnwrap(updatedTree.first)
+        XCTAssertEqual(updatedRoot.name, "FolderB")
+        XCTAssertEqual(updatedRoot.path, "FolderB")
+
+        let updatedChildren = try XCTUnwrap(updatedRoot.children)
+        let updatedSub = try XCTUnwrap(updatedChildren.first)
+        XCTAssertEqual(updatedSub.path, "FolderB/SubFolder")
+        XCTAssertEqual(updatedSub.localURL?.lastPathComponent, "SubFolder")
+
+        let updatedSubSub = try XCTUnwrap(updatedSub.children?.first)
+        XCTAssertEqual(updatedSubSub.path, "FolderB/SubFolder/SubSubFolder")
+        XCTAssertEqual(updatedSubSub.localURL?.lastPathComponent, "SubSubFolder")
+    }
+
+    func testDownloadProgressThrottler() async {
+        let throttler = DownloadProgressThrottler(minimumInterval: .milliseconds(50), minimumPercentDelta: 5)
+        
+        // Initial micro-step
+        let report0 = await throttler.shouldReport(bytes: 10, total: 1000) // 1% < 5%
+        XCTAssertFalse(report0)
+
+        // Jump to 10%
+        let report10 = await throttler.shouldReport(bytes: 100, total: 1000)
+        XCTAssertTrue(report10)
+
+        // Micro-step to 11% immediately
+        let report11 = await throttler.shouldReport(bytes: 110, total: 1000)
+        XCTAssertFalse(report11)
+
+        // Completion always reports
+        let reportComplete = await throttler.shouldReport(bytes: 1000, total: 1000)
+        XCTAssertTrue(reportComplete)
+    }
+
+
 }
 #endif

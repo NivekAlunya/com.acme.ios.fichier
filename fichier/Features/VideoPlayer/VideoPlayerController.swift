@@ -904,15 +904,19 @@ public final class VideoPlayerController {
         }
         saveTask = Task { @MainActor in
             do {
+                let throttler = DownloadProgressThrottler()
                 let localURL = try await manager.fetchVideoURL(for: currentItem) { [weak self] bytes, total in
-                    Task { @MainActor in
-                        guard let self, total > 0 else { return }
-                        let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                        let totalStr = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
-                        let percent = Int(Double(bytes) / Double(total) * 100)
-                        self.saveStatusMessage = String(
-                            localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent)
-                        )
+                    Task {
+                        guard await throttler.shouldReport(bytes: bytes, total: total) else { return }
+                        await MainActor.run {
+                            guard let self, total > 0 else { return }
+                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                            let totalStr = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+                            let percent = Int(Double(bytes) / Double(total) * 100)
+                            self.saveStatusMessage = String(
+                                localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent)
+                            )
+                        }
                     }
                 }
                 guard !Task.isCancelled else { return }

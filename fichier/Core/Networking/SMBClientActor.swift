@@ -487,11 +487,12 @@ actor SMBClientActor {
         }
 
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
         guard !trimmed.isEmpty,
               trimmed != ".",
               trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains(":") else {
+              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
+              !trimmed.hasSuffix(".") else {
             throw FileOperationError.invalidName(newName)
         }
 

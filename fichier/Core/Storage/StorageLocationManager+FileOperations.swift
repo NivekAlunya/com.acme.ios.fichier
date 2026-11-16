@@ -178,11 +178,12 @@ extension StorageLocationManager {
         }
         
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
         guard !trimmed.isEmpty,
               trimmed != ".",
               trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains(":") else {
+              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
+              !trimmed.hasSuffix(".") else {
             throw FileOperationError.invalidName(newName)
         }
         
@@ -217,8 +218,28 @@ extension StorageLocationManager {
         
         if item.isDirectory {
             self.folderTree = renameNodeInTree(in: self.folderTree, targetID: item.id, renamedItem: renamedItem)
-            if self.selectedFolder?.id == item.id {
-                self.selectedFolder = renamedItem
+            if let currentSelected = self.selectedFolder {
+                if currentSelected.id == item.id {
+                    self.selectedFolder = renamedItem
+                } else if currentSelected.path.hasPrefix(item.path + "/") {
+                    let relativeSuffix = String(currentSelected.path.dropFirst(item.path.count + 1))
+                    let newSelectedPath = "\(renamedItem.path)/\(relativeSuffix)"
+                    let newSelectedURL = renamedItem.localURL?.appendingPathComponent(relativeSuffix, isDirectory: true)
+                    self.selectedFolder = MediaItem(
+                        locationID: currentSelected.locationID,
+                        name: currentSelected.name,
+                        rootName: currentSelected.rootName,
+                        path: newSelectedPath,
+                        isDirectory: currentSelected.isDirectory,
+                        size: currentSelected.size,
+                        modifiedDate: currentSelected.modifiedDate,
+                        children: currentSelected.children,
+                        localURL: newSelectedURL,
+                        phAssetIdentifier: currentSelected.phAssetIdentifier,
+                        isMediaVideo: currentSelected.isMediaVideo,
+                        folderIconName: currentSelected.folderIconName
+                    )
+                }
             }
             recordMutation()
             await refreshExpandedTreeBranches()
@@ -227,13 +248,21 @@ extension StorageLocationManager {
         return renamedItem
     }
     
-    /// Recursively renames a directory node inside the hierarchical folder tree.
+    /// Recursively renames a directory node inside the hierarchical folder tree and updates descendant paths.
     private func renameNodeInTree(in nodes: [MediaItem], targetID: String, renamedItem: MediaItem) -> [MediaItem] {
         var updated = nodes
         for idx in updated.indices {
             if updated[idx].id == targetID {
+                let oldItem = updated[idx]
                 var replacement = renamedItem
-                replacement.children = updated[idx].children
+                if let children = oldItem.children {
+                    replacement.children = updateDescendantPaths(
+                        in: children,
+                        oldPathPrefix: oldItem.path,
+                        newPathPrefix: renamedItem.path,
+                        newParentURL: renamedItem.localURL
+                    )
+                }
                 updated[idx] = replacement
                 return updated
             }
@@ -242,6 +271,54 @@ extension StorageLocationManager {
             }
         }
         return updated
+    }
+
+    /// Recursively updates relative paths and local file URLs for all descendants of a renamed directory node.
+    private func updateDescendantPaths(
+        in nodes: [MediaItem],
+        oldPathPrefix: String,
+        newPathPrefix: String,
+        newParentURL: URL?
+    ) -> [MediaItem] {
+        nodes.map { item in
+            let updatedPath: String
+            if item.path == oldPathPrefix {
+                updatedPath = newPathPrefix
+            } else if item.path.hasPrefix(oldPathPrefix + "/") {
+                let relativeSuffix = String(item.path.dropFirst(oldPathPrefix.count + 1))
+                updatedPath = "\(newPathPrefix)/\(relativeSuffix)"
+            } else {
+                updatedPath = item.path
+            }
+
+            let updatedLocalURL = newParentURL?.appendingPathComponent(item.name, isDirectory: item.isDirectory)
+            let updatedChildren: [MediaItem]?
+            if let children = item.children {
+                updatedChildren = updateDescendantPaths(
+                    in: children,
+                    oldPathPrefix: oldPathPrefix,
+                    newPathPrefix: newPathPrefix,
+                    newParentURL: updatedLocalURL
+                )
+            } else {
+                updatedChildren = nil
+            }
+
+            return MediaItem(
+                locationID: item.locationID,
+                name: item.name,
+                rootName: item.rootName,
+                path: updatedPath,
+                isDirectory: item.isDirectory,
+                size: item.size,
+                modifiedDate: item.modifiedDate,
+                children: updatedChildren,
+                localURL: updatedLocalURL,
+                phAssetIdentifier: item.phAssetIdentifier,
+                isMediaVideo: item.isMediaVideo,
+                folderIconName: item.folderIconName
+            )
+        }
     }
     
     // MARK: - Folder Picker Hierarchy

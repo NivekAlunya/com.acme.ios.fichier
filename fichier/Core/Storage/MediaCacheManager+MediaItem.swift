@@ -68,7 +68,8 @@ nonisolated extension MediaCacheManager {
         let targets = collectThumbnailURLsToRemove(for: items)
         await diskActor.removeFiles(at: targets)
     }
-    
+
+
     /// Dispatches invalidation of disk thumbnail and cached document copies to `MediaDiskCacheActor`.
     ///
     /// - Parameter items: The collection of `MediaItem` assets to purge from disk caches.

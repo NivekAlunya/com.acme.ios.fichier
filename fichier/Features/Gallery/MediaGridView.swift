@@ -984,13 +984,17 @@ struct MediaGridView: View {
             
             if total == 1, let item = items.first {
                 batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                let throttler = DownloadProgressThrottler()
                 let success = await Self.saveSingleMediaItemToPhotos(item, manager: manager) { bytes, totalBytes in
-                    Task { @MainActor in
-                        guard totalBytes > 0 else { return }
-                        let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                        let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                        let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                        self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                    Task {
+                        guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
+                        await MainActor.run {
+                            guard totalBytes > 0 else { return }
+                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                            let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                            let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                            self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                        }
                     }
                 }
                 completedCount = 1
@@ -1081,14 +1085,18 @@ struct MediaGridView: View {
             
             if total == 1, let item = items.first {
                 batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                let throttler = DownloadProgressThrottler()
                 do {
                     let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
-                        Task { @MainActor in
-                            guard totalBytes > 0 else { return }
-                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                            let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                            let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                            self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                        Task {
+                            guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
+                            await MainActor.run {
+                                guard totalBytes > 0 else { return }
+                                let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                                let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                                let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                                self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                            }
                         }
                     }
                     downloadedURLs.append(url)
@@ -1099,14 +1107,18 @@ struct MediaGridView: View {
                 for (index, item) in items.enumerated() {
                     guard !Task.isCancelled else { break }
                     batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
+                    let throttler = DownloadProgressThrottler()
                     do {
                         let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
-                            Task { @MainActor in
-                                guard totalBytes > 0 else { return }
-                                let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                                let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                                let percent = Int(Double(bytes) / Double(totalBytes) * 100)
-                                self.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
+                            Task {
+                                guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
+                                await MainActor.run {
+                                    guard totalBytes > 0 else { return }
+                                    let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                                    let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                                    let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                                    self.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
+                                }
                             }
                         }
                         downloadedURLs.append(url)

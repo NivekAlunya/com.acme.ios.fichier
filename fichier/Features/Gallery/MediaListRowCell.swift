@@ -24,7 +24,7 @@ struct MediaListRowCell: View {
     var isSelectionMode: Bool = false
 
     /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
-    @State private var mediaDetail: String? = nil
+    @State private var mediaDetail: String?
     
     /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
     private var displayedDetail: String? {
