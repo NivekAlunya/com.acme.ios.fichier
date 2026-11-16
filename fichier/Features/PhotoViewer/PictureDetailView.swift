@@ -369,7 +369,7 @@ public struct PictureDetailView: View {
             do {
                 try await PhotoLibrarySaver.saveImageToPhotos(img)
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.photoViewerSavedToPhotos)
+                    saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
                 }
             } catch {
                 withAnimation {

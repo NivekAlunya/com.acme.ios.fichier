@@ -473,6 +473,62 @@ actor SMBClientActor {
         await MediaCacheManager.shared.invalidateThumbnailCache(for: items)
     }
 
+    /// Renames a file or directory within its parent directory on an SMB share.
+    ///
+    /// - Parameters:
+    ///   - item: The `MediaItem` to rename.
+    ///   - newName: The new filename or directory name.
+    /// - Returns: The updated `MediaItem`.
+    /// - Throws: `FileOperationError` or SMB/network errors.
+    func renameItem(_ item: MediaItem, to newName: String) async throws -> MediaItem {
+        try Task.checkCancellation()
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
+            throw FileOperationError.invalidName(newName)
+        }
+
+        if trimmed == item.name {
+            return item
+        }
+
+        let sourcePath = item.smbRelativePath
+        let parentPath = (sourcePath as NSString).deletingLastPathComponent
+        let normalizedParent = (parentPath == "." ? "" : parentPath)
+        let targetPath = normalizedParent.isEmpty ? trimmed : "\(normalizedParent)/\(trimmed)"
+
+        try await client.moveItem(share: item.shareName, fromPath: sourcePath, toPath: targetPath)
+
+        // Evict in-memory and disk caches
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        thumbnailCache.removeObject(forKey: memoryCacheKey)
+        fullImageCache.removeObject(forKey: "\(item.id)_full" as NSString)
+        metadataCache.removeObject(forKey: item.id as NSString)
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: [item])
+
+        return MediaItem(
+            locationID: item.locationID,
+            name: trimmed,
+            rootName: item.rootName,
+            path: targetPath,
+            isDirectory: item.isDirectory,
+            size: item.size,
+            modifiedDate: Date(),
+            children: item.children,
+            localURL: nil,
+            phAssetIdentifier: nil,
+            isMediaVideo: item.isMediaVideo,
+            folderIconName: item.folderIconName
+        )
+    }
+
     /// Lists immediate child subfolders in the given directory of an SMB share.
     ///
     /// - Parameters:
@@ -831,6 +887,45 @@ actor SMBClientActor {
         }
 
         return localURL
+    }
+
+    /// Downloads any media item directly to local disk cache with progress reporting.
+    func downloadItemToFile(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        if item.isVideo {
+            return try await fetchVideoURL(for: item, progress: progress)
+        }
+        if item.isDocument {
+            return try await fetchDocumentURL(for: item, progress: progress)
+        }
+        let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
+        if FileManager.default.fileExists(atPath: localURL.path) {
+            progress?(item.size, item.size)
+            return localURL
+        }
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+        let partURL = localURL.appendingPathExtension("part")
+        try? FileManager.default.removeItem(at: partURL)
+        do {
+            try await client.downloadFile(share: item.shareName, path: item.smbRelativePath, to: partURL) { bytes, total in
+                if Task.isCancelled { return false }
+                progress?(bytes, total)
+                return true
+            }
+            if Task.isCancelled {
+                try? FileManager.default.removeItem(at: partURL)
+                throw CancellationError()
+            }
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                try? FileManager.default.removeItem(at: localURL)
+            }
+            try FileManager.default.moveItem(at: partURL, to: localURL)
+            return localURL
+        } catch {
+            try? FileManager.default.removeItem(at: partURL)
+            throw error
+        }
     }
 
     /// Flushes all in-memory caches to immediately release RAM upon system low-memory warnings.

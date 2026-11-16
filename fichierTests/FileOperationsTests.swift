@@ -594,5 +594,136 @@ final class FileOperationsTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testRenameItemLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("old_name.txt")
+        try Data("content".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "old_name.txt",
+            rootName: "TempRoot",
+            path: "old_name.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "renamed.txt")
+        XCTAssertEqual(renamed.name, "renamed.txt")
+        XCTAssertEqual(renamed.path, "renamed.txt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    func testRenameFolderLocalStorage() async throws {
+        let actor = LocalStorageActor()
+        let folderURL = tempDirectory.appendingPathComponent("OldFolder")
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "OldFolder",
+            rootName: "TempRoot",
+            path: "OldFolder",
+            isDirectory: true,
+            localURL: folderURL
+        )
+
+        let renamed = try await actor.renameItem(item, to: "NewFolder")
+        XCTAssertEqual(renamed.name, "NewFolder")
+        XCTAssertEqual(renamed.path, "NewFolder")
+        XCTAssertTrue(renamed.isDirectory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folderURL.path))
+        let newURL = try XCTUnwrap(renamed.localURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newURL.path))
+    }
+
+    func testRenameItemInvalidNames() async throws {
+        let actor = LocalStorageActor()
+        let fileURL = tempDirectory.appendingPathComponent("test.txt")
+        try Data("test".utf8).write(to: fileURL)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "test.txt",
+            rootName: "TempRoot",
+            path: "test.txt",
+            isDirectory: false,
+            localURL: fileURL
+        )
+
+        let invalidNames = ["", "  ", "sub/folder", "invalid:name", ".", ".."]
+        for invalidName in invalidNames {
+            do {
+                _ = try await actor.renameItem(item, to: invalidName)
+                XCTFail("Expected invalidName error for '\(invalidName)'")
+            } catch let error as FileOperationError {
+                if case .invalidName = error {
+                    // Expected
+                } else {
+                    XCTFail("Expected invalidName but got \(error)")
+                }
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testRenameItemCollisionThrows() async throws {
+        let actor = LocalStorageActor()
+        let file1 = tempDirectory.appendingPathComponent("file1.txt")
+        let file2 = tempDirectory.appendingPathComponent("file2.txt")
+        try Data("1".utf8).write(to: file1)
+        try Data("2".utf8).write(to: file2)
+
+        let item = MediaItem(
+            locationID: "local_loc",
+            name: "file1.txt",
+            rootName: "TempRoot",
+            path: "file1.txt",
+            isDirectory: false,
+            localURL: file1
+        )
+
+        do {
+            _ = try await actor.renameItem(item, to: "file2.txt")
+            XCTFail("Expected itemAlreadyExists error")
+        } catch let error as FileOperationError {
+            if case .itemAlreadyExists = error {
+                // Expected
+            } else {
+                XCTFail("Expected itemAlreadyExists but got \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRenameItemSMB() async throws {
+        let mockClient = MockSMBClient(shares: ["Media"])
+        let server = SavedSMBConnection(host: "192.168.1.50", username: "admin", lastConnected: Date())
+        let actor = SMBClientActor { _, _ in mockClient }
+
+        _ = try await actor.connectAndListShares(server: server, password: "test")
+
+        let sourceFile = MediaItem(
+            locationID: server.id,
+            name: "old_photo.jpg",
+            rootName: "Media",
+            path: "old_photo.jpg",
+            isDirectory: false
+        )
+
+        let renamed = try await actor.renameItem(sourceFile, to: "new_photo.jpg")
+        XCTAssertEqual(renamed.name, "new_photo.jpg")
+        XCTAssertEqual(renamed.path, "new_photo.jpg")
+
+        let moved = await mockClient.movedItems
+        XCTAssertEqual(moved.count, 1)
+        XCTAssertEqual(moved.first?.from, "old_photo.jpg")
+        XCTAssertEqual(moved.first?.to, "new_photo.jpg")
+    }
 }
 #endif

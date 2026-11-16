@@ -496,6 +496,65 @@ public actor LocalStorageActor {
         }
     }
     
+    /// Renames a media item or folder within its parent directory on local or iCloud storage.
+    ///
+    /// - Parameters:
+    ///   - item: The `MediaItem` to rename.
+    ///   - newName: The new filename or directory name.
+    /// - Returns: The updated `MediaItem`.
+    /// - Throws: `FileOperationError` or filesystem errors.
+    public func renameItem(_ item: MediaItem, to newName: String) throws -> MediaItem {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
+            throw FileOperationError.invalidName(newName)
+        }
+        
+        guard let sourceURL = item.localURL else {
+            throw FileOperationError.missingURL(item.name)
+        }
+        
+        if trimmed == item.name {
+            return item
+        }
+        
+        let parentURL = sourceURL.deletingLastPathComponent().standardizedFileURL
+        let targetURL = parentURL.appendingPathComponent(trimmed, isDirectory: item.isDirectory).standardizedFileURL
+        
+        guard targetURL.deletingLastPathComponent().path == parentURL.path else {
+            throw FileOperationError.invalidName(newName)
+        }
+        
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: targetURL.path) {
+            throw FileOperationError.itemAlreadyExists(trimmed)
+        }
+        
+        try fileManager.moveItem(at: sourceURL, to: targetURL)
+        
+        let parentRelativePath = (item.path as NSString).deletingLastPathComponent
+        let normalizedParent = (parentRelativePath == "." ? "" : parentRelativePath)
+        let newRelativePath = normalizedParent.isEmpty ? trimmed : "\(normalizedParent)/\(trimmed)"
+        
+        return MediaItem(
+            locationID: item.locationID,
+            name: trimmed,
+            rootName: item.rootName,
+            path: newRelativePath,
+            isDirectory: item.isDirectory,
+            size: item.size,
+            modifiedDate: Date(),
+            children: item.children,
+            localURL: targetURL,
+            phAssetIdentifier: item.phAssetIdentifier,
+            isMediaVideo: item.isMediaVideo,
+            folderIconName: item.folderIconName
+        )
+    }
+    
     /// Lists immediate child subfolders within a local or iCloud directory.
     ///
     /// - Parameters:

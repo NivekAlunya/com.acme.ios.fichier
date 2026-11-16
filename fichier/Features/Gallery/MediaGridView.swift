@@ -117,11 +117,20 @@ struct MediaGridView: View {
     /// User input text buffer for a new folder name.
     @State private var newFolderName = ""
     
+    /// Item pending user renaming.
+    @State private var itemToRename: MediaItem?
+    
+    /// User input text buffer for renaming an item.
+    @State private var renameText = ""
+    
     /// Items selected or contextualized for moving to another folder.
     @State private var itemsPendingMove: [MediaItem]?
     
     /// Items pending user confirmation for deletion to the system Trash.
     @State private var itemsPendingDelete: [MediaItem]?
+    
+    /// Staged local file URLs pending export to the iOS Files app via UIDocumentPickerViewController.
+    @State private var itemsPendingFileExport: [URL]?
     
     /// Error message captured during file management actions.
     @State private var fileOpErrorMessage: String?
@@ -281,6 +290,10 @@ struct MediaGridView: View {
                                         await manager.refreshSharesAndFolders()
                                     }
                                 },
+                                onRequestRename: { item in
+                                    itemToRename = item
+                                    renameText = item.name
+                                },
                                 onRequestMove: { item in
                                     itemsPendingMove = [item]
                                 },
@@ -317,6 +330,10 @@ struct MediaGridView: View {
                                         await manager.refreshSharesAndFolders()
                                     }
                                 },
+                                onRequestRename: { item in
+                                    itemToRename = item
+                                    renameText = item.name
+                                },
                                 onRequestMove: { item in
                                     itemsPendingMove = [item]
                                 },
@@ -347,9 +364,16 @@ struct MediaGridView: View {
                     onCancel: { cancelBatchTask() },
                     onToggleFavorite: { batchToggleFavorites() },
                     onSaveToPhotos: { batchSaveToPhotos() },
+                    onDownloadToFiles: { batchDownloadToFiles() },
                     onShare: { batchShare() },
                     onMove: {
                         itemsPendingMove = Array(selectedItems)
+                    },
+                    onRename: {
+                        if let first = selectedItems.first {
+                            itemToRename = first
+                            renameText = first.name
+                        }
                     },
                     onDelete: {
                         itemsPendingDelete = Array(selectedItems)
@@ -371,6 +395,31 @@ struct MediaGridView: View {
         .sheet(isPresented: $showingSettings) {
             AppSettingsView()
         }
+        #if !os(tvOS)
+        .sheet(isPresented: Binding(
+            get: { itemsPendingFileExport != nil },
+            set: { if !$0 { itemsPendingFileExport = nil } }
+        )) {
+            if let urls = itemsPendingFileExport {
+                DocumentPickerExportView(urls: urls) { success in
+                    itemsPendingFileExport = nil
+                    if success {
+                        withAnimation {
+                            batchStatusToast = String(localized: .Strings.galleryBatchSavedToFiles(urls.count))
+                            isSelectionMode = false
+                            selectedItems.removeAll()
+                        }
+                        Task {
+                            try? await Task.sleep(for: .seconds(2.5))
+                            withAnimation {
+                                batchStatusToast = nil
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        #endif
         .sheet(isPresented: Binding(
             get: { itemsPendingMove != nil },
             set: { if !$0 { itemsPendingMove = nil } }
@@ -425,6 +474,30 @@ struct MediaGridView: View {
             if let folder = manager.selectedFolder {
                 let displayName = folder.name.isEmpty ? folder.rootName : folder.name
                 Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
+            }
+        }
+        .alert(
+            itemToRename?.isDirectory == true
+                ? String(localized: .Strings.galleryRenameFolderTitle)
+                : String(localized: .Strings.galleryRenameFileTitle),
+            isPresented: Binding(
+                get: { itemToRename != nil },
+                set: { if !$0 { itemToRename = nil } }
+            )
+        ) {
+            TextField(String(localized: .Strings.galleryRenameFieldPlaceholder), text: $renameText)
+            Button(String(localized: .Strings.commonCancel), role: .cancel) {
+                itemToRename = nil
+            }
+            Button(String(localized: .Strings.galleryRenameButton)) {
+                if let item = itemToRename {
+                    executeRename(item: item, to: renameText)
+                }
+            }
+            .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || renameText == itemToRename?.name)
+        } message: {
+            if let item = itemToRename {
+                Text(String(localized: .Strings.galleryRenamePrompt(item.name)))
             }
         }
         .alert(
@@ -652,9 +725,8 @@ struct MediaGridView: View {
             batchTask?.cancel()
             batchTask = nil
         }
-        #if !os(tvOS)
         .background {
-            // Hardware Keyboard Shortcuts for iPad and Mac
+            // Hardware Keyboard & Remote Shortcuts for iPadOS, macOS, and tvOS
             Group {
                 #if DEBUG
                 // Cmd+Option+R: Invalidate thumbnails for current folder
@@ -700,11 +772,34 @@ struct MediaGridView: View {
                     }
                 }
                 .keyboardShortcut("a", modifiers: [.command])
+
+                // Delete key: Move selected items to trash or delete from SMB
+                Button("") {
+                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
+                        itemsPendingDelete = Array(selectedItems)
+                    }
+                }
+                .keyboardShortcut(.delete, modifiers: [])
+
+                // Cmd+Delete (⌘⌫): Delete selected items
+                Button("") {
+                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
+                        itemsPendingDelete = Array(selectedItems)
+                    }
+                }
+                .keyboardShortcut(.delete, modifiers: [.command])
+
+                // Cmd+M (⌘M): Move selected items to destination folder
+                Button("") {
+                    if !selectedItems.isEmpty && manager.canManageCurrentFolder {
+                        itemsPendingMove = Array(selectedItems)
+                    }
+                }
+                .keyboardShortcut("m", modifiers: [.command])
             }
             .opacity(0)
             .allowsHitTesting(false)
         }
-        #endif
     }
     
     // MARK: - Navigation Helpers
@@ -887,34 +982,53 @@ struct MediaGridView: View {
             var failedCount = 0
             let total = items.count
             
-            // Bounded concurrency pool (up to 3 parallel downloads to maximize network throughput without saturating memory)
-            await withTaskGroup(of: Bool.self) { group in
-                var iterator = items.makeIterator()
-                let maxConcurrent = 3
-                
-                // Seed initial workers
-                for _ in 0..<min(maxConcurrent, total) {
-                    if let nextItem = iterator.next() {
-                        group.addTask { [manager = self.manager] in
-                            await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
-                        }
+            if total == 1, let item = items.first {
+                batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                let success = await Self.saveSingleMediaItemToPhotos(item, manager: manager) { bytes, totalBytes in
+                    Task { @MainActor in
+                        guard totalBytes > 0 else { return }
+                        let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                        let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                        self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
                     }
                 }
-                
-                // As each worker finishes, update progress and schedule the next queued item
-                while let success = await group.next() {
-                    guard !Task.isCancelled else { break }
-                    completedCount += 1
-                    if success {
-                        savedCount += 1
-                    } else {
-                        failedCount += 1
-                    }
-                    batchProgressMessage = String(localized: .Strings.galleryBatchSavingProgress(completedCount, total))
+                completedCount = 1
+                if success {
+                    savedCount = 1
+                } else {
+                    failedCount = 1
+                }
+            } else {
+                // Bounded concurrency pool (up to 3 parallel downloads to maximize network throughput without saturating memory)
+                await withTaskGroup(of: Bool.self) { group in
+                    var iterator = items.makeIterator()
+                    let maxConcurrent = 3
                     
-                    if let nextItem = iterator.next() {
-                        group.addTask { [manager = self.manager] in
-                            await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
+                    // Seed initial workers
+                    for _ in 0..<min(maxConcurrent, total) {
+                        if let nextItem = iterator.next() {
+                            group.addTask { [manager = self.manager] in
+                                await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
+                            }
+                        }
+                    }
+                    
+                    // As each worker finishes, update progress and schedule the next queued item
+                    while let success = await group.next() {
+                        guard !Task.isCancelled else { break }
+                        completedCount += 1
+                        if success {
+                            savedCount += 1
+                        } else {
+                            failedCount += 1
+                        }
+                        batchProgressMessage = String(localized: .Strings.galleryBatchSavingToPhotos(completedCount, total))
+                        
+                        if let nextItem = iterator.next() {
+                            group.addTask { [manager = self.manager] in
+                                await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
+                            }
                         }
                     }
                 }
@@ -931,11 +1045,13 @@ struct MediaGridView: View {
             
             withAnimation {
                 if failedCount > 0 && savedCount > 0 {
-                    batchStatusToast = String(localized: "Saved \(savedCount) of \(total) items to Photos", comment: "Toast message when batch save completes with partial failures")
+                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
                 } else if failedCount > 0 && savedCount == 0 {
-                    batchStatusToast = String(localized: "Failed to save items to Photos", comment: "Toast message when batch save fails completely")
+                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosFailed)
                 } else {
-                    batchStatusToast = String(localized: .Strings.galleryBatchSavedToPhotos(savedCount))
+                    batchStatusToast = savedCount == 1
+                        ? String(localized: .Strings.gallerySavedToPhotosSingle)
+                        : String(localized: .Strings.gallerySavedToPhotosMultiple(savedCount))
                 }
                 isSelectionMode = false
                 selectedItems.removeAll()
@@ -949,6 +1065,86 @@ struct MediaGridView: View {
         }
     }
     
+    // MARK: - Batch Download to Files
+    
+    /// Downloads selected media items directly to local files and presents the native document picker
+    /// so the user can choose where to export or save them (e.g., iCloud Drive, Downloads, On My iPhone).
+    private func batchDownloadToFiles() {
+        let items = Array(selectedItems)
+        guard !items.isEmpty else { return }
+        isBatchProcessing = true
+        batchTask?.cancel()
+        
+        batchTask = Task { @MainActor in
+            var downloadedURLs: [URL] = []
+            let total = items.count
+            
+            if total == 1, let item = items.first {
+                batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
+                do {
+                    let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                        Task { @MainActor in
+                            guard totalBytes > 0 else { return }
+                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                            let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                            let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                            self.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
+                        }
+                    }
+                    downloadedURLs.append(url)
+                } catch {
+                    loge("Failed to download \(item.name) to file: \(error.localizedDescription)")
+                }
+            } else {
+                for (index, item) in items.enumerated() {
+                    guard !Task.isCancelled else { break }
+                    batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
+                    do {
+                        let url = try await manager.downloadItemToFile(for: item) { bytes, totalBytes in
+                            Task { @MainActor in
+                                guard totalBytes > 0 else { return }
+                                let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                                let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+                                let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                                self.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
+                            }
+                        }
+                        downloadedURLs.append(url)
+                    } catch {
+                        loge("Failed to download \(item.name) to file: \(error.localizedDescription)")
+                    }
+                }
+            }
+            
+            guard !Task.isCancelled else {
+                isBatchProcessing = false
+                batchProgressMessage = nil
+                return
+            }
+            
+            isBatchProcessing = false
+            batchProgressMessage = nil
+            
+            if downloadedURLs.isEmpty {
+                withAnimation {
+                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadFailed)
+                }
+                try? await Task.sleep(for: .seconds(2.5))
+                withAnimation {
+                    batchStatusToast = nil
+                }
+            } else {
+                #if !os(tvOS)
+                itemsPendingFileExport = downloadedURLs
+                #else
+                withAnimation {
+                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count))
+                }
+                #endif
+            }
+        }
+    }
+    
     /// Saves an individual media item (image or video) to the system Photos library.
     ///
     /// Declared `static` to ensure no implicit capture of the enclosing SwiftUI `View` struct
@@ -957,17 +1153,30 @@ struct MediaGridView: View {
     /// - Parameters:
     ///   - item: The `MediaItem` representing the photo or video to export.
     ///   - manager: The `StorageLocationManager` instance used to fetch the remote file or image data.
+    ///   - progress: Optional callback for reporting download progress.
     /// - Returns: `true` if the media item was successfully saved to Photos; otherwise, `false`.
-    private static func saveSingleMediaItemToPhotos(_ item: MediaItem, manager: StorageLocationManager) async -> Bool {
+    private static func saveSingleMediaItemToPhotos(
+        _ item: MediaItem,
+        manager: StorageLocationManager,
+        progress: (@Sendable (Int64, Int64) -> Void)? = nil
+    ) async -> Bool {
         do {
             if item.isVideo {
-                let localURL = try await manager.fetchVideoURL(for: item)
+                let localURL = try await manager.fetchVideoURL(for: item, progress: progress)
                 try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
             } else {
-                guard let image = await manager.downloadImage(for: item) else {
-                    return false
+                if let progress {
+                    let localURL = try await manager.downloadItemToFile(for: item, progress: progress)
+                    guard let image = UIImage(contentsOfFile: localURL.path) else {
+                        return false
+                    }
+                    try await PhotoLibrarySaver.saveImageToPhotos(image)
+                } else {
+                    guard let image = await manager.downloadImage(for: item) else {
+                        return false
+                    }
+                    try await PhotoLibrarySaver.saveImageToPhotos(image)
                 }
-                try await PhotoLibrarySaver.saveImageToPhotos(image)
             }
             return true
         } catch {
@@ -1157,6 +1366,30 @@ struct MediaGridView: View {
             do {
                 try await manager.createFolder(named: trimmed)
                 showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
+            } catch {
+                fileOpErrorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    /// Renames a file or folder and updates selection and toast notification.
+    private func executeRename(item: MediaItem, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task {
+            do {
+                let renamed = try await manager.renameItem(item, to: trimmed)
+                if isSelectionMode {
+                    withAnimation {
+                        selectedItems.remove(item)
+                        selectedItems.insert(renamed)
+                    }
+                }
+                showToastMessage(
+                    item.isDirectory
+                        ? String(localized: .Strings.galleryToastFolderRenamed(renamed.name))
+                        : String(localized: .Strings.galleryToastFileRenamed(renamed.name))
+                )
             } catch {
                 fileOpErrorMessage = error.localizedDescription
             }

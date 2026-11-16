@@ -899,15 +899,33 @@ public final class VideoPlayerController {
     public func saveToCameraRoll() {
         isSaving = true
         saveTask?.cancel()
+        withAnimation {
+            saveStatusMessage = String(localized: .Strings.videoPlayerDownloadingVideo)
+        }
         saveTask = Task { @MainActor in
             do {
-                let localURL = try await manager.fetchVideoURL(for: currentItem)
+                let localURL = try await manager.fetchVideoURL(for: currentItem) { [weak self] bytes, total in
+                    Task { @MainActor in
+                        guard let self, total > 0 else { return }
+                        let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        let totalStr = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+                        let percent = Int(Double(bytes) / Double(total) * 100)
+                        self.saveStatusMessage = String(
+                            localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent)
+                        )
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 self.shareableVideoURL = localURL
+                withAnimation {
+                    self.saveStatusMessage = String(localized: .Strings.videoPlayerSavingToPhotos)
+                }
+                #if !os(tvOS)
                 try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+                #endif
                 guard !Task.isCancelled else { return }
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.videoPlayerSavedToPhotos)
+                    saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
                 }
             } catch {
                 guard !Task.isCancelled else { return }

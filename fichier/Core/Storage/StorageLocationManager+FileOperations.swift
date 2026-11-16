@@ -162,6 +162,88 @@ extension StorageLocationManager {
         }
     }
     
+    // MARK: - Rename Item
+    
+    /// Renames a media item (file or subfolder) within its parent directory and updates the UI state in-place.
+    ///
+    /// - Parameters:
+    ///   - item: The target `MediaItem` to rename.
+    ///   - newName: The new name (with extension for files).
+    /// - Returns: The mutated `MediaItem` with updated identifiers and filesystem path.
+    /// - Throws: `FileOperationError` if the name is invalid, storage is unsupported, or a name collision occurs.
+    @discardableResult
+    public func renameItem(_ item: MediaItem, to newName: String) async throws -> MediaItem {
+        guard canManageItem(item) else {
+            throw FileOperationError.unsupportedStorage
+        }
+        
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
+            throw FileOperationError.invalidName(newName)
+        }
+        
+        guard trimmed != item.name else {
+            return item
+        }
+        
+        let renamedItem: MediaItem
+        if item.localURL != nil {
+            renamedItem = try await localWorker.renameItem(item, to: trimmed)
+        } else if !item.shareName.isEmpty {
+            renamedItem = try await worker.renameItem(item, to: trimmed)
+        } else {
+            throw FileOperationError.unsupportedStorage
+        }
+        
+        // Update in-place in pictures and currentFolders to preserve scroll position
+        withAnimation(.snappy) {
+            if let idx = self.pictures.firstIndex(where: { $0.id == item.id }) {
+                self.pictures[idx] = renamedItem
+            }
+            if let idx = self.currentFolders.firstIndex(where: { $0.id == item.id }) {
+                self.currentFolders[idx] = renamedItem
+            }
+        }
+        
+        // Update favorite if present
+        if FavoritesManager.shared.isFavorite(item) {
+            FavoritesManager.shared.toggleFavorite(item)
+            FavoritesManager.shared.toggleFavorite(renamedItem)
+        }
+        
+        if item.isDirectory {
+            self.folderTree = renameNodeInTree(in: self.folderTree, targetID: item.id, renamedItem: renamedItem)
+            if self.selectedFolder?.id == item.id {
+                self.selectedFolder = renamedItem
+            }
+            recordMutation()
+            await refreshExpandedTreeBranches()
+        }
+        
+        return renamedItem
+    }
+    
+    /// Recursively renames a directory node inside the hierarchical folder tree.
+    private func renameNodeInTree(in nodes: [MediaItem], targetID: String, renamedItem: MediaItem) -> [MediaItem] {
+        var updated = nodes
+        for idx in updated.indices {
+            if updated[idx].id == targetID {
+                var replacement = renamedItem
+                replacement.children = updated[idx].children
+                updated[idx] = replacement
+                return updated
+            }
+            if let children = updated[idx].children {
+                updated[idx].children = renameNodeInTree(in: children, targetID: targetID, renamedItem: renamedItem)
+            }
+        }
+        return updated
+    }
+    
     // MARK: - Folder Picker Hierarchy
     
     /// Loads the root directory tree for picking destination folders in the move sheet.
