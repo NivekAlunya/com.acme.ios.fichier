@@ -95,18 +95,16 @@ public struct FolderTreeContentView: View {
                         systemImage: "folder"
                     )
                 } description: {
-                    Text(.Strings.selectStorageDescription)
-                } actions: {
-                    if let onOpenSidebar {
-                        Button {
-                            onOpenSidebar()
-                        } label: {
-                            Label(
-                                String(localized: .Strings.selectStorage),
-                                systemImage: "sidebar.leading"
-                            )
+                    VStack(spacing: 8) {
+                        Text(.Strings.selectStorageDescription)
+                        HStack(spacing: 5) {
+                            Image(systemName: "sidebar.leading")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.tint)
+                            Text(.Strings.selectStorageSidebarInstruction)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
                 }
             } else if !manager.allLocations.isEmpty {
@@ -116,18 +114,16 @@ public struct FolderTreeContentView: View {
                         systemImage: "folder"
                     )
                 } description: {
-                    Text(.Strings.selectStorageDescription)
-                } actions: {
-                    if let onOpenSidebar {
-                        Button {
-                            onOpenSidebar()
-                        } label: {
-                            Label(
-                                String(localized: .Strings.selectStorage),
-                                systemImage: "sidebar.leading"
-                            )
+                    VStack(spacing: 8) {
+                        Text(.Strings.selectStorageDescription)
+                        HStack(spacing: 5) {
+                            Image(systemName: "sidebar.leading")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.tint)
+                            Text(.Strings.selectStorageSidebarInstruction)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
                 }
             } else {
@@ -137,25 +133,16 @@ public struct FolderTreeContentView: View {
                         systemImage: "folder"
                     )
                 } description: {
-                    Text(.Strings.sidebarNoConnectedRemoteDescription)
-                } actions: {
-                    Button {
-                        showingAddRemote = true
-                    } label: {
-                        Text(.Strings.sidebarButtonAddRemote)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    if let onOpenSidebar {
-                        Button {
-                            onOpenSidebar()
-                        } label: {
-                            Label(
-                                String(localized: .Strings.selectStorage),
-                                systemImage: "sidebar.leading"
-                            )
+                    VStack(spacing: 8) {
+                        Text(.Strings.sidebarNoConnectedRemoteDescription)
+                        HStack(spacing: 5) {
+                            Image(systemName: "sidebar.leading")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.tint)
+                            Text(.Strings.selectStorageSidebarInstruction)
                         }
-                        .buttonStyle(.bordered)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }

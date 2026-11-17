@@ -71,7 +71,7 @@ struct MediaListRowCell: View {
                 HStack(spacing: 6) {
                     Text(item.name)
                         .font(.system(size: GridSize.large.titleFontSize, weight: .semibold))
-                        .lineLimit(1)
+                        .lineLimit(2)
                     if FavoritesManager.shared.isFavorite(item) {
                         Image(systemName: "heart.fill")
                             .font(.system(size: GridSize.large.detailFontSize))

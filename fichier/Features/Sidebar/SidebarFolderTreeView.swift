@@ -37,18 +37,16 @@ struct SidebarFolderTreeView: View {
                             systemImage: "folder"
                         )
                     } description: {
-                        Text(.Strings.selectStorageDescription)
-                    } actions: {
-                        if let onOpenSidebar {
-                            Button {
-                                onOpenSidebar()
-                            } label: {
-                                Label(
-                                    String(localized: .Strings.selectStorage),
-                                    systemImage: "sidebar.leading"
-                                )
+                        VStack(spacing: 8) {
+                            Text(.Strings.selectStorageDescription)
+                            HStack(spacing: 5) {
+                                Image(systemName: "sidebar.leading")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                                Text(.Strings.selectStorageSidebarInstruction)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }

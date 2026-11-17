@@ -161,7 +161,7 @@ struct MediaThumbnailCell: View {
                 Text(item.name)
                     .font(.system(size: gridSize.titleFontSize, weight: .semibold))
                     .foregroundColor(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.middle)
                     .shadow(color: Color.black.opacity(0.35), radius: 1, x: 0, y: 1)
                 

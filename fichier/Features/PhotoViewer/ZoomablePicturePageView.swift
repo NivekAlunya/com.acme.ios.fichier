@@ -51,6 +51,10 @@ struct ZoomablePicturePageView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onTap()
+                }
             
             if let image {
                 ZoomableImageView(image: image, onTap: onTap)

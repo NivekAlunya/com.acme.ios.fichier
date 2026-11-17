@@ -71,7 +71,7 @@ public struct PictureDetailView: View {
                         },
                         onTap: {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.showControls.toggle()
+                                viewModel.toggleControls()
                             }
                         }
                     )
@@ -83,7 +83,7 @@ public struct PictureDetailView: View {
                 .zIndex(1)
                 .contentShape(Rectangle())
                 #if !os(tvOS)
-                .gesture(
+                .simultaneousGesture(
                     DragGesture(minimumDistance: 25)
                         .onEnded { value in
                             if value.translation.width < -40 {
@@ -114,7 +114,7 @@ public struct PictureDetailView: View {
                             },
                             onTap: {
                                 withAnimation(.easeInOut(duration: 0.2)) {
-                                    viewModel.showControls.toggle()
+                                    viewModel.toggleControls()
                                 }
                             }
                         )
@@ -122,6 +122,7 @@ public struct PictureDetailView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .zIndex(1)
             }
             
             // Floating HUD Overlays
@@ -139,7 +140,10 @@ public struct PictureDetailView: View {
                     
                     PictureViewerBottomBarView(
                         hasMultiplePictures: viewModel.pictures.count > 1,
-                        isPlayingSlideshow: $viewModel.isPlayingSlideshow,
+                        isPlayingSlideshow: Binding(
+                            get: { viewModel.isPlayingSlideshow },
+                            set: { _ in viewModel.toggleSlideshow() }
+                        ),
                         slideshowInterval: $slideshowInterval,
                         transitionStyle: $transitionStyle,
                         isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
@@ -167,6 +171,7 @@ public struct PictureDetailView: View {
                     .padding(.bottom, 20)
                 }
                 .transition(.opacity)
+                .zIndex(10)
             }
             
             // Visual toast banner when saved to photos
@@ -186,6 +191,7 @@ public struct PictureDetailView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     Spacer()
                 }
+                .zIndex(20)
             }
         }
         .preferredColorScheme(.dark)

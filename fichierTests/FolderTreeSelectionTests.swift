@@ -69,5 +69,6 @@ struct FolderTreeSelectionTests {
         #expect(String(localized: .Strings.folders) == "Folders")
         #expect(String(localized: .Strings.selectStorage) == "Select storage")
         #expect(String(localized: .Strings.openSidebar) == "Open Sidebar")
+        #expect(String(localized: .Strings.selectStorageSidebarInstruction) == "Tap the sidebar icon to select a storage location.")
     }
 }
