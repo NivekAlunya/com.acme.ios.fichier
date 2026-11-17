@@ -88,6 +88,14 @@ struct FolderTreeNodeView: View {
         return isSelected ? .blue : .accentColor
     }
     
+    /// Display name of the folder node, using "/" for the root container level.
+    private var displayName: String {
+        if level == 0 && manager.currentLocation?.kind != .photos {
+            return "/"
+        }
+        return node.name
+    }
+    
     var body: some View {
         HStack(spacing: 6) {
             if level > 0 {
@@ -120,7 +128,7 @@ struct FolderTreeNodeView: View {
                     Image(systemName: nodeIconName)
                         .foregroundColor(nodeIconColor)
                     
-                    Text(node.name)
+                    Text(displayName)
                         .fontWeight(isSelected ? .semibold : .regular)
                         .foregroundColor(.primary)
                         .lineLimit(1)

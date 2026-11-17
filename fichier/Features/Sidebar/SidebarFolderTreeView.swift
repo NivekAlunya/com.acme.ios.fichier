@@ -13,6 +13,9 @@ struct SidebarFolderTreeView: View {
     /// Centralized storage location manager.
     var manager: StorageLocationManager
     
+    /// Optional callback to reveal or navigate back to the sidebar programmatically.
+    var onOpenSidebar: (() -> Void)? = nil
+
     /// Callback triggered when a folder node is selected by the user.
     let onSelectFolder: (MediaItem) -> Void
     
@@ -30,11 +33,23 @@ struct SidebarFolderTreeView: View {
                 } else {
                     ContentUnavailableView {
                         Label(
-                            String(localized: .Strings.gallerySectionSubfoldersCount(0)),
+                            String(localized: .Strings.folders),
                             systemImage: "folder"
                         )
                     } description: {
-                        Text(.Strings.galleryNoFolderSelectedDescription)
+                        Text(.Strings.selectStorageDescription)
+                    } actions: {
+                        if let onOpenSidebar {
+                            Button {
+                                onOpenSidebar()
+                            } label: {
+                                Label(
+                                    String(localized: .Strings.selectStorage),
+                                    systemImage: "sidebar.leading"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
                     }
                 }
             } else {
@@ -68,7 +83,7 @@ struct SidebarFolderTreeView: View {
         }
     }
     
-    /// Root-level tree nodes displayed in the middle column, scoped to the active share's children for SMB connections.
+    /// Root-level tree nodes displayed in the middle column, starting with the root folder/share.
     private var displayedTreeNodes: [MediaItem] {
         guard manager.currentLocation?.kind == .smb else {
             return manager.folderTree
@@ -76,14 +91,11 @@ struct SidebarFolderTreeView: View {
         guard let activeShare = manager.selectedShare else {
             return []
         }
-        let matchedNode = manager.folderTree.first(where: { $0.shareName == activeShare.shareName }) ?? activeShare
-        if let children = matchedNode.children {
-            return children
+        var matchedNode = manager.folderTree.first(where: { $0.shareName == activeShare.shareName }) ?? activeShare
+        if matchedNode.children == nil && manager.selectedFolder?.shareName == activeShare.shareName && manager.selectedFolder?.path.isEmpty == true && !manager.currentFolders.isEmpty {
+            matchedNode.children = manager.currentFolders
         }
-        if manager.selectedFolder?.shareName == activeShare.shareName {
-            return manager.currentFolders
-        }
-        return []
+        return [matchedNode]
     }
 
     /// Determines whether a root share/folder node should be expanded automatically upon initial appearance.
@@ -91,21 +103,16 @@ struct SidebarFolderTreeView: View {
     /// - Parameter root: The root `MediaItem` being evaluated.
     /// - Returns: `true` if the currently selected folder belongs to this root tree.
     private func isRootInitiallyExpanded(_ root: MediaItem) -> Bool {
-        guard let selected = manager.selectedFolder else { return false }
-        if manager.currentLocation?.kind == .smb {
-            return selected.path.hasPrefix(root.path) && selected.path != root.path
+        guard let selected = manager.selectedFolder else {
+            return manager.selectedShare?.shareName == root.shareName
         }
         return selected.shareName == root.shareName || selected.rootName == root.rootName
     }
     
-    /// Localized title for the folder tree section header based on active storage kind.
+    /// Title for the folder tree section header displaying folder and file counts.
     private var sectionHeaderTitle: String {
-        if manager.currentLocation?.kind == .photos {
-            return String(localized: .Strings.sidebarLocationPhotos)
-        }
-        if manager.currentLocation?.kind == .localFolder || manager.currentLocation?.kind == .iCloudFolder {
-            return String(localized: .Strings.gallerySectionSubfoldersCount(manager.folderTree.count))
-        }
-        return String(localized: .Strings.gallerySectionSubfoldersCount(displayedTreeNodes.count))
+        let folderCount = manager.selectedFolder != nil ? manager.currentFolders.count : displayedTreeNodes.count
+        let fileCount = manager.pictures.count
+        return "Folder \(folderCount) File \(fileCount)"
     }
 }

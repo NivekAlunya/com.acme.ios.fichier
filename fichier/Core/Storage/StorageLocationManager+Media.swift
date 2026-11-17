@@ -509,4 +509,11 @@ extension StorageLocationManager {
         
         await refreshMediaCacheSize()
     }
+    
+    /// Clears both memory and persistent disk thumbnail cache for a specific media item and notifies observers to reload it.
+    public func invalidateThumbnail(for item: MediaItem) async {
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: [item])
+        await worker.removeThumbnailsFromMemory(for: [item.id])
+        thumbnailVersions[item.id, default: 0] += 1
+    }
 }

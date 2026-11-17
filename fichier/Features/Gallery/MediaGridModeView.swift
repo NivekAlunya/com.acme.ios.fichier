@@ -155,6 +155,7 @@ struct MediaGridModeView: View {
                                     MediaThumbnailCell(
                                         manager: manager,
                                         item: pic,
+                                        gridSize: gridSize,
                                         maxDimension: gridSize.thumbnailPixels,
                                         isSelected: selectedItems.contains(pic),
                                         isSelectionMode: isSelectionMode
@@ -205,6 +206,14 @@ struct MediaGridModeView: View {
                                                 FavoritesManager.shared.isFavorite(pic) ? String(localized: "Remove from Favorites", comment: "Context menu unfavorite") : String(localized: "Add to Favorites", comment: "Context menu favorite"),
                                                 systemImage: FavoritesManager.shared.isFavorite(pic) ? "heart.slash" : "heart"
                                             )
+                                        }
+                                        
+                                        Button {
+                                            Task {
+                                                await manager.invalidateThumbnail(for: pic)
+                                            }
+                                        } label: {
+                                            Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
                                         }
                                     })
                                 }

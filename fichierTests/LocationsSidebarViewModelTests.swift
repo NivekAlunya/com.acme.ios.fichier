@@ -3,6 +3,7 @@
 //  fichierTests
 //
 
+import Foundation
 import Testing
 import FichierKit
 @testable import fichier
@@ -54,11 +55,12 @@ struct LocationsSidebarViewModelTests {
         let manager = StorageLocationManager()
         let server = SavedSMBConnection(host: "nas.local", username: "alice", lastConnected: Date(), hostname: "nas")
         let location = StorageLocation(smb: server)
+        manager.savedConnections = [server]
         manager.currentLocation = location
         manager.isConnected = true
         
-        let share1 = MediaItem(name: "Photos", path: "", type: .folder, shareName: "Photos", locationID: location.id)
-        let share2 = MediaItem(name: "Videos", path: "", type: .folder, shareName: "Videos", locationID: location.id)
+        let share1 = MediaItem(locationID: location.id, name: "Photos", rootName: "Photos", path: "", isDirectory: true)
+        let share2 = MediaItem(locationID: location.id, name: "Videos", rootName: "Videos", path: "", isDirectory: true)
         manager.folderTree = [share1, share2]
         
         let viewModel = LocationsSidebarViewModel(manager: manager)

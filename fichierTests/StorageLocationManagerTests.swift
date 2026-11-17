@@ -233,8 +233,7 @@ final class StorageLocationManagerTests: XCTestCase {
             name: "Documents",
             rootName: "Documents",
             path: "",
-            isDirectory: true,
-            shareName: "Documents"
+            isDirectory: true
         )
         
         await manager.selectShare(share)
@@ -250,8 +249,7 @@ final class StorageLocationManagerTests: XCTestCase {
             id: "smb_server_1",
             name: "HomeServer",
             subtitle: "192.168.1.10",
-            kind: .smb,
-            systemIcon: "server.rack"
+            kind: .smb
         )
         manager.currentLocation = smbLoc
         manager.folderTree = []
@@ -261,8 +259,7 @@ final class StorageLocationManagerTests: XCTestCase {
             name: "Media",
             rootName: "Media",
             path: "",
-            isDirectory: true,
-            shareName: "Media"
+            isDirectory: true
         )
         
         await manager.selectAndLoadFolder(rootShare)
@@ -277,8 +274,7 @@ final class StorageLocationManagerTests: XCTestCase {
             id: "smb_server_1",
             name: "HomeServer",
             subtitle: "192.168.1.10",
-            kind: .smb,
-            systemIcon: "server.rack"
+            kind: .smb
         )
         manager.currentLocation = smbLoc
         manager.folderTree = []
@@ -288,8 +284,7 @@ final class StorageLocationManagerTests: XCTestCase {
             name: "Photos",
             rootName: "Media",
             path: "/Photos",
-            isDirectory: true,
-            shareName: "Media"
+            isDirectory: true
         )
         
         await manager.selectAndLoadFolder(subfolder)

@@ -169,6 +169,14 @@ struct MediaListModeView: View {
                                         systemImage: FavoritesManager.shared.isFavorite(pic) ? "heart.slash" : "heart"
                                     )
                                 }
+                                
+                                Button {
+                                    Task {
+                                        await manager.invalidateThumbnail(for: pic)
+                                    }
+                                } label: {
+                                    Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
+                                }
                             })
                         }
                     }

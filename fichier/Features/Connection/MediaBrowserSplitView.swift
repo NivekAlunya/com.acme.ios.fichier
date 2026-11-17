@@ -78,6 +78,12 @@ public struct MediaBrowserSplitView: View {
             FolderTreeContentView(
                 manager: storageManager,
                 showingAddRemote: $showingAddRemote,
+                onOpenSidebar: {
+                    withAnimation {
+                        columnVisibility = .all
+                        preferredCompactColumn = .sidebar
+                    }
+                },
                 onSelectFolder: { folder in
                     Task {
                         await storageManager.selectAndLoadFolder(folder)
