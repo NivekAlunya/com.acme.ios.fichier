@@ -11,15 +11,18 @@ public struct TVSeekThumbnailPreviewCardView: View {
     public let thumbnailState: TVSeekThumbnailState
     public let duration: Double
     public let detailLabel: String?
+    public let tintColor: Color
 
     public init(
         thumbnailState: TVSeekThumbnailState,
         duration: Double,
-        detailLabel: String? = nil
+        detailLabel: String? = nil,
+        tintColor: Color = .blue
     ) {
         self.thumbnailState = thumbnailState
         self.duration = duration
         self.detailLabel = detailLabel
+        self.tintColor = tintColor
     }
 
     private var progressRatio: Double {
@@ -86,7 +89,7 @@ public struct TVSeekThumbnailPreviewCardView: View {
                     if let detailLabel, !detailLabel.isEmpty {
                         Text(detailLabel)
                             .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(tintColor)
                             .lineLimit(1)
                     }
                 }

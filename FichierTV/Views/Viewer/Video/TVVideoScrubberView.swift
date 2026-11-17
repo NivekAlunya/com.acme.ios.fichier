@@ -23,7 +23,7 @@ public struct TVVideoScrubberView: View {
         duration: Double,
         scrubbingTime: Double?,
         isFocused: Bool,
-        tintColor: Color = .orange,
+        tintColor: Color = .blue,
         chapters: [PlayerChapter] = [],
         seekThumbnailState: TVSeekThumbnailState? = nil,
         previewBubbleLabel: String? = nil,
@@ -56,7 +56,8 @@ public struct TVVideoScrubberView: View {
                     TVSeekThumbnailPreviewCardView(
                         thumbnailState: seekThumbnailState,
                         duration: duration,
-                        detailLabel: previewBubbleLabel ?? "Click to seek"
+                        detailLabel: previewBubbleLabel ?? String(localized: .Strings.tapToSeek),
+                        tintColor: tintColor
                     )
                 } else {
                     previewTimestampBubble(time: scrubbingTime)
@@ -123,7 +124,7 @@ public struct TVVideoScrubberView: View {
 
     @ViewBuilder
     private func previewTimestampBubble(time: Double) -> some View {
-        Text(previewBubbleLabel ?? "Scrub: \(formatTimestamp(time))")
+        Text(previewBubbleLabel ?? "\(String(localized: .Strings.tapToSeek)): \(formatTimestamp(time))")
             .font(.caption.weight(.bold).monospacedDigit())
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
