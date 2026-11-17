@@ -30,7 +30,7 @@ public struct TVMediaListRowView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.name)
                     .font(.headline)
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.middle)
 
                 HStack(spacing: 16) {

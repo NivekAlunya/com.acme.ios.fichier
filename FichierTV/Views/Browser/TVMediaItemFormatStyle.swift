@@ -1,0 +1,104 @@
+//
+//  TVMediaItemFormatStyle.swift
+//  FichierTV
+//
+
+import SwiftUI
+import FichierKit
+
+/// Visual styling, format labels, and accent colors for media source items displayed on tvOS gallery cells.
+public enum TVMediaItemFormatStyle: Sendable {
+    
+    /// Returns the SF Symbol name describing the item's media format type.
+    ///
+    /// - Parameter item: The target media source item.
+    /// - Returns: An SF Symbol name (`"play.fill"` for video, `"photo.fill"` for image, `"folder.fill"` for folder).
+    public static func pictogramName(for item: MediaSourceItem) -> String {
+        switch item.type {
+        case .folder:
+            return "folder.fill"
+        case .video:
+            return "play.fill"
+        case .image:
+            return "photo.fill"
+        }
+    }
+    
+    /// Formats the item's type or file extension into an uppercase badge string (e.g. "MP4", "PNG", folder item count).
+    ///
+    /// - Parameter item: The target media source item.
+    /// - Returns: A normalized uppercase badge label.
+    public static func label(for item: MediaSourceItem) -> String {
+        switch item.type {
+        case .folder:
+            return item.size > 0 ? "\(item.size)" : "FOLDER"
+        case .video:
+            let ext = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters).uppercased()
+            return ext.isEmpty ? "VIDEO" : ext
+        case .image:
+            let ext = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters).uppercased()
+            return ext.isEmpty ? "PHOTO" : ext
+        }
+    }
+    
+    /// Returns a distinctive format accent color matching the iOS gallery design system.
+    ///
+    /// - Parameter item: The target media source item.
+    /// - Returns: A dedicated `Color` for the format family.
+    public static func color(for item: MediaSourceItem) -> Color {
+        switch item.type {
+        case .folder:
+            return Color(white: 0.35)
+        case .video:
+            let ext = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters).lowercased()
+            switch ext {
+            case "mp4":
+                return Color.blue
+            case "mov":
+                return Color.cyan
+            case "m4v":
+                return Color.indigo
+            case "mkv":
+                return Color(red: 0.58, green: 0.28, blue: 0.88) // Vivid Purple
+            case "avi":
+                return Color.orange
+            case "webm":
+                return Color(red: 0.16, green: 0.68, blue: 0.38) // Emerald Green
+            case "flv", "f4v":
+                return Color(red: 0.90, green: 0.25, blue: 0.25) // Coral Red
+            case "wmv", "asf":
+                return Color(red: 0.94, green: 0.62, blue: 0.12) // Warm Amber
+            case "ts", "m2ts", "mts":
+                return Color.mint
+            case "ogv":
+                return Color(red: 0.20, green: 0.70, blue: 0.50) // Sea Green
+            case "3gp":
+                return Color.teal
+            default:
+                return Color(white: 0.30)
+            }
+        case .image:
+            let ext = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters).lowercased()
+            switch ext {
+            case "png":
+                return Color.teal
+            case "jpg", "jpeg", "jpe", "jfif":
+                return Color.green
+            case "heic", "heif":
+                return Color.cyan
+            case "webp", "avif":
+                return Color.blue
+            case "gif":
+                return Color.orange
+            case "dng", "cr2", "cr3", "nef", "arw", "raw", "orf", "rw2":
+                return Color(red: 0.58, green: 0.28, blue: 0.88) // Vivid Purple / RAW
+            case "tif", "tiff":
+                return Color.indigo
+            case "pdf":
+                return Color(red: 0.90, green: 0.25, blue: 0.25) // PDF Coral Red
+            default:
+                return Color(white: 0.30)
+            }
+        }
+    }
+}
