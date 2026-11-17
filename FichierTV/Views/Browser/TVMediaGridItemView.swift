@@ -30,14 +30,19 @@ public struct TVMediaGridItemView: View {
         return mediaDetail
     }
 
+    /// Format metadata resolved in a single pass.
+    private var formatInfo: (label: String, color: Color, pictogramName: String) {
+        TVMediaItemFormatStyle.formatInfo(for: item)
+    }
+
     /// Distinctive accent color resolved for this media item's container format.
     private var formatColor: Color {
-        TVMediaItemFormatStyle.color(for: item)
+        formatInfo.color
     }
 
     /// Display label for the media format capsule badge.
     private var formatLabel: String {
-        TVMediaItemFormatStyle.label(for: item)
+        formatInfo.label
     }
 
     /// Designated public initializer.
@@ -87,11 +92,12 @@ public struct TVMediaGridItemView: View {
     /// Capsule badge at top trailing edge with picto + extension tinted by formatColor.
     @ViewBuilder
     private var formatCapsule: some View {
+        let info = formatInfo
         HStack(spacing: 6) {
-            Image(systemName: TVMediaItemFormatStyle.pictogramName(for: item))
+            Image(systemName: info.pictogramName)
                 .font(.system(size: 13, weight: .bold))
 
-            Text(formatLabel)
+            Text(info.label)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
 
             if item.type == .video {
@@ -101,7 +107,7 @@ public struct TVMediaGridItemView: View {
         .foregroundColor(.white)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(formatColor.opacity(0.85))
+        .background(info.color.opacity(0.85))
         .clipShape(Capsule())
         .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
     }

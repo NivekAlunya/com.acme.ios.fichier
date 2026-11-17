@@ -44,14 +44,19 @@ struct MediaThumbnailCell: View {
         return mediaDetail
     }
     
+    /// Format metadata resolved in a single pass.
+    private var formatInfo: (label: String, color: Color, pictogramName: String) {
+        MediaItemFormatStyle.formatInfo(for: item)
+    }
+    
     /// Distinctive accent color resolved for this media item's container format.
     private var formatColor: Color {
-        MediaItemFormatStyle.color(for: item)
+        formatInfo.color
     }
     
     /// Display label for the media format capsule badge.
     private var formatLabel: String {
-        MediaItemFormatStyle.label(for: item)
+        formatInfo.label
     }
 
     var body: some View {
@@ -131,11 +136,12 @@ struct MediaThumbnailCell: View {
     /// Capsule badge at top trailing edge with picto + extension tinted by formatColor.
     @ViewBuilder
     private var formatCapsule: some View {
+        let info = formatInfo
         HStack(spacing: gridSize == .large ? 3.5 : 2.5) {
-            Image(systemName: MediaItemFormatStyle.pictogramName(for: item))
+            Image(systemName: info.pictogramName)
                 .font(.system(size: max(7, gridSize.detailFontSize - 2), weight: .bold))
             
-            Text(formatLabel)
+            Text(info.label)
                 .font(.system(size: max(8, gridSize.detailFontSize - 1), weight: .bold, design: .rounded))
             
             if item.isVideo {
@@ -145,7 +151,7 @@ struct MediaThumbnailCell: View {
         .foregroundColor(.white)
         .padding(.horizontal, gridSize == .large ? 6 : 4.5)
         .padding(.vertical, gridSize == .large ? 3 : 2)
-        .background(formatColor.opacity(0.85))
+        .background(info.color.opacity(0.85))
         .clipShape(Capsule())
         .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
     }
