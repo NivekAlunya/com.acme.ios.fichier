@@ -58,6 +58,12 @@ public final class VideoPlayerController {
     /// Current AVURLAsset reference configured for custom resource loading.
     private var currentAsset: AVURLAsset?
     
+    // swiftlint:disable:next no_legacy_dispatch_queue
+    private static let smbResourceLoaderQueue = DispatchQueue(
+        label: "com.acme.ios.fichier.videoloader",
+        qos: .userInitiated
+    )
+    
     /// Active resource loader delegate streaming chunks over SMB.
     private var loaderDelegate: SMBAVAssetResourceLoaderDelegate?
     
@@ -301,9 +307,7 @@ public final class VideoPlayerController {
             
             // AVAssetResourceLoader requires a GCD queue for delegate callbacks (no async API
             // exists). The delegate is retained in `loaderDelegate` because the asset only holds it weakly.
-            // swiftlint:disable:next no_legacy_dispatch_queue
-            let queue = DispatchQueue(label: "com.acme.ios.photos.videoloader.\(UUID().uuidString)", qos: .userInitiated)
-            asset.resourceLoader.setDelegate(delegate, queue: queue)
+            asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
             
             let playerItem = AVPlayerItem(asset: asset)
             playerItem.preferredForwardBufferDuration = 2.0

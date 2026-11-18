@@ -808,7 +808,7 @@ public final class TVVideoPlayerViewModel {
         // a fixed tick, growing the step with hold duration, until the press ends or Menu cancels it.
         // `self` is re-bound on each iteration so the task never keeps the view model alive.
         remoteSeekHoldTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(for: .milliseconds(300))
             while !Task.isCancelled {
                 guard let self, let hold = self.activeRemoteSeekHold, !hold.wasCancelledByMenu else {
                     return
@@ -832,7 +832,7 @@ public final class TVVideoPlayerViewModel {
                     isHolding: true
                 )
                 self.requestSeekThumbnail(for: targetTime)
-                try? await Task.sleep(nanoseconds: TVRemoteSeekCalculator.holdTickIntervalNanoseconds)
+                try? await Task.sleep(for: .nanoseconds(Int(TVRemoteSeekCalculator.holdTickIntervalNanoseconds)))
             }
         }
     }
@@ -841,7 +841,7 @@ public final class TVVideoPlayerViewModel {
         remoteSeekPreviewDismissTask?.cancel()
         remoteSeekPreview = preview
         remoteSeekPreviewDismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: TVRemoteSeekCalculator.previewVisibleDurationNanoseconds)
+            try? await Task.sleep(for: .nanoseconds(Int(TVRemoteSeekCalculator.previewVisibleDurationNanoseconds)))
             guard !Task.isCancelled, let self else { return }
             if self.activeRemoteSeekHold == nil {
                 self.remoteSeekPreview = nil
@@ -917,8 +917,8 @@ public final class TVVideoPlayerViewModel {
     /// (`bucketTimestamp`) so nearby positions share one cached frame. Short settle and cooldown
     /// delays throttle decoding, which is more expensive for extended (VLC) streams over SMB.
     private func runThumbnailWorkerLoop() async {
-        let settleNs: UInt64 = activeEngineKind == .extended ? 140_000_000 : 75_000_000
-        try? await Task.sleep(nanoseconds: settleNs)
+        let settleDuration: Duration = activeEngineKind == .extended ? .milliseconds(140) : .milliseconds(75)
+        try? await Task.sleep(for: settleDuration)
 
         while !Task.isCancelled {
             guard let request = latestThumbnailRequest else {
@@ -978,13 +978,13 @@ public final class TVVideoPlayerViewModel {
             }
 
             if latestThumbnailRequest != nil {
-                let cooldownNs: UInt64
+                let cooldownDuration: Duration
                 if request.engineKind == .extended && !request.url.isFileURL {
-                    cooldownNs = 300_000_000
+                    cooldownDuration = .milliseconds(300)
                 } else {
-                    cooldownNs = 60_000_000
+                    cooldownDuration = .milliseconds(60)
                 }
-                try? await Task.sleep(nanoseconds: cooldownNs)
+                try? await Task.sleep(for: cooldownDuration)
             }
         }
 
@@ -1154,7 +1154,7 @@ public final class TVVideoPlayerViewModel {
         guard isPlaying, !isScrubbing, !isShowingTracksSheet, !isShowingChaptersSheet, !isShowingSpeedSheet, !isRemoteSeekHolding else { return }
 
         autoHideTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, let self else { return }
             if self.isPlaying && !self.isScrubbing && !self.isShowingTracksSheet && !self.isShowingChaptersSheet && !self.isShowingSpeedSheet && !self.isRemoteSeekHolding {
                 withAnimation(.snappy) {
@@ -1179,7 +1179,7 @@ public final class TVVideoPlayerViewModel {
         progressPersistenceTask?.cancel()
         progressPersistenceTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled, let self else { return }
                 if self.isPlaying {
                     let itemID = self.currentItem.id

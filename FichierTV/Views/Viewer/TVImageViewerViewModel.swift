@@ -320,7 +320,7 @@ public final class TVImageViewerViewModel {
         slideshowTask?.cancel()
         slideshowTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: UInt64(self.slideshowInterval * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(self.slideshowInterval))
             guard !Task.isCancelled, self.isSlideshowPlaying else { return }
 
             // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve

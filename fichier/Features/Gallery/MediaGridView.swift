@@ -1115,7 +1115,7 @@ struct MediaGridView: View {
             viewModel.batchStatusToast = message
         }
         Task {
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            try? await Task.sleep(for: .seconds(2.5))
             withAnimation {
                 viewModel.batchStatusToast = nil
             }
