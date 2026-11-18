@@ -304,7 +304,7 @@ struct MediaGridView: View {
             }
         }
         .sheet(isPresented: $viewModel.showingSettings) {
-            AppSettingsView()
+            AppSettingsView(manager: viewModel.manager)
         }
         #if !os(tvOS)
         .sheet(isPresented: Binding(

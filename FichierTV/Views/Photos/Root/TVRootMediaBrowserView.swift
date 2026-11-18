@@ -44,8 +44,8 @@ public struct TVRootMediaBrowserView: View {
                     TVBrowserDestinationView(sourceID: sourceID, folder: folder)
                 case .imageViewer(let item, let context, let pagination):
                     TVImageViewerView(initialItem: item, items: context, paginationContext: pagination)
-                case .videoPlayer(let item, let context):
-                    TVVideoPlayerView(initialItem: item, videos: context)
+                case .videoPlayer(let item, let context, let pagination):
+                    TVVideoPlayerView(initialItem: item, videos: context, paginationContext: pagination)
                 case .addServer:
                     TVServerFormView(mode: .add)
                 case .editServer(let server):

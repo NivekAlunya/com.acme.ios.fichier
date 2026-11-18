@@ -7,6 +7,7 @@
 import SwiftUI
 import Observation
 import AVFoundation
+import os
 import FichierKit
 
 /// Master state coordinator for the tvOS video player, handling dual playback engines (`AVPlayerEngine` and `TVVLCPlayerEngine`),
@@ -14,14 +15,29 @@ import FichierKit
 @Observable
 @MainActor
 public final class TVVideoPlayerViewModel {
+    private static let logger = Logger(subsystem: "com.acme.ios.fichiertv", category: "videoPlayerViewModel")
     // swiftlint:disable:next no_legacy_dispatch_queue
     private static let smbResourceLoaderQueue = DispatchQueue(
         label: "com.acme.ios.fichier.tv.videoloader",
         qos: .userInitiated
     )
 
-    public let videos: [MediaSourceItem]
+    public private(set) var videos: [MediaSourceItem]
     public private(set) var currentIndex: Int
+    private let paginationContext: TVViewerPaginationContext?
+    private var paginationSource: (any MediaSource)?
+    private var nextPageToFetch: Int
+    private var hasMoreSourcePages: Bool
+    private var seenItemIDs: Set<String>
+    private var paginationTask: Task<Void, Never>?
+
+    public var canPlayPrevious: Bool {
+        currentIndex > 0
+    }
+
+    public var canPlayNext: Bool {
+        currentIndex < videos.count - 1 || hasMoreSourcePages
+    }
 
     public let nativeEngine: AVPlayerEngine
     public let extendedEngine: TVVLCPlayerEngine
@@ -118,6 +134,7 @@ public final class TVVideoPlayerViewModel {
     public init(
         initialItem: MediaSourceItem,
         videos: [MediaSourceItem],
+        paginationContext: TVViewerPaginationContext? = nil,
         playbackStore: any VideoPlaybackStoreProtocol = VideoPlaybackStore.shared,
         resolver: any MediaSourceResolverProtocol = DefaultMediaSourceResolver.shared,
         remoteCommandBridge: any TVRemoteCommandHandling = TVSystemRemoteCommandBridge(),
@@ -125,8 +142,13 @@ public final class TVVideoPlayerViewModel {
         uptimeProvider: @escaping @MainActor @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let filteredVideos = videos.filter { $0.type == .video }
-        self.videos = filteredVideos.isEmpty ? [initialItem] : filteredVideos
-        self.currentIndex = self.videos.firstIndex(where: { $0.id == initialItem.id }) ?? 0
+        let resolvedVideos = filteredVideos.isEmpty ? [initialItem] : filteredVideos
+        self.videos = resolvedVideos
+        self.currentIndex = resolvedVideos.firstIndex(where: { $0.id == initialItem.id }) ?? 0
+        self.paginationContext = paginationContext
+        self.nextPageToFetch = paginationContext?.nextPage ?? 0
+        self.hasMoreSourcePages = paginationContext?.canLoadMore ?? false
+        self.seenItemIDs = Set(resolvedVideos.map(\.id))
 
         let native = AVPlayerEngine()
         let extended = TVVLCPlayerEngine()
@@ -1136,6 +1158,9 @@ public final class TVVideoPlayerViewModel {
             saveCurrentProgressSnapshot()
             currentIndex += 1
             loadCurrentVideo()
+            scheduleLookaheadIfNeeded()
+        } else if hasMoreSourcePages {
+            loadMoreAndAdvance()
         }
     }
 
@@ -1284,6 +1309,9 @@ public final class TVVideoPlayerViewModel {
         if currentIndex < videos.count - 1 {
             currentIndex += 1
             loadCurrentVideo()
+            scheduleLookaheadIfNeeded()
+        } else if hasMoreSourcePages {
+            loadMoreAndAdvance()
         }
     }
 
@@ -1467,6 +1495,81 @@ public final class TVVideoPlayerViewModel {
         resolvedMediaURL = url
     }
 
+    // MARK: - Multi-Page Source Lookahead & Video Pagination
+
+    private func scheduleLookaheadIfNeeded() {
+        let bufferedAhead = (videos.count - 1) - currentIndex
+        guard hasMoreSourcePages, bufferedAhead <= 5, paginationTask == nil else { return }
+        paginationTask = Task { [weak self] in
+            guard let self else { return }
+            await self.performFetchLookaheadVideos(targetBufferCount: 6)
+        }
+    }
+
+    private func loadMoreAndAdvance() {
+        guard paginationTask == nil else { return }
+        paginationTask = Task { [weak self] in
+            guard let self else { return }
+            await self.performFetchLookaheadVideos(targetBufferCount: 1, advanceWhenReady: true)
+        }
+    }
+
+    private func performFetchLookaheadVideos(targetBufferCount: Int, advanceWhenReady: Bool = false) async {
+        defer { paginationTask = nil }
+        guard hasMoreSourcePages, let context = paginationContext else { return }
+
+        if paginationSource == nil {
+            paginationSource = await resolver.resolve(sourceID: context.sourceID)
+        }
+        guard !Task.isCancelled, let source = paginationSource else {
+            hasMoreSourcePages = false
+            return
+        }
+
+        while !Task.isCancelled && hasMoreSourcePages {
+            let bufferedAhead = (videos.count - 1) - currentIndex
+            if !advanceWhenReady && bufferedAhead >= targetBufferCount {
+                break
+            }
+
+            let page = nextPageToFetch
+            do {
+                let fetched = try await source.fetchItems(
+                    in: context.folder,
+                    sortBy: context.sortKey,
+                    order: context.sortOrder,
+                    page: page,
+                    pageSize: context.pageSize
+                )
+                guard !Task.isCancelled else { break }
+
+                nextPageToFetch = page + 1
+                if fetched.count < context.pageSize {
+                    hasMoreSourcePages = false
+                }
+
+                let newVideos = fetched.filter { $0.type == .video && !seenItemIDs.contains($0.id) }
+                for video in newVideos {
+                    seenItemIDs.insert(video.id)
+                }
+
+                if !newVideos.isEmpty {
+                    videos.append(contentsOf: newVideos)
+                    if advanceWhenReady && currentIndex < videos.count - 1 {
+                        saveCurrentProgressSnapshot()
+                        currentIndex += 1
+                        loadCurrentVideo()
+                        break
+                    }
+                }
+            } catch {
+                Self.logger.error("Failed to paginate video source: \(error.localizedDescription)")
+                hasMoreSourcePages = false
+                break
+            }
+        }
+    }
+
     public func tearDown() {
         saveCurrentProgressSnapshot()
         clearRemoteSeekState()
@@ -1485,6 +1588,8 @@ public final class TVVideoPlayerViewModel {
         autoHideTask = nil
         progressPersistenceTask?.cancel()
         progressPersistenceTask = nil
+        paginationTask?.cancel()
+        paginationTask = nil
         nativeEngine.tearDown()
         extendedEngine.tearDown()
         syncState(from: activeEngine)

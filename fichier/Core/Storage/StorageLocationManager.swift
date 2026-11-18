@@ -80,7 +80,11 @@ public final class StorageLocationManager {
         set {
             operationErrorMessage = newValue
             if let newValue {
-                connectionState = .failed(newValue)
+                if case .connected = connectionState {
+                    // Retain active connection when recording an incidental operation failure
+                } else {
+                    connectionState = .failed(newValue)
+                }
             } else if case .failed = connectionState {
                 connectionState = .idle
             }
@@ -244,6 +248,17 @@ public final class StorageLocationManager {
         // Clear in-memory image caches on low memory warnings to prevent OOM terminations
         NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task {
+                await self.worker.clearMemoryCache()
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .clearAllMemoryCaches,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -922,6 +937,7 @@ public final class StorageLocationManager {
         currentLocation = nil
         
         connectionState = .idle
+        isLoading = false
         operationErrorMessage = nil
         selectedShare = nil
         folderTree = []

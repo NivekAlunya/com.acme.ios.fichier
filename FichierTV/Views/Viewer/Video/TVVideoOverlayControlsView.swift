@@ -29,6 +29,8 @@ public struct TVVideoOverlayControlsView: View {
     public let onSwipeScrubEnded: @MainActor () -> Void
     public let onSwipeScrubCancelled: @MainActor () -> Void
     public let onScrubberSelect: () -> Void
+    public let canPrevious: Bool
+    public let canNext: Bool
     public let onPrevious: () -> Void
     public let onTogglePlayPause: () -> Void
     public let onNext: () -> Void
@@ -61,6 +63,8 @@ public struct TVVideoOverlayControlsView: View {
         onSwipeScrubEnded: @escaping @MainActor () -> Void = {},
         onSwipeScrubCancelled: @escaping @MainActor () -> Void = {},
         onScrubberSelect: @escaping () -> Void,
+        canPrevious: Bool = true,
+        canNext: Bool = true,
         onPrevious: @escaping () -> Void,
         onTogglePlayPause: @escaping () -> Void,
         onNext: @escaping () -> Void,
@@ -90,6 +94,8 @@ public struct TVVideoOverlayControlsView: View {
         self.onSwipeScrubEnded = onSwipeScrubEnded
         self.onSwipeScrubCancelled = onSwipeScrubCancelled
         self.onScrubberSelect = onScrubberSelect
+        self.canPrevious = canPrevious
+        self.canNext = canNext
         self.onPrevious = onPrevious
         self.onTogglePlayPause = onTogglePlayPause
         self.onNext = onNext
@@ -265,6 +271,7 @@ public struct TVVideoOverlayControlsView: View {
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .previous)
+            .disabled(!canPrevious)
             .accessibilityLabel(Text(.Strings.tvVideoControlsPreviousVideoAccessibility))
             .accessibilityIdentifier("video_previous_button")
 
@@ -284,6 +291,7 @@ public struct TVVideoOverlayControlsView: View {
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .next)
+            .disabled(!canNext)
             .accessibilityLabel(Text(.Strings.tvVideoControlsNextVideoAccessibility))
             .accessibilityIdentifier("video_next_button")
 

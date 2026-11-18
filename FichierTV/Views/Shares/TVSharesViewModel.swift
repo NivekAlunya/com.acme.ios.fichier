@@ -5,12 +5,14 @@
 
 import Foundation
 import Observation
+import os
 import FichierKit
 
 /// State coordinator managing the list of configured SMB server cards and live reachability probes.
 @Observable
 @MainActor
 public final class TVSharesViewModel {
+    private static let logger = Logger(subsystem: "com.acme.ios.fichiertv", category: "sharesViewModel")
     public private(set) var serverCards: [ServerCardItem] = []
     public private(set) var isLoading: Bool = false
     public var selectedServerForAction: ServerCardItem?
@@ -58,7 +60,7 @@ public final class TVSharesViewModel {
         do {
             try await store.removeServer(server)
         } catch {
-            // Server removal error handled gracefully
+            Self.logger.error("Failed to remove server \(server.id): \(error.localizedDescription)")
         }
         await resolver.invalidateSource(id: server.id)
         serverCards.removeAll { $0.id == server.id }

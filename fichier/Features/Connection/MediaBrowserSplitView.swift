@@ -203,7 +203,7 @@ public struct MediaBrowserSplitView: View {
         }
         #endif
         .sheet(isPresented: $showingSettings) {
-            AppSettingsView()
+            AppSettingsView(manager: storageManager)
         }
         .sheet(isPresented: $showingAddRemote) {
             SMBConnectWithDiscoveryView(smbManager: storageManager)

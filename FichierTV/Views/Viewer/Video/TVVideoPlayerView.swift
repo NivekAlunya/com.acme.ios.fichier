@@ -20,11 +20,19 @@ public struct TVVideoPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(initialItem: MediaSourceItem, videos: [MediaSourceItem]) {
+    public init(
+        initialItem: MediaSourceItem,
+        videos: [MediaSourceItem],
+        paginationContext: TVViewerPaginationContext? = nil
+    ) {
         // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
         // While State(wrappedValue:) evaluates on every init, @State retains only the
         // original state object across renders and discards transient allocations.
-        _viewModel = State(wrappedValue: TVVideoPlayerViewModel(initialItem: initialItem, videos: videos))
+        _viewModel = State(wrappedValue: TVVideoPlayerViewModel(
+            initialItem: initialItem,
+            videos: videos,
+            paginationContext: paginationContext
+        ))
     }
 
     init(viewModel: TVVideoPlayerViewModel) {
@@ -151,6 +159,8 @@ public struct TVVideoPlayerView: View {
                     onScrubberSelect: {
                         viewModel.activateScrubberSelect()
                     },
+                    canPrevious: viewModel.canPlayPrevious,
+                    canNext: viewModel.canPlayNext,
                     onPrevious: { viewModel.previousVideo() },
                     onTogglePlayPause: { viewModel.togglePlayPause() },
                     onNext: { viewModel.nextVideo() },

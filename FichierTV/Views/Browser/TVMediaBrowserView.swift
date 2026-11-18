@@ -302,7 +302,11 @@ public struct TVMediaBrowserView: View {
                 pagination: viewModel.paginationContext
             )
         case .video:
-            return .videoPlayer(item: item, context: viewModel.items)
+            return .videoPlayer(
+                item: item,
+                context: viewModel.items,
+                pagination: viewModel.paginationContext
+            )
         }
     }
 }

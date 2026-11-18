@@ -19,7 +19,11 @@ public enum TVNavigationDestination: Hashable, Sendable {
     )
 
     /// Pushes the video player with the selected item and its playlist context.
-    case videoPlayer(item: MediaSourceItem, context: [MediaSourceItem])
+    case videoPlayer(
+        item: MediaSourceItem,
+        context: [MediaSourceItem],
+        pagination: TVViewerPaginationContext? = nil
+    )
 
     /// Presents the full-screen form to add a new SMB server.
     case addServer

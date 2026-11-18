@@ -18,6 +18,7 @@ import FichierKit
 /// 6. **Diagnostics**: Share the most recent crash report captured by `CrashReporting` (a placeholder is shown when none exists).
 /// 7. **About**: Application version, build number, and SMB protocol support details.
 struct AppSettingsView: View {
+    var manager: StorageLocationManager?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     
@@ -211,6 +212,10 @@ struct AppSettingsView: View {
         isClearingCache = true
         Task {
             await MediaCacheManager.shared.clearAllCacheAsync()
+            if let manager {
+                await manager.worker.clearMemoryCache()
+            }
+            NotificationCenter.default.post(name: .clearAllMemoryCaches, object: nil)
             AppHapticFeedback.medium()
             let newSize = await MediaCacheManager.shared.formattedCacheSize()
             cacheSizeString = newSize

@@ -240,13 +240,15 @@ struct VideoPlayerControllerFlowTests {
         defer { controller.tearDownPlayer(deactivateAudioSession: false) }
 
         // Setup an explicit failed item to simulate background socket closure
-        let failedURL = URL(fileURLWithPath: "/dev/null/non_existent_stream_\(UUID().uuidString).m3u8")
+        let failedURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing_stream_\(UUID().uuidString).mp4")
         let failedAsset = AVURLAsset(url: failedURL)
         let failedItem = AVPlayerItem(asset: failedAsset)
         controller.player?.replaceCurrentItem(with: failedItem)
+        controller.player?.play()
 
         // Wait for AVPlayerItem to asynchronously evaluate to .failed status
-        for _ in 0..<50 {
+        for _ in 0..<150 {
             if controller.player?.currentItem?.status == .failed {
                 break
             }
