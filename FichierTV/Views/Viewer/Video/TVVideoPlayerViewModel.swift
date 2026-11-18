@@ -67,6 +67,7 @@ public final class TVVideoPlayerViewModel {
     private var remoteSeekHoldTask: Task<Void, Never>?
     private var remoteSeekPreviewDismissTask: Task<Void, Never>?
     private var thumbnailWorkerTask: Task<Void, Never>?
+    private var assetRegistrationTask: Task<Void, Never>?
     private var resolvedMediaURL: URL?
     private var directSMBURL: URL?
     private var vlcPlaybackOptions: VLCPlaybackOptions?
@@ -165,6 +166,8 @@ public final class TVVideoPlayerViewModel {
         progressPersistenceTask = nil
         autoHideTask?.cancel()
         autoHideTask = nil
+        assetRegistrationTask?.cancel()
+        assetRegistrationTask = nil
 
         smbResourceLoaderDelegate?.cancelAll()
         smbResourceLoaderDelegate = nil
@@ -247,6 +250,9 @@ public final class TVVideoPlayerViewModel {
     /// Reveals the HUD overlay if hidden and resets auto-hide timing.
     public func revealOverlay() {
         resetInactivityTimer()
+        if let hold = activeRemoteSeekHold {
+            cancelRemoteSeek(isForward: hold.isForward, source: hold.source)
+        }
         guard !showOverlay else { return }
         withAnimation(.snappy) {
             showOverlay = true
@@ -1028,7 +1034,8 @@ public final class TVVideoPlayerViewModel {
         cachedBucketImages.removeAll()
         cachedBucketOrder.removeAll()
         let keyToInvalidate = currentItem.id
-        Task { [thumbnailProvider] in
+        assetRegistrationTask?.cancel()
+        assetRegistrationTask = Task { [thumbnailProvider] in
             await thumbnailProvider.invalidateAsset(forAssetKey: keyToInvalidate)
         }
     }
@@ -1292,10 +1299,22 @@ public final class TVVideoPlayerViewModel {
         let fallbackKind: PlayerEngineKind = (failedKind == .native) ? .extended : .native
         activeEngine.tearDown()
 
-        if fallbackKind == .extended, let directSMBURL {
-            resolvedMediaURL = directSMBURL
-            mount(url: directSMBURL, kind: .extended)
-            return
+        if fallbackKind == .extended {
+            smbResourceLoaderDelegate?.cancelAll()
+            smbResourceLoaderDelegate = nil
+            if let directSMBURL {
+                resolvedMediaURL = directSMBURL
+                mount(url: directSMBURL, kind: .extended)
+                return
+            } else if currentItem.sourceID != nil, currentItem.smbShare != nil, currentItem.smbPath != nil {
+                loadSMBVideo(item: currentItem, preferredKind: .extended)
+                return
+            }
+        } else if fallbackKind == .native {
+            if directSMBURL != nil || (currentItem.sourceID != nil && currentItem.smbShare != nil && currentItem.smbPath != nil) {
+                loadSMBVideo(item: currentItem, preferredKind: .native)
+                return
+            }
         }
 
         mount(url: url, kind: fallbackKind)
@@ -1386,6 +1405,7 @@ public final class TVVideoPlayerViewModel {
             guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
 
             guard let sharesSource = await self.resolver.resolve(sourceID: sourceID) as? SharesMediaSource else {
+                guard !Task.isCancelled, self.currentItem.id == itemID else { return }
                 self.playbackState = .failed("Unable to resolve SMB server connection.")
                 self.errorMessage = "Unable to resolve SMB server connection."
                 return
@@ -1396,6 +1416,7 @@ public final class TVVideoPlayerViewModel {
                 share: share,
                 relativePath: path
             ) else {
+                guard !Task.isCancelled, self.currentItem.id == itemID else { return }
                 self.playbackState = .failed("Unable to construct direct SMB playback URL.")
                 self.errorMessage = "Unable to construct direct SMB playback URL."
                 return
@@ -1425,9 +1446,10 @@ public final class TVVideoPlayerViewModel {
 
                 let asset = AVURLAsset(url: streamURL)
                 asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
-                Task { [weak self] in
+                self.assetRegistrationTask?.cancel()
+                self.assetRegistrationTask = Task { [weak self, thumbnailProvider] in
                     guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
-                    await self.thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
+                    await thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
                 }
 
                 let playerItem = AVPlayerItem(asset: asset)
@@ -1457,6 +1479,8 @@ public final class TVVideoPlayerViewModel {
         deactivateRemoteCommandBridge()
         mediaLoadTask?.cancel()
         mediaLoadTask = nil
+        assetRegistrationTask?.cancel()
+        assetRegistrationTask = nil
         autoHideTask?.cancel()
         autoHideTask = nil
         progressPersistenceTask?.cancel()

@@ -47,6 +47,16 @@ public final class TVPlayerRemoteCatcherUIView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    public override func willMove(toWindow newWindow: UIWindow?) {
+        super.willMove(toWindow: newWindow)
+        if newWindow == nil, let activeID = activeSeekPressID {
+            let directionForward = activeSeekIsForward
+            activeSeekPressID = nil
+            consumedPressIDs.remove(activeID)
+            onSeekPressCancelled?(directionForward)
+        }
+    }
+
     public override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil && isFocusCatchingEnabled {

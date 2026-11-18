@@ -246,4 +246,30 @@ struct TVVideoPlayerViewModelTests {
         }
         #expect(viewModel.activeEngineKind == .native)
     }
+
+    @Test("Revealing overlay cancels active remote seek hold cleanly")
+    @MainActor
+    func testRevealOverlayCancelsActiveRemoteHold() {
+        let video = MediaSourceItem(
+            id: "hold-v1",
+            name: "sample.mp4",
+            path: "sample.mp4",
+            type: .video,
+            localURL: URL(fileURLWithPath: "/tmp/sample.mp4")
+        )
+        let viewModel = TVVideoPlayerViewModel(
+            initialItem: video,
+            videos: [video],
+            playbackStore: StubVideoPlaybackStore(),
+            resolver: StubMediaSourceResolver()
+        )
+        defer { viewModel.tearDown() }
+
+        viewModel.beginRemoteSeek(isForward: true, source: .siriRemoteDirection, timestamp: 100.0)
+        #expect(viewModel.isRemoteSeekHolding)
+
+        viewModel.revealOverlay()
+        #expect(viewModel.showOverlay)
+        #expect(!viewModel.isRemoteSeekHolding)
+    }
 }

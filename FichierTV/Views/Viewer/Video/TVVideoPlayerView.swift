@@ -46,8 +46,8 @@ public struct TVVideoPlayerView: View {
                     .ignoresSafeArea()
             }
 
-            // Hidden-overlay remote catch target (removed when HUD or error overlay shows so buttons receive Focus Engine focus)
-            if !viewModel.showOverlay && viewModel.errorMessage == nil {
+            // Hidden-overlay remote catch target (kept mounted during active holds to capture release events; removed when HUD or error overlay shows so buttons receive Focus Engine focus)
+            if (!viewModel.showOverlay && viewModel.errorMessage == nil) || viewModel.isRemoteSeekHolding {
                 TVPlayerRemoteCatcherView(
                     isEnabled: !viewModel.showOverlay && viewModel.errorMessage == nil && !viewModel.isShowingTracksSheet && !viewModel.isShowingChaptersSheet && !viewModel.isShowingSpeedSheet,
                     shouldRequestFocus: isPlayerFocused,
