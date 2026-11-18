@@ -69,5 +69,56 @@ final class TVMediaItemFormatStyleTests: XCTestCase {
         XCTAssertEqual(TVMediaItemFormatStyle.pictogramName(for: photoItem), "photo.fill")
         XCTAssertEqual(TVMediaItemFormatStyle.pictogramName(for: folderItem), "folder.fill")
     }
+    
+    func testFormatInfo() {
+        let pdfItem = MediaSourceItem(id: "1", name: "document.pdf", path: "document.pdf", type: .image)
+        let gifItem = MediaSourceItem(id: "2", name: "animation.gif", path: "animation.gif", type: .image)
+        let emptyExtItem = MediaSourceItem(id: "3", name: "unknown", path: "unknown", type: .image)
+        let uppercaseExtItem = MediaSourceItem(id: "4", name: "PHOTO.PNG", path: "PHOTO.PNG", type: .image)
+        let trailingPunctuationItem = MediaSourceItem(id: "5", name: "file.jpg..", path: "file.jpg..", type: .image)
+        let folderWithSize = MediaSourceItem(id: "6", name: "Vacation", path: "Vacation", type: .folder, size: 42)
+        let emptyFolder = MediaSourceItem(id: "7", name: "Empty", path: "Empty", type: .folder, size: 0)
+        let videoItem = MediaSourceItem(id: "8", name: "clip.mp4", path: "clip.mp4", type: .video)
+
+        let pdfInfo = TVMediaItemFormatStyle.formatInfo(for: pdfItem)
+        XCTAssertEqual(pdfInfo.label, "PDF")
+        XCTAssertEqual(pdfInfo.color, Color(red: 0.90, green: 0.25, blue: 0.25))
+        XCTAssertEqual(pdfInfo.pictogramName, "photo.fill")
+
+        let gifInfo = TVMediaItemFormatStyle.formatInfo(for: gifItem)
+        XCTAssertEqual(gifInfo.label, "GIF")
+        XCTAssertEqual(gifInfo.color, Color.orange)
+        XCTAssertEqual(gifInfo.pictogramName, "photo.fill")
+
+        let emptyExtInfo = TVMediaItemFormatStyle.formatInfo(for: emptyExtItem)
+        XCTAssertEqual(emptyExtInfo.label, "PHOTO")
+        XCTAssertEqual(emptyExtInfo.color, Color(white: 0.30))
+        XCTAssertEqual(emptyExtInfo.pictogramName, "photo.fill")
+
+        let uppercaseExtInfo = TVMediaItemFormatStyle.formatInfo(for: uppercaseExtItem)
+        XCTAssertEqual(uppercaseExtInfo.label, "PNG")
+        XCTAssertEqual(uppercaseExtInfo.color, Color.teal)
+        XCTAssertEqual(uppercaseExtInfo.pictogramName, "photo.fill")
+
+        let trailingPunctuationInfo = TVMediaItemFormatStyle.formatInfo(for: trailingPunctuationItem)
+        XCTAssertEqual(trailingPunctuationInfo.label, "JPG")
+        XCTAssertEqual(trailingPunctuationInfo.color, Color.green)
+        XCTAssertEqual(trailingPunctuationInfo.pictogramName, "photo.fill")
+
+        let folderWithSizeInfo = TVMediaItemFormatStyle.formatInfo(for: folderWithSize)
+        XCTAssertEqual(folderWithSizeInfo.label, "42")
+        XCTAssertEqual(folderWithSizeInfo.color, Color(white: 0.35))
+        XCTAssertEqual(folderWithSizeInfo.pictogramName, "folder.fill")
+
+        let emptyFolderInfo = TVMediaItemFormatStyle.formatInfo(for: emptyFolder)
+        XCTAssertEqual(emptyFolderInfo.label, "FOLDER")
+        XCTAssertEqual(emptyFolderInfo.color, Color(white: 0.35))
+        XCTAssertEqual(emptyFolderInfo.pictogramName, "folder.fill")
+
+        let videoInfo = TVMediaItemFormatStyle.formatInfo(for: videoItem)
+        XCTAssertEqual(videoInfo.label, "MP4")
+        XCTAssertEqual(videoInfo.color, Color.blue)
+        XCTAssertEqual(videoInfo.pictogramName, "play.fill")
+    }
 }
 #endif

@@ -61,5 +61,44 @@ final class MediaItemFormatStyleTests: XCTestCase {
         XCTAssertEqual(MediaItemFormatStyle.pictogramName(for: photoItem), "photo.fill")
         XCTAssertEqual(MediaItemFormatStyle.pictogramName(for: pdfItem), "doc.text.fill")
     }
+    
+    func testFormatInfo() {
+        let pdfItem = MediaItem(name: "document.pdf", path: "document.pdf", isDirectory: false)
+        let gifItem = MediaItem(name: "animation.gif", path: "animation.gif", isDirectory: false)
+        let emptyExtItem = MediaItem(name: "unknown", path: "unknown", isDirectory: false)
+        let uppercaseExtItem = MediaItem(name: "PHOTO.PNG", path: "PHOTO.PNG", isDirectory: false)
+        let trailingPunctuationItem = MediaItem(name: "file.jpg..", path: "file.jpg..", isDirectory: false)
+        let videoItem = MediaItem(name: "clip.mp4", path: "clip.mp4", isDirectory: false)
+
+        let pdfInfo = MediaItemFormatStyle.formatInfo(for: pdfItem)
+        XCTAssertEqual(pdfInfo.label, "PDF")
+        XCTAssertEqual(pdfInfo.color, Color(red: 0.90, green: 0.25, blue: 0.25))
+        XCTAssertEqual(pdfInfo.pictogramName, "doc.text.fill")
+
+        let gifInfo = MediaItemFormatStyle.formatInfo(for: gifItem)
+        XCTAssertEqual(gifInfo.label, "GIF")
+        XCTAssertEqual(gifInfo.color, Color.orange)
+        XCTAssertEqual(gifInfo.pictogramName, "photo.fill")
+
+        let emptyExtInfo = MediaItemFormatStyle.formatInfo(for: emptyExtItem)
+        XCTAssertEqual(emptyExtInfo.label, "PHOTO")
+        XCTAssertEqual(emptyExtInfo.color, Color(white: 0.30))
+        XCTAssertEqual(emptyExtInfo.pictogramName, "photo.fill")
+
+        let uppercaseExtInfo = MediaItemFormatStyle.formatInfo(for: uppercaseExtItem)
+        XCTAssertEqual(uppercaseExtInfo.label, "PNG")
+        XCTAssertEqual(uppercaseExtInfo.color, Color.teal)
+        XCTAssertEqual(uppercaseExtInfo.pictogramName, "photo.fill")
+
+        let trailingPunctuationInfo = MediaItemFormatStyle.formatInfo(for: trailingPunctuationItem)
+        XCTAssertEqual(trailingPunctuationInfo.label, "JPG")
+        XCTAssertEqual(trailingPunctuationInfo.color, Color.green)
+        XCTAssertEqual(trailingPunctuationInfo.pictogramName, "photo.fill")
+
+        let videoInfo = MediaItemFormatStyle.formatInfo(for: videoItem)
+        XCTAssertEqual(videoInfo.label, "MP4")
+        XCTAssertEqual(videoInfo.color, Color.blue)
+        XCTAssertEqual(videoInfo.pictogramName, "play.fill")
+    }
 }
 #endif
