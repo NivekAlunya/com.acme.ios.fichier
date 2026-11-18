@@ -995,16 +995,7 @@ public final class VideoPlayerController {
     
     /// Formats a time in seconds into a standard digital clock string (e.g. "1:23" or "1:02:45").
     public func formatSeconds(_ totalSeconds: Double) -> String {
-        guard totalSeconds.isFinite && !totalSeconds.isNaN && totalSeconds >= 0 else { return "0:00" }
-        let secs = Int(totalSeconds)
-        let hours = secs / 3600
-        let minutes = (secs % 3600) / 60
-        let seconds = secs % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%d:%02d", minutes, seconds)
-        }
+        MediaFormatHelper.formatTimestamp(totalSeconds, zeroPaddedHours: false, zeroPaddedMinutes: false)
     }
     
     /// Schedules automatic fading of HUD overlay controls after a period of user inactivity.

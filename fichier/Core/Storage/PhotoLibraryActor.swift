@@ -256,18 +256,9 @@ public actor PhotoLibraryActor {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
         guard let asset = fetch.firstObject else { return nil }
 
-        let dimensions = "\(asset.pixelWidth) × \(asset.pixelHeight)"
+        let dimensions = MediaFormatHelper.formatDimensions(width: asset.pixelWidth, height: asset.pixelHeight)
         let megapixels = String(format: "%.1f MP", Double(asset.pixelWidth * asset.pixelHeight) / 1_000_000.0)
-
-        let dateTaken: String?
-        if let creation = asset.creationDate {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .short
-            dateTaken = formatter.string(from: creation)
-        } else {
-            dateTaken = nil
-        }
+        let dateTaken: String? = asset.creationDate.map { MediaFormatHelper.formatDate($0) }
 
         let primaryResource = PHAssetResource.assetResources(for: asset).first
         let fileName = primaryResource?.originalFilename ?? (asset.value(forKey: "filename") as? String) ?? item.name
@@ -275,7 +266,7 @@ public actor PhotoLibraryActor {
         let fileFormat = ext.isEmpty ? (asset.mediaType == .video ? "MOV" : "HEIC") : ext
 
         let sizeInBytes = item.size > 0 ? item.size : ((primaryResource?.value(forKey: "fileSize") as? Int64) ?? Self.estimateFileSize(for: asset))
-        let formattedSize = sizeInBytes > 0 ? ByteCountFormatter.string(fromByteCount: sizeInBytes, countStyle: .file) : "—"
+        let formattedSize = sizeInBytes > 0 ? MediaFormatHelper.formatByteCount(sizeInBytes) : "—"
 
         return PictureEXIFData(
             fileName: fileName,
