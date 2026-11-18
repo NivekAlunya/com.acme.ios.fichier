@@ -359,6 +359,7 @@
 /* Begin PBXShellScriptBuildPhase section */
 		D14BDE20309B4039007D8134 /* Run SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
 			name = "Run SwiftLint";
 			shellPath = /bin/sh;
 			shellScript = (

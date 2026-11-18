@@ -175,6 +175,20 @@ public final class TVVideoPlayerViewModel {
         let initialKind = preferredEngine ?? preferredEngineKind(for: item)
         setActiveEngine(kind: initialKind)
 
+        // Link video thumbnail as the folder's video icon when played
+        let playedItem = item
+        Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let req = TVSeekThumbnailRequest(
+                item: playedItem,
+                timestamp: 0.0,
+                targetSize: CGSize(width: 440, height: 260)
+            )
+            if let thumb = await self.thumbnailProvider.cachedThumbnail(for: req) ?? (await self.thumbnailProvider.thumbnail(for: req)) {
+                playedItem.linkThumbnailAsFolderIcon(thumb)
+            }
+        }
+
         if let localURL = item.localURL {
             resolvedMediaURL = localURL
             mount(url: localURL, kind: initialKind)

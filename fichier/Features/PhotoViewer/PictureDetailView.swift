@@ -260,6 +260,13 @@ public struct PictureDetailView: View {
                         self.viewModel.currentImage = result.image
                         if let img = result.image {
                             self.viewModel.slideImageCache[targetID] = img
+                            MediaCacheManager.shared.linkFolderIcon(
+                                img,
+                                childPath: self.viewModel.currentItem.path,
+                                shareName: self.viewModel.currentItem.shareName,
+                                connectionID: self.viewModel.currentItem.connectionID,
+                                isVideo: false
+                            )
                         }
                     }
                 }

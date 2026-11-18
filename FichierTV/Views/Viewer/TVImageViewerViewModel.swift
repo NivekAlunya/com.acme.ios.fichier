@@ -241,6 +241,7 @@ public final class TVImageViewerViewModel {
         if let cached = imageCache[item.id] {
             self.currentImage = cached
             self.isLoadingImage = false
+            item.linkThumbnailAsFolderIcon(cached)
             prefetchNeighbors()
             return
         }
@@ -255,6 +256,7 @@ public final class TVImageViewerViewModel {
             if let loaded {
                 self.cacheImage(loaded, for: item.id)
                 self.currentImage = loaded
+                item.linkThumbnailAsFolderIcon(loaded)
             }
             self.isLoadingImage = false
             self.prefetchNeighbors()

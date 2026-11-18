@@ -14,7 +14,7 @@ struct SidebarFolderTreeView: View {
     var manager: StorageLocationManager
     
     /// Optional callback to reveal or navigate back to the sidebar programmatically.
-    var onOpenSidebar: (() -> Void)? = nil
+    var onOpenSidebar: (() -> Void)?
 
     /// Callback triggered when a folder node is selected by the user.
     let onSelectFolder: (MediaItem) -> Void

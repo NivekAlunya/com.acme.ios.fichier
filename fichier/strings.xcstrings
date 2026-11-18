@@ -4544,67 +4544,67 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld %%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld %%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@ : %4$@ / %5$@ (%6$lld %%)"
+            "value": "(%1$lld/%2$lld) %3$@ : %4$@ / %5$@ (%6$@)"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "nl": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@: %4$@ / %5$@ (%6$@)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@：%4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@：%4$@ / %5$@ (%6$@)"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "(%1$lld/%2$lld) %3$@：%4$@ / %5$@ (%6$lld%%)"
+            "value": "(%1$lld/%2$lld) %3$@：%4$@ / %5$@ (%6$@)"
           }
         }
       }
@@ -4688,67 +4688,67 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Laden: %1$@ / %2$@ (%3$lld %%)"
+            "value": "Laden: %1$@ / %2$@ (%3$@)"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Downloading: %1$@ / %2$@ (%3$lld%%)"
+            "value": "Downloading: %1$@ / %2$@ (%3$@)"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Descargando: %1$@ / %2$@ (%3$lld %%)"
+            "value": "Descargando: %1$@ / %2$@ (%3$@)"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Téléchargement : %1$@ / %2$@ (%3$lld %%)"
+            "value": "Téléchargement : %1$@ / %2$@ (%3$@)"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download: %1$@ / %2$@ (%3$lld%%)"
+            "value": "Download: %1$@ / %2$@ (%3$@)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ダウンロード中: %1$@ / %2$@ (%3$lld%%)"
+            "value": "ダウンロード中: %1$@ / %2$@ (%3$@)"
           }
         },
         "nl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Downloaden: %1$@ / %2$@ (%3$lld%%)"
+            "value": "Downloaden: %1$@ / %2$@ (%3$@)"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pobieranie: %1$@ / %2$@ (%3$lld%%)"
+            "value": "Pobieranie: %1$@ / %2$@ (%3$@)"
           }
         },
         "pt-PT": {
           "stringUnit": {
             "state": "translated",
-            "value": "A descarregar: %1$@ / %2$@ (%3$lld%%)"
+            "value": "A descarregar: %1$@ / %2$@ (%3$@)"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在下载：%1$@ / %2$@ (%3$lld%%)"
+            "value": "正在下载：%1$@ / %2$@ (%3$@)"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "正在下載：%1$@ / %2$@ (%3$lld%%)"
+            "value": "正在下載：%1$@ / %2$@ (%3$@)"
           }
         }
       }
