@@ -30,7 +30,7 @@ final class PictureDetailViewModel {
     // MARK: - Media & Metadata State
 
     var currentImage: UIImage?
-    var slideImageCache: [String: UIImage] = [:]
+    var slideImageCache = SlideImageCache()
     var activeMetadata: PictureEXIFData?
     var showingInfoSheet = false
     var saveStatusMessage: String?

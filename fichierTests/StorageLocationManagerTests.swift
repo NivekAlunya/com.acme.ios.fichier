@@ -293,5 +293,29 @@ final class StorageLocationManagerTests: XCTestCase {
         XCTAssertEqual(manager.selectedShare?.shareName, "Media")
         XCTAssertEqual(manager.selectedShare?.path, "")
     }
+
+    func testConnectionStateTransitionsAndDisconnect() async {
+        let manager = StorageLocationManager()
+        XCTAssertEqual(manager.connectionState, .idle)
+        XCTAssertFalse(manager.isConnected)
+        XCTAssertFalse(manager.isLoading)
+
+        manager.connectionState = .connecting
+        XCTAssertTrue(manager.isLoading)
+        XCTAssertFalse(manager.isConnected)
+
+        manager.connectionState = .connected
+        XCTAssertTrue(manager.isConnected)
+        XCTAssertFalse(manager.isLoading)
+
+        manager.connectionState = .failed("Network timeout")
+        XCTAssertFalse(manager.isConnected)
+        XCTAssertEqual(manager.errorMessage, "Network timeout")
+
+        await manager.disconnect()
+        XCTAssertEqual(manager.connectionState, .idle)
+        XCTAssertFalse(manager.isConnected)
+        XCTAssertNil(manager.errorMessage)
+    }
 }
 #endif

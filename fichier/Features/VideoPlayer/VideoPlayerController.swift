@@ -262,6 +262,7 @@ public final class VideoPlayerController {
                        relativePath: validItem.smbRelativePath
                    ) {
                     let password = await self.manager.password(for: server)
+                    guard !Task.isCancelled else { return }
                     let options = VLCPlaybackOptions(
                         username: server.username,
                         password: password
