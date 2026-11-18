@@ -16,6 +16,9 @@ struct FolderCardView: View {
     /// Linked thumbnail, if one exists.
     @State private var thumbnail: UIImage?
 
+    /// Tracks initial appearance to prevent duplicate loading on first render.
+    @State private var hasAppeared = false
+
     var body: some View {
         ZStack {
             background
@@ -31,6 +34,10 @@ struct FolderCardView: View {
             await loadThumbnail()
         }
         .onAppear {
+            guard hasAppeared else {
+                hasAppeared = true
+                return
+            }
             Task {
                 await loadThumbnail()
             }
