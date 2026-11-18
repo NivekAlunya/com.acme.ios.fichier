@@ -86,8 +86,10 @@ public struct TVSharesRootView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
-        .task {
-            await viewModel.loadServers()
+        .onAppear {
+            Task {
+                await viewModel.loadServers()
+            }
         }
     }
 
