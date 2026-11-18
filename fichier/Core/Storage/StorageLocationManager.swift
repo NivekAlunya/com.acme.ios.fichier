@@ -257,17 +257,6 @@ public final class StorageLocationManager {
             }
         }
         
-        NotificationCenter.default.addObserver(
-            forName: .clearAllMemoryCaches,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task {
-                await self.worker.clearMemoryCache()
-            }
-        }
-        
         // Execute disk cache hygiene sweep when app transitions to background
         NotificationCenter.default.addObserver(
             forName: UIApplication.didEnterBackgroundNotification,
@@ -278,6 +267,13 @@ public final class StorageLocationManager {
                 MediaCacheManager.shared.performMaintenanceSweep()
             }
         }
+    }
+    
+    // MARK: - Cache Management
+    
+    /// Flushes in-memory folder and thumbnail caches from the underlying worker actor.
+    public func clearMemoryCache() async {
+        await worker.clearMemoryCache()
     }
     
     // MARK: - Saved Connections Persistence

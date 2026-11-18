@@ -212,10 +212,7 @@ struct AppSettingsView: View {
         isClearingCache = true
         Task {
             await MediaCacheManager.shared.clearAllCacheAsync()
-            if let manager {
-                await manager.worker.clearMemoryCache()
-            }
-            NotificationCenter.default.post(name: .clearAllMemoryCaches, object: nil)
+            await manager?.clearMemoryCache()
             AppHapticFeedback.medium()
             let newSize = await MediaCacheManager.shared.formattedCacheSize()
             cacheSizeString = newSize
