@@ -917,8 +917,9 @@ public final class VideoPlayerController {
             saveStatusMessage = String(localized: .Strings.videoPlayerDownloadingVideo)
         }
         saveTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isSaving = false }
             do {
-                guard let self else { return }
                 let throttler = DownloadProgressThrottler()
                 let localURL = try await manager.fetchVideoURL(for: currentItem) { [weak self] bytes, total in
                     Task {
@@ -944,19 +945,18 @@ public final class VideoPlayerController {
                 #endif
                 guard !Task.isCancelled else { return }
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
+                    self.saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
                 }
             } catch {
                 guard !Task.isCancelled else { return }
                 withAnimation {
-                    saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
+                    self.saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
                 }
             }
-            isSaving = false
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
             withAnimation {
-                saveStatusMessage = nil
+                self.saveStatusMessage = nil
             }
         }
     }
