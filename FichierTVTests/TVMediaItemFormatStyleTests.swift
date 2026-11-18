@@ -101,8 +101,8 @@ final class TVMediaItemFormatStyleTests: XCTestCase {
         XCTAssertEqual(uppercaseExtInfo.pictogramName, "photo.fill")
 
         let trailingPunctuationInfo = TVMediaItemFormatStyle.formatInfo(for: trailingPunctuationItem)
-        XCTAssertEqual(trailingPunctuationInfo.label, "JPG")
-        XCTAssertEqual(trailingPunctuationInfo.color, Color.green)
+        XCTAssertEqual(trailingPunctuationInfo.label, "PHOTO")
+        XCTAssertEqual(trailingPunctuationInfo.color, Color(white: 0.30))
         XCTAssertEqual(trailingPunctuationInfo.pictogramName, "photo.fill")
 
         let folderWithSizeInfo = TVMediaItemFormatStyle.formatInfo(for: folderWithSize)
