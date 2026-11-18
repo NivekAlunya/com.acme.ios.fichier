@@ -58,6 +58,17 @@ public final class StorageLocationManager {
     /// The currently selected SMB share (root of the displayed folder tree).
     public var selectedShare: MediaItem?
     
+    /// Indicates whether a storage drive (SMB share, local/iCloud folder, or Photos library) is actively selected.
+    public var hasSelectedDrive: Bool {
+        guard isConnected, let location = currentLocation else {
+            return false
+        }
+        if location.kind == .smb {
+            return selectedShare != nil
+        }
+        return true
+    }
+    
     /// Hierarchical tree of folders and shares used to populate the navigation sidebar.
     ///
     /// Updating this tree automatically recalculates `parentFolder` for O(1) breadcrumb navigation.
@@ -586,14 +597,13 @@ public final class StorageLocationManager {
                     selectedShare = matchingShare
                 } else if folder.path.isEmpty {
                     selectedShare = folder
-                } else if let shareName = folder.shareName, !shareName.isEmpty {
+                } else if !folder.shareName.isEmpty {
                     selectedShare = MediaItem(
                         locationID: folder.locationID,
-                        name: shareName,
-                        rootName: shareName,
+                        name: folder.shareName,
+                        rootName: folder.shareName,
                         path: "",
-                        isDirectory: true,
-                        shareName: shareName
+                        isDirectory: true
                     )
                 }
             }

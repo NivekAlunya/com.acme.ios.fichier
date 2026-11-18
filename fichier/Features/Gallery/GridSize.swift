@@ -60,4 +60,40 @@ enum GridSize: String, CaseIterable, Identifiable {
         case .large: return "rectangle.grid.1x2"
         }
     }
+    
+    /// Title font point size on media item cells for this grid density.
+    var titleFontSize: CGFloat {
+        switch self {
+        case .compact: return 11
+        case .medium: return 13
+        case .large: return 16
+        }
+    }
+    
+    /// Secondary metadata and format font point size for this grid density.
+    var detailFontSize: CGFloat {
+        switch self {
+        case .compact: return 9
+        case .medium: return 11
+        case .large: return 13
+        }
+    }
+    
+    /// Diameter of the centered media format indicator circle badge.
+    var pictogramBadgeSize: CGFloat {
+        switch self {
+        case .compact: return 32
+        case .medium: return 38
+        case .large: return 48
+        }
+    }
+    
+    /// Font point size of the centered format SF Symbol pictogram.
+    var pictogramIconSize: CGFloat {
+        switch self {
+        case .compact: return 14
+        case .medium: return 16
+        case .large: return 22
+        }
+    }
 }

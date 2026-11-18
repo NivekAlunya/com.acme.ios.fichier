@@ -178,7 +178,7 @@ public struct TVVideoOverlayControlsView: View {
     private var topBar: some View {
         HStack(spacing: 16) {
             Text(title)
-                .font(.title3)
+                .font(.headline)
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .truncationMode(.middle)

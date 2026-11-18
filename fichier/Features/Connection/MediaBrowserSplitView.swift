@@ -78,6 +78,12 @@ public struct MediaBrowserSplitView: View {
             FolderTreeContentView(
                 manager: storageManager,
                 showingAddRemote: $showingAddRemote,
+                onOpenSidebar: {
+                    withAnimation {
+                        columnVisibility = .all
+                        preferredCompactColumn = .sidebar
+                    }
+                },
                 onSelectFolder: { folder in
                     Task {
                         await storageManager.selectAndLoadFolder(folder)
@@ -141,7 +147,17 @@ public struct MediaBrowserSplitView: View {
                             systemImage: "photo.on.rectangle.angled"
                         )
                     } description: {
-                        Text(.Strings.galleryNoFolderSelectedDescription)
+                        VStack(spacing: 8) {
+                            Text(.Strings.galleryNoFolderSelectedDescription)
+                            HStack(spacing: 5) {
+                                Image(systemName: "sidebar.leading")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.tint)
+                                Text(.Strings.selectStorageSidebarInstruction)
+                            }
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        }
                     }
                     .navigationTitle(storageManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
                 }

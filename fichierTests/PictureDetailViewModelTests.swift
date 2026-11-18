@@ -76,5 +76,24 @@ struct PictureDetailViewModelTests {
         #expect(viewModel.showControls)
         viewModel.toggleControls()
         #expect(!viewModel.showControls)
+
+        // Pausing slideshow restores controls
+        viewModel.toggleSlideshow()
+        #expect(!viewModel.isPlayingSlideshow)
+        #expect(viewModel.showControls)
+    }
+
+    @Test("autoStartSlideshow initializes with isPlayingSlideshow true")
+    func autoStartSlideshowInitialState() {
+        let photo = makePhoto("1.jpg")
+        let viewModel = PictureDetailViewModel(
+            manager: StorageLocationManager(),
+            pictures: [photo],
+            initialItem: photo,
+            autoStartSlideshow: true
+        )
+
+        #expect(viewModel.isPlayingSlideshow)
+        #expect(viewModel.showControls)
     }
 }

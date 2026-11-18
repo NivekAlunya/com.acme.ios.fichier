@@ -6,6 +6,7 @@
 import Foundation
 import Observation
 import UIKit
+import SwiftUI
 import FichierKit
 
 /// ViewModel managing photo browsing, slideshow state, image/EXIF loading state,
@@ -35,6 +36,10 @@ final class PictureDetailViewModel {
     var saveStatusMessage: String?
     var isSaving = false
 
+    // MARK: - Auto-Hide Management
+
+    private var autoHideTask: Task<Void, Never>?
+
     // MARK: - Derived State
 
     var currentIndex: Int {
@@ -55,6 +60,32 @@ final class PictureDetailViewModel {
         self.initialItem = initialItem
         self.currentItem = initialItem
         self.isPlayingSlideshow = autoStartSlideshow
+        if autoStartSlideshow {
+            scheduleAutoHideControls()
+        }
+    }
+
+    // MARK: - Auto-Hide Controls
+
+    func cancelAutoHideTimer() {
+        autoHideTask?.cancel()
+        autoHideTask = nil
+    }
+
+    func scheduleAutoHideControls() {
+        cancelAutoHideTimer()
+        guard isPlayingSlideshow, showControls else { return }
+        autoHideTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(3.5))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, self.isPlayingSlideshow else { return }
+            withAnimation(.easeInOut(duration: 0.3)) {
+                self.showControls = false
+            }
+        }
     }
 
     // MARK: - Actions
@@ -75,9 +106,22 @@ final class PictureDetailViewModel {
 
     func toggleSlideshow() {
         isPlayingSlideshow.toggle()
+        if isPlayingSlideshow {
+            if showControls {
+                scheduleAutoHideControls()
+            }
+        } else {
+            cancelAutoHideTimer()
+            showControls = true
+        }
     }
 
     func toggleControls() {
         showControls.toggle()
+        if showControls && isPlayingSlideshow {
+            scheduleAutoHideControls()
+        } else {
+            cancelAutoHideTimer()
+        }
     }
 }

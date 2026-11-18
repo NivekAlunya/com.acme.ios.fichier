@@ -495,6 +495,7 @@ extension StorageLocationManager {
     }
     
     /// Clears both memory and persistent disk thumbnail caches for all items in the currently loaded folder.
+    @MainActor
     public func invalidateCurrentFolderThumbnails() async {
         let items = pictures
         guard !items.isEmpty else { return }
@@ -508,5 +509,13 @@ extension StorageLocationManager {
         }
         
         await refreshMediaCacheSize()
+    }
+    
+    /// Clears both memory and persistent disk thumbnail cache for a specific media item and notifies observers to reload it.
+    @MainActor
+    public func invalidateThumbnail(for item: MediaItem) async {
+        await MediaCacheManager.shared.invalidateThumbnailCache(for: [item])
+        await worker.removeThumbnailsFromMemory(for: [item.id])
+        thumbnailVersions[item.id, default: 0] += 1
     }
 }

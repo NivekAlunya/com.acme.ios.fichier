@@ -70,11 +70,11 @@ struct MediaListRowCell: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(item.name)
-                        .font(.body)
-                        .lineLimit(1)
+                        .font(.system(size: GridSize.large.titleFontSize, weight: .semibold))
+                        .lineLimit(2)
                     if FavoritesManager.shared.isFavorite(item) {
                         Image(systemName: "heart.fill")
-                            .font(.caption2)
+                            .font(.system(size: GridSize.large.detailFontSize))
                             .foregroundColor(.red)
                     }
                 }
@@ -85,7 +85,7 @@ struct MediaListRowCell: View {
                         Text(detail)
                     }
                 }
-                .font(.caption)
+                .font(.system(size: GridSize.large.detailFontSize, weight: .medium))
                 .foregroundColor(.secondary)
             }
             

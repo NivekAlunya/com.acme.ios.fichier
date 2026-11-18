@@ -38,6 +38,10 @@ public struct TVVideoSeekPreviewHUDView: View {
         TVRemoteSeekCalculator.formattedTimestamp(preview.targetTime)
     }
 
+    private var engineTintColor: Color {
+        engineKind == .extended ? .orange : .blue
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             Spacer()
@@ -47,7 +51,8 @@ public struct TVVideoSeekPreviewHUDView: View {
                     TVSeekThumbnailPreviewCardView(
                         thumbnailState: seekThumbnailState,
                         duration: duration,
-                        detailLabel: formattedDelta
+                        detailLabel: formattedDelta,
+                        tintColor: engineTintColor
                     )
                 }
 
@@ -56,7 +61,7 @@ public struct TVVideoSeekPreviewHUDView: View {
                     duration: duration,
                     scrubbingTime: preview.targetTime,
                     isFocused: true,
-                    tintColor: engineKind == .extended ? .orange : .blue,
+                    tintColor: engineTintColor,
                     chapters: chapters,
                     showsPreviewBubble: false
                 )

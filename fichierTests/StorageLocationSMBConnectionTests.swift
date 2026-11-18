@@ -103,6 +103,10 @@ struct StorageLocationSMBConnectionTests {
 
         #expect(manager.isConnected)
         #expect(!manager.isLoading)
+        #expect(manager.serverShares.map(\.name) == ["Media"])
+        if let share = manager.serverShares.first {
+            await manager.selectShare(share)
+        }
         #expect(manager.selectedFolder?.name == "Media")
         #expect(manager.currentFolders.map(\.name) == ["Albums"])
         #expect(manager.pictures.map(\.name) == ["cover.jpg"])
@@ -390,6 +394,9 @@ struct StorageLocationSMBConnectionTests {
 
         await manager.connect(host: "nas", user: "alice", pass: "pw")
         #expect(manager.isConnected)
+        if let share = manager.serverShares.first {
+            await manager.selectShare(share)
+        }
         #expect(manager.pictures.count == 1)
         worker.cacheThumbnail(UIImage(), forKey: "manager_thumb" as NSString)
 

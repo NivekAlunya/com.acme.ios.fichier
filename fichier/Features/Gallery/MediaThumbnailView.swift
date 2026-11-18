@@ -33,6 +33,9 @@ public struct MediaThumbnailView: View {
     /// Configures layout for compact environments such as table list cells.
     public var isCompact: Bool = false
     
+    /// Configures whether overlay badges (format capsule, progress bar) are rendered internally.
+    public var showsBadges: Bool = true
+    
     /// Successfully loaded and decoded thumbnail image.
     @State private var image: UIImage?
     
@@ -53,18 +56,21 @@ public struct MediaThumbnailView: View {
     ///   - maxDimension: Maximum pixel bounding dimension (defaults to 260).
     ///   - cornerRadius: Clipping corner radius (defaults to 10).
     ///   - isCompact: Whether rendered in compact list mode (defaults to `false`).
+    ///   - showsBadges: Whether overlay badges and progress bars are rendered internally (defaults to `true`).
     public init(
         manager: StorageLocationManager,
         item: MediaItem,
         maxDimension: CGFloat = 260,
         cornerRadius: CGFloat = 10,
-        isCompact: Bool = false
+        isCompact: Bool = false,
+        showsBadges: Bool = true
     ) {
         self.manager = manager
         self.item = item
         self.maxDimension = maxDimension
         self.cornerRadius = cornerRadius
         self.isCompact = isCompact
+        self.showsBadges = showsBadges
     }
     
     public var body: some View {
@@ -94,84 +100,86 @@ public struct MediaThumbnailView: View {
                 }
             }
             
-            if item.isVideo {
-                let playbackStatus = VideoPlaybackStore.shared.status(for: item)
-                
-                // Progress bar along the bottom edge (using scaleEffect instead of GeometryReader to prevent container expansion in list cells)
-                if case .inProgress(let progress) = playbackStatus, progress > 0 {
-                    let barHeight: CGFloat = isCompact ? 2.5 : 3.5
-                    VStack(spacing: 0) {
-                        Spacer()
-                        ZStack(alignment: .leading) {
-                            Color.black.opacity(0.4)
-                            
-                            Color.blue
-                                .scaleEffect(x: max(0, min(1, CGFloat(progress))), y: 1, anchor: .leading)
+            if showsBadges {
+                if item.isVideo {
+                    let playbackStatus = VideoPlaybackStore.shared.status(for: item)
+                    
+                    // Progress bar along the bottom edge (using scaleEffect instead of GeometryReader to prevent container expansion in list cells)
+                    if case .inProgress(let progress) = playbackStatus, progress > 0 {
+                        let barHeight: CGFloat = isCompact ? 2.5 : 3.5
+                        VStack(spacing: 0) {
+                            Spacer()
+                            ZStack(alignment: .leading) {
+                                Color.black.opacity(0.4)
+                                
+                                Color.blue
+                                    .scaleEffect(x: max(0, min(1, CGFloat(progress))), y: 1, anchor: .leading)
+                            }
+                            .frame(height: barHeight)
                         }
-                        .frame(height: barHeight)
+                        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                        .allowsHitTesting(false)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-                    .allowsHitTesting(false)
-                }
-                
-                let ext = (item.name as NSString).pathExtension
-                let formatLabel = VideoFormatStyle.label(for: ext)
-                let badgeColor = VideoFormatStyle.color(for: ext)
-                
-                // Video Playback Status & Format Capsule (Bottom-Trailing)
-                HStack(spacing: isCompact ? 2.5 : 3.5) {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: isCompact ? 7 : 8))
-                        .foregroundColor(.white)
                     
-                    Text(formatLabel)
-                        .font(.system(size: isCompact ? 7 : 8, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                    let ext = (item.name as NSString).pathExtension
+                    let formatLabel = VideoFormatStyle.label(for: ext)
+                    let badgeColor = VideoFormatStyle.color(for: ext)
                     
-                    switch playbackStatus {
-                    case .finished:
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: isCompact ? 7 : 8, weight: .bold))
-                            .foregroundColor(.green)
-                    case .inProgress(let progress):
-                        VideoProgressRing(
-                            progress: progress,
-                            size: isCompact ? 7.5 : 9.0,
-                            lineWidth: isCompact ? 1.3 : 1.5,
-                            ringColor: .white
-                        )
-                    case .unwatched:
-                        EmptyView()
+                    // Video Playback Status & Format Capsule (Bottom-Trailing)
+                    HStack(spacing: isCompact ? 2.5 : 3.5) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: isCompact ? 7 : 8))
+                            .foregroundColor(.white)
+                        
+                        Text(formatLabel)
+                            .font(.system(size: isCompact ? 7 : 8, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        
+                        switch playbackStatus {
+                        case .finished:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: isCompact ? 7 : 8, weight: .bold))
+                                .foregroundColor(.green)
+                        case .inProgress(let progress):
+                            VideoProgressRing(
+                                progress: progress,
+                                size: isCompact ? 7.5 : 9.0,
+                                lineWidth: isCompact ? 1.3 : 1.5,
+                                ringColor: .white
+                            )
+                        case .unwatched:
+                            EmptyView()
+                        }
                     }
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, isCompact ? 4 : 6)
-                .padding(.vertical, isCompact ? 2 : 3)
-                .background(badgeColor.opacity(isCompact ? 0.88 : 0.85))
-                .clipShape(Capsule())
-                .shadow(color: Color.black.opacity(0.3), radius: 1, x: 0, y: 1)
-                .padding(isCompact ? 2 : 6)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            } else if item.isGIF {
-                Text(.Strings.galleryBadgeGif)
-                    .font(.system(size: isCompact ? 7 : 8, weight: .bold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, isCompact ? 3 : 5)
-                    .padding(.vertical, isCompact ? 1 : 3)
-                    .background(Color.black.opacity(isCompact ? 0.75 : 0.65))
+                    .padding(.horizontal, isCompact ? 4 : 6)
+                    .padding(.vertical, isCompact ? 2 : 3)
+                    .background(badgeColor.opacity(isCompact ? 0.88 : 0.85))
                     .clipShape(Capsule())
+                    .shadow(color: Color.black.opacity(0.3), radius: 1, x: 0, y: 1)
                     .padding(isCompact ? 2 : 6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            } else if item.isPDF && image != nil {
-                Text("PDF")
-                    .font(.system(size: isCompact ? 7 : 8, weight: .bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, isCompact ? 3 : 5)
-                    .padding(.vertical, isCompact ? 1 : 3)
-                    .background(Color.red.opacity(isCompact ? 0.85 : 0.8))
-                    .clipShape(Capsule())
-                    .padding(isCompact ? 2 : 6)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                } else if item.isGIF {
+                    Text(.Strings.galleryBadgeGif)
+                        .font(.system(size: isCompact ? 7 : 8, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, isCompact ? 3 : 5)
+                        .padding(.vertical, isCompact ? 1 : 3)
+                        .background(Color.black.opacity(isCompact ? 0.75 : 0.65))
+                        .clipShape(Capsule())
+                        .padding(isCompact ? 2 : 6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                } else if item.isPDF && image != nil {
+                    Text("PDF")
+                        .font(.system(size: isCompact ? 7 : 8, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, isCompact ? 3 : 5)
+                        .padding(.vertical, isCompact ? 1 : 3)
+                        .background(Color.red.opacity(isCompact ? 0.85 : 0.8))
+                        .clipShape(Capsule())
+                        .padding(isCompact ? 2 : 6)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                }
             }
         }
         .onAppear {
@@ -230,7 +238,7 @@ public struct MediaThumbnailView: View {
     
     // MARK: - Non-Blocking Failure Placeholder View
     
-    /// Non-blocking failure placeholder allowing cell taps to pass through for video playback while offering a compact retry button.
+    /// Non-blocking failure placeholder allowing cell taps to pass through for video playback.
     @ViewBuilder
     private var failedPlaceholderView: some View {
         ZStack {
@@ -250,22 +258,6 @@ public struct MediaThumbnailView: View {
                 }
             }
             .allowsHitTesting(false)
-            
-            // Compact, non-blocking retry button isolated to the top-leading corner
-            Button {
-                retryLoading()
-            } label: {
-                Image(systemName: "arrow.clockwise.circle.fill")
-                    .font(.system(size: isCompact ? 13 : 16))
-                    .foregroundColor(.white.opacity(0.9))
-                    .padding(5)
-                    .background(Color.black.opacity(0.45))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(isCompact ? 3 : 5)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .accessibilityLabel(Text(.Strings.galleryThumbnailRetryPreview))
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
