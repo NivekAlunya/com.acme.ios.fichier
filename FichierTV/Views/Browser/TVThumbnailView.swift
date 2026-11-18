@@ -70,9 +70,20 @@ public struct TVThumbnailView: View {
         isLoading = true
         defer { isLoading = false }
 
+        if item.type == .folder {
+            let icon = await item.linkedFolderIcon()
+            if !Task.isCancelled { thumbnailImage = icon }
+            return
+        }
+
+        let isCached = await isPrecached(item: item)
         if let loaded = await fetchThumbnailOnce() {
             if !Task.isCancelled {
                 thumbnailImage = loaded
+                // Link folder icon only if freshly generated (no cache hit)
+                if !isCached {
+                    item.linkThumbnailAsFolderIcon(loaded)
+                }
             }
             return
         }
@@ -82,8 +93,26 @@ public struct TVThumbnailView: View {
             guard !Task.isCancelled else { return }
             if let retried = await fetchThumbnailOnce(), !Task.isCancelled {
                 thumbnailImage = retried
+                item.linkThumbnailAsFolderIcon(retried)
             }
         }
+    }
+
+    private func isPrecached(item: MediaSourceItem) async -> Bool {
+        if item.type == .image {
+            if let localURL = item.localURL, localURL.isFileURL {
+                return await SMBImageLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
+            } else if let sourceID = item.sourceID, let share = item.smbShare, let path = item.smbPath {
+                return await SMBImageLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
+            }
+        } else if item.type == .video {
+            if let localURL = item.localURL, localURL.isFileURL {
+                return await SMBVideoThumbnailLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
+            } else if let sourceID = item.sourceID, let share = item.smbShare, let path = item.smbPath {
+                return await SMBVideoThumbnailLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
+            }
+        }
+        return false
     }
 
     private func fetchThumbnailOnce() async -> UIImage? {

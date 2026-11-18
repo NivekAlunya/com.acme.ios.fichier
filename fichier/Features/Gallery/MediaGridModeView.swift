@@ -78,156 +78,13 @@ struct MediaGridModeView: View {
                 
                 VStack(alignment: .leading, spacing: 16) {
                     if !folders.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                            
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
-                                ForEach(folders) { subfolder in
-                                    Button {
-                                        onNavigateToFolder(subfolder)
-                                    } label: {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: "folder.fill")
-                                                .foregroundColor(.blue)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(subfolder.name)
-                                                    .font(.subheadline)
-                                                    .foregroundColor(.primary)
-                                                    .lineLimit(1)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .padding(10)
-                                        .background(Color(.secondarySystemBackground))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .contextMenu(isSelectionMode ? nil : ContextMenu {
-                                        if manager.canManageItem(subfolder) {
-                                            Button {
-                                                onRequestRename?(subfolder)
-                                            } label: {
-                                                Label(.Strings.galleryActionRename, systemImage: "pencil")
-                                            }
-                                            
-                                            Button {
-                                                onRequestMove?(subfolder)
-                                            } label: {
-                                                Label(String(localized: "Move to Folder...", comment: "Context menu action to move folder"), systemImage: "folder")
-                                            }
-                                            
-                                            Button(role: .destructive) {
-                                                onRequestDelete?(subfolder)
-                                            } label: {
-                                                Label(String(localized: "Delete", comment: "Context menu action to delete folder"), systemImage: "trash")
-                                            }
-                                        }
-                                    })
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                        }
+                        foldersSection
                     }
                     
                     if !pictures.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(mediaSectionHeader(for: pictures.count))
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
-                                
-                                Text(sortOption.localizedTitle)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding(.horizontal, 12)
-                            
-                            LazyVGrid(columns: gridColumns, spacing: 10) {
-                                ForEach(pictures) { pic in
-                                    MediaThumbnailCell(
-                                        manager: manager,
-                                        item: pic,
-                                        gridSize: gridSize,
-                                        maxDimension: gridSize.thumbnailPixels,
-                                        isSelected: selectedItems.contains(pic),
-                                        isSelectionMode: isSelectionMode
-                                    )
-                                    .onTapGesture {
-                                        if isSelectionMode {
-                                            onToggleSelection(pic)
-                                        } else {
-                                            onSelectPicture(pic, pictures)
-                                        }
-                                    }
-                                    .onLongPressGesture {
-                                        if !isSelectionMode {
-                                            onEnterSelectionMode(pic)
-                                        }
-                                    }
-                                    .contextMenu(isSelectionMode ? nil : ContextMenu {
-                                        Button {
-                                            onEnterSelectionMode(pic)
-                                        } label: {
-                                            Label(String(localized: "Select", comment: "Context menu action to select item"), systemImage: "checkmark.circle")
-                                        }
-                                        
-                                        if manager.canManageItem(pic) {
-                                            Button {
-                                                onRequestRename?(pic)
-                                            } label: {
-                                                Label(.Strings.galleryActionRename, systemImage: "pencil")
-                                            }
-                                            
-                                            Button {
-                                                onRequestMove?(pic)
-                                            } label: {
-                                                Label(String(localized: "Move to Folder...", comment: "Context menu action to move item"), systemImage: "folder")
-                                            }
-                                            
-                                            Button(role: .destructive) {
-                                                onRequestDelete?(pic)
-                                            } label: {
-                                                Label(String(localized: "Delete", comment: "Context menu action to delete item"), systemImage: "trash")
-                                            }
-                                        }
-                                        
-                                        Button {
-                                            FavoritesManager.shared.toggleFavorite(pic)
-                                        } label: {
-                                            Label(
-                                                FavoritesManager.shared.isFavorite(pic) ? String(localized: "Remove from Favorites", comment: "Context menu unfavorite") : String(localized: "Add to Favorites", comment: "Context menu favorite"),
-                                                systemImage: FavoritesManager.shared.isFavorite(pic) ? "heart.slash" : "heart"
-                                            )
-                                        }
-                                        
-                                        Button {
-                                            Task {
-                                                await manager.invalidateThumbnail(for: pic)
-                                            }
-                                        } label: {
-                                            Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
-                                        }
-                                    })
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
-                        }
+                        picturesSection
                     } else if !folders.isEmpty && !manager.isLoading {
-                        ContentUnavailableView(
-                            String(localized: .Strings.galleryNoPicturesTitle),
-                            systemImage: "photo",
-                            description: Text(.Strings.galleryNoPicturesDescription)
-                        )
-                        .padding(.top, 24)
+                        emptyPicturesPlaceholder
                     }
                 }
                 .padding(.vertical, 12)
@@ -248,5 +105,174 @@ struct MediaGridModeView: View {
                 await onRefresh()
             }
         }
+    }
+
+    // MARK: - Subfolders Section
+
+    @ViewBuilder
+    private var foldersSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+            
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
+                ForEach(folders) { subfolder in
+                    Button {
+                        onNavigateToFolder(subfolder)
+                    } label: {
+                        FolderCardView(folder: subfolder)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu(isSelectionMode ? nil : ContextMenu {
+                        folderContextMenu(for: subfolder)
+                    })
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+
+    @ViewBuilder
+    private func folderContextMenu(for subfolder: MediaItem) -> some View {
+        if manager.canManageItem(subfolder) {
+            Button {
+                onRequestRename?(subfolder)
+            } label: {
+                Label(.Strings.galleryActionRename, systemImage: "pencil")
+            }
+            
+            Button {
+                onRequestMove?(subfolder)
+            } label: {
+                Label(String(localized: "Move to Folder...", comment: "Context menu action to move folder"), systemImage: "folder")
+            }
+            
+            Button(role: .destructive) {
+                onRequestDelete?(subfolder)
+            } label: {
+                Label(String(localized: "Delete", comment: "Context menu action to delete folder"), systemImage: "trash")
+            }
+        }
+    }
+
+    // MARK: - Pictures Section
+
+    @ViewBuilder
+    private var picturesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(mediaSectionHeader(for: pictures.count))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(sortOption.localizedTitle)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            
+            LazyVGrid(columns: gridColumns, spacing: 10) {
+                ForEach(pictures) { pic in
+                    pictureCell(for: pic)
+                }
+            }
+            .padding(.horizontal, 12)
+            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: gridSize)
+        }
+    }
+
+    @ViewBuilder
+    private func pictureCell(for pic: MediaItem) -> some View {
+        MediaThumbnailCell(
+            manager: manager,
+            item: pic,
+            gridSize: gridSize,
+            maxDimension: gridSize.thumbnailPixels,
+            isSelected: selectedItems.contains(pic),
+            isSelectionMode: isSelectionMode
+        )
+        .onTapGesture {
+            if isSelectionMode {
+                onToggleSelection(pic)
+            } else {
+                onSelectPicture(pic, pictures)
+            }
+        }
+        .onLongPressGesture {
+            if !isSelectionMode {
+                onEnterSelectionMode(pic)
+            }
+        }
+        .contextMenu(isSelectionMode ? nil : ContextMenu {
+            pictureContextMenu(for: pic)
+        })
+    }
+
+    @ViewBuilder
+    private func pictureContextMenu(for pic: MediaItem) -> some View {
+        Button {
+            onEnterSelectionMode(pic)
+        } label: {
+            Label(String(localized: "Select", comment: "Context menu action to select item"), systemImage: "checkmark.circle")
+        }
+        
+        if manager.canManageItem(pic) {
+            Button {
+                onRequestRename?(pic)
+            } label: {
+                Label(.Strings.galleryActionRename, systemImage: "pencil")
+            }
+            
+            Button {
+                onRequestMove?(pic)
+            } label: {
+                Label(String(localized: "Move to Folder...", comment: "Context menu action to move item"), systemImage: "folder")
+            }
+            
+            Button(role: .destructive) {
+                onRequestDelete?(pic)
+            } label: {
+                Label(String(localized: "Delete", comment: "Context menu action to delete item"), systemImage: "trash")
+            }
+        }
+        
+        favoriteButton(for: pic)
+        
+        Button {
+            Task {
+                await manager.invalidateThumbnail(for: pic)
+            }
+        } label: {
+            Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
+        }
+    }
+
+    @ViewBuilder
+    private func favoriteButton(for pic: MediaItem) -> some View {
+        let isFav = FavoritesManager.shared.isFavorite(pic)
+        Button {
+            FavoritesManager.shared.toggleFavorite(pic)
+        } label: {
+            if isFav {
+                Label(String(localized: "Remove from Favorites", comment: "Context menu unfavorite"), systemImage: "heart.slash")
+            } else {
+                Label(String(localized: "Add to Favorites", comment: "Context menu favorite"), systemImage: "heart")
+            }
+        }
+    }
+
+    // MARK: - Empty State
+
+    private var emptyPicturesPlaceholder: some View {
+        ContentUnavailableView(
+            String(localized: .Strings.galleryNoPicturesTitle),
+            systemImage: "photo",
+            description: Text(.Strings.galleryNoPicturesDescription)
+        )
+        .padding(.top, 24)
     }
 }

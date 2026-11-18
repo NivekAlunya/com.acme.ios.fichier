@@ -693,7 +693,7 @@ struct MediaGridView: View {
                             guard totalBytes > 0 else { return }
                             let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                             let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                            let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                            let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
                             self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
                         }
                     }
@@ -795,7 +795,7 @@ struct MediaGridView: View {
                                 guard totalBytes > 0 else { return }
                                 let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                                 let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                                let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                                let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
                                 self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
                             }
                         }
@@ -817,7 +817,7 @@ struct MediaGridView: View {
                                     guard totalBytes > 0 else { return }
                                     let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                                     let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                                    let percent = Int(Double(bytes) / Double(totalBytes) * 100)
+                                    let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
                                     self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
                                 }
                             }

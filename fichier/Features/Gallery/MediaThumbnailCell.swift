@@ -6,11 +6,10 @@
 import SwiftUI
 import FichierKit
 
-/// Full-bleed square grid cell rendering media thumbnails with a format-colored top capsule and neutral frosted bottom overlay bar.
+/// Visual grid card presenting a single media asset within `MediaGridView`.
 ///
-/// Wraps `MediaThumbnailView` with full-bleed 1:1 aspect ratio, a top-trailing overlay
-/// displaying a format-colored capsule badge (picto + extension), favorite indicator, and selection checkbox,
-/// and a neutral frosted bottom bar displaying the item title and metadata.
+/// Features an edge-to-edge downsampled thumbnail, top badges (format capsule, favorites, selection),
+/// and an ultra-thin material frosted glass footer detailing the item's filename and secondary metadata.
 struct MediaThumbnailCell: View {
     /// Storage location manager providing thumbnail caching and retrieval.
     var manager: StorageLocationManager
@@ -29,8 +28,8 @@ struct MediaThumbnailCell: View {
     
     /// Indicates whether the gallery is currently in multi-selection editing mode.
     var isSelectionMode: Bool = false
-
-    /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
+    
+    /// Cached secondary metadata details resolved asynchronously.
     @State private var mediaDetail: String?
     
     /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
@@ -88,7 +87,7 @@ struct MediaThumbnailCell: View {
         HStack(spacing: 5) {
             if FavoritesManager.shared.isFavorite(item) {
                 Image(systemName: "heart.fill")
-                    .font(.system(size: max(9, gridSize.titleFontSize - 2), weight: .bold))
+                    .font(gridSize.iconFont)
                     .foregroundColor(.red)
                     .padding(4)
                     .background(Color.black.opacity(0.4))
@@ -101,14 +100,14 @@ struct MediaThumbnailCell: View {
             formatCapsule
             
             if isSelectionMode {
-                let checkSize = max(20, gridSize.titleFontSize + 8)
+                let checkSize: CGFloat = gridSize == .large ? 24 : 20
                 ZStack {
                     Circle()
                         .fill(isSelected ? Color.blue : Color.black.opacity(0.45))
                         .frame(width: checkSize, height: checkSize)
                     if isSelected {
                         Image(systemName: "checkmark")
-                            .font(.system(size: gridSize.titleFontSize - 1, weight: .bold))
+                            .font(gridSize.iconFont)
                             .foregroundColor(.white)
                     }
                 }
@@ -129,10 +128,10 @@ struct MediaThumbnailCell: View {
         let info = formatInfo
         HStack(spacing: gridSize == .large ? 3.5 : 2.5) {
             Image(systemName: info.pictogramName)
-                .font(.system(size: max(7, gridSize.detailFontSize - 2), weight: .bold))
+                .font(gridSize.iconFont)
             
             Text(info.label)
-                .font(.system(size: max(8, gridSize.detailFontSize - 1), weight: .bold, design: .rounded))
+                .font(gridSize.capsuleFont)
             
             if item.isVideo {
                 videoPlaybackIndicator
@@ -153,11 +152,11 @@ struct MediaThumbnailCell: View {
     private var bottomOverlayBar: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: gridSize == .large ? 3 : 2) {
-                // Merged item title
+                // Merged item title (1 line in compact mode, up to 2 lines in medium/large)
                 Text(item.name)
-                    .font(.system(size: gridSize.titleFontSize, weight: .semibold))
+                    .font(gridSize.titleFont)
                     .foregroundColor(.white)
-                    .lineLimit(2)
+                    .lineLimit(gridSize == .compact ? 1 : 2)
                     .truncationMode(.middle)
                     .shadow(color: Color.black.opacity(0.35), radius: 1, x: 0, y: 1)
                 
@@ -169,7 +168,7 @@ struct MediaThumbnailCell: View {
                         Text(detail)
                     }
                 }
-                .font(.system(size: gridSize.detailFontSize, weight: .medium))
+                .font(gridSize.detailFont)
                 .foregroundColor(.white.opacity(0.95))
                 .lineLimit(1)
                 .shadow(color: Color.black.opacity(0.3), radius: 1, x: 0, y: 1)
@@ -181,7 +180,6 @@ struct MediaThumbnailCell: View {
                 Color.black.opacity(0.45)
                     .background(.ultraThinMaterial)
             )
-
         }
     }
     
@@ -192,12 +190,12 @@ struct MediaThumbnailCell: View {
         switch playbackStatus {
         case .finished:
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: max(7, gridSize.detailFontSize - 1), weight: .bold))
+                .font(gridSize.iconFont)
                 .foregroundColor(.green)
         case .inProgress(let progress):
             VideoProgressRing(
                 progress: progress,
-                size: max(8, gridSize.detailFontSize),
+                size: gridSize == .large ? 12 : 9,
                 lineWidth: 1.4,
                 ringColor: .white
             )

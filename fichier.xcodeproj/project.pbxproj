@@ -360,6 +360,9 @@
 		D14BDE20309B4039007D8134 /* Run SwiftLint */ = {
 			isa = PBXShellScriptBuildPhase;
 			name = "Run SwiftLint";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/swiftlint.timestamp",
+			);
 			shellPath = /bin/sh;
 			shellScript = (
 				"export PATH=\"$PATH:/opt/homebrew/bin:/usr/local/bin\"",
@@ -375,6 +378,8 @@
 				"else",
 				"  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"",
 				"fi",
+				"",
+				"touch \"${DERIVED_FILE_DIR}/swiftlint.timestamp\"",
 				"",
 			);
 		};

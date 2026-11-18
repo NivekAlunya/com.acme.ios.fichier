@@ -179,6 +179,20 @@ public final class VideoPlayerController {
         playbackState = .loading
         errorMessage = nil
         
+        // Link video thumbnail as the folder's video icon when played
+        Task(priority: .utility) { [weak self] in
+            guard let self else { return }
+            if let thumb = await self.manager.downloadThumbnail(for: item) {
+                MediaCacheManager.shared.linkFolderIcon(
+                    thumb,
+                    childPath: item.path,
+                    shareName: item.shareName,
+                    connectionID: item.connectionID,
+                    isVideo: true
+                )
+            }
+        }
+        
         Task.detached(priority: .userInitiated) {
             let session = AVAudioSession.sharedInstance()
             do {
@@ -902,8 +916,9 @@ public final class VideoPlayerController {
         withAnimation {
             saveStatusMessage = String(localized: .Strings.videoPlayerDownloadingVideo)
         }
-        saveTask = Task { @MainActor in
+        saveTask = Task { @MainActor [weak self] in
             do {
+                guard let self else { return }
                 let throttler = DownloadProgressThrottler()
                 let localURL = try await manager.fetchVideoURL(for: currentItem) { [weak self] bytes, total in
                     Task {
@@ -912,7 +927,7 @@ public final class VideoPlayerController {
                             guard let self, total > 0 else { return }
                             let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                             let totalStr = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
-                            let percent = Int(Double(bytes) / Double(total) * 100)
+                            let percent = (Double(bytes) / Double(total)).formatted(.percent.precision(.fractionLength(0)))
                             self.saveStatusMessage = String(
                                 localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent)
                             )

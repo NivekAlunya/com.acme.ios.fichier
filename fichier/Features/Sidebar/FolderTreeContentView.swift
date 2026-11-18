@@ -20,7 +20,7 @@ public struct FolderTreeContentView: View {
     @Binding var showingAddRemote: Bool
     
     /// Optional callback to reveal or navigate back to the sidebar programmatically.
-    var onOpenSidebar: (() -> Void)? = nil
+    var onOpenSidebar: (() -> Void)?
 
     /// Callback invoked when a folder item is selected in the tree.
     let onSelectFolder: (MediaItem) -> Void

@@ -46,7 +46,7 @@ struct MediaListRowCell: View {
                         .frame(width: 22, height: 22)
                     if isSelected {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.caption2.weight(.bold))
                             .foregroundColor(.white)
                     }
                 }
@@ -70,11 +70,11 @@ struct MediaListRowCell: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(item.name)
-                        .font(.system(size: GridSize.large.titleFontSize, weight: .semibold))
+                        .font(.headline)
                         .lineLimit(2)
                     if FavoritesManager.shared.isFavorite(item) {
                         Image(systemName: "heart.fill")
-                            .font(.system(size: GridSize.large.detailFontSize))
+                            .font(.subheadline)
                             .foregroundColor(.red)
                     }
                 }
@@ -85,7 +85,7 @@ struct MediaListRowCell: View {
                         Text(detail)
                     }
                 }
-                .font(.system(size: GridSize.large.detailFontSize, weight: .medium))
+                .font(.subheadline.weight(.medium))
                 .foregroundColor(.secondary)
             }
             

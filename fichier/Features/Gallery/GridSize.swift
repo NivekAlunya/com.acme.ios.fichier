@@ -79,6 +79,51 @@ enum GridSize: String, CaseIterable, Identifiable {
         }
     }
     
+    /// Title Dynamic Type font on media item cells for this grid density.
+    var titleFont: Font {
+        switch self {
+        case .compact: return .caption.weight(.semibold)
+        case .medium: return .subheadline.weight(.semibold)
+        case .large: return .headline
+        }
+    }
+    
+    /// Secondary metadata Dynamic Type font for this grid density.
+    var detailFont: Font {
+        switch self {
+        case .compact: return .caption2
+        case .medium: return .caption
+        case .large: return .subheadline
+        }
+    }
+    
+    /// Capsule format badge Dynamic Type font for this grid density.
+    var capsuleFont: Font {
+        switch self {
+        case .compact: return .caption2.weight(.bold)
+        case .medium: return .caption2.weight(.bold)
+        case .large: return .caption.weight(.bold)
+        }
+    }
+    
+    /// Icon Dynamic Type font for badges and indicators.
+    var iconFont: Font {
+        switch self {
+        case .compact: return .caption2.weight(.bold)
+        case .medium: return .caption2.weight(.bold)
+        case .large: return .caption.weight(.bold)
+        }
+    }
+    
+    /// Centered format SF Symbol pictogram Dynamic Type font.
+    var pictogramFont: Font {
+        switch self {
+        case .compact: return .title3.weight(.medium)
+        case .medium: return .title2.weight(.medium)
+        case .large: return .title.weight(.semibold)
+        }
+    }
+    
     /// Diameter of the centered media format indicator circle badge.
     var pictogramBadgeSize: CGFloat {
         switch self {
