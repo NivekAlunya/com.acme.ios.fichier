@@ -35,16 +35,6 @@ public struct TVMediaGridItemView: View {
         TVMediaItemFormatStyle.formatInfo(for: item)
     }
 
-    /// Distinctive accent color resolved for this media item's container format.
-    private var formatColor: Color {
-        formatInfo.color
-    }
-
-    /// Display label for the media format capsule badge.
-    private var formatLabel: String {
-        formatInfo.label
-    }
-
     /// Designated public initializer.
     ///
     /// - Parameter item: Target media source item.

@@ -14,23 +14,22 @@ public enum TVMediaItemFormatStyle: Sendable {
     /// - Parameter item: The target media source item.
     /// - Returns: A tuple containing the format label, color, and pictogram SF Symbol name.
     public static func formatInfo(for item: MediaSourceItem) -> (label: String, color: Color, pictogramName: String) {
-        let picto = pictogramName(for: item)
         switch item.type {
         case .folder:
             let label = item.size > 0 ? "\(item.size)" : "FOLDER"
-            return (label: label, color: Color(white: 0.35), pictogramName: picto)
+            return (label: label, color: Color(white: 0.35), pictogramName: "folder.fill")
         case .video:
             let rawExt = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters)
             let lowerExt = rawExt.lowercased()
             let label = rawExt.isEmpty ? "VIDEO" : rawExt.uppercased()
             let color = videoColor(forExtension: lowerExt)
-            return (label: label, color: color, pictogramName: picto)
+            return (label: label, color: color, pictogramName: "play.fill")
         case .image:
             let rawExt = (item.name as NSString).pathExtension.trimmingCharacters(in: .punctuationCharacters)
             let lowerExt = rawExt.lowercased()
             let label = rawExt.isEmpty ? "PHOTO" : rawExt.uppercased()
             let color = imageColor(forExtension: lowerExt)
-            return (label: label, color: color, pictogramName: picto)
+            return (label: label, color: color, pictogramName: "photo.fill")
         }
     }
     
@@ -39,14 +38,7 @@ public enum TVMediaItemFormatStyle: Sendable {
     /// - Parameter item: The target media source item.
     /// - Returns: An SF Symbol name (`"play.fill"` for video, `"photo.fill"` for image, `"folder.fill"` for folder).
     public static func pictogramName(for item: MediaSourceItem) -> String {
-        switch item.type {
-        case .folder:
-            return "folder.fill"
-        case .video:
-            return "play.fill"
-        case .image:
-            return "photo.fill"
-        }
+        formatInfo(for: item).pictogramName
     }
     
     /// Formats the item's type or file extension into an uppercase badge string (e.g. "MP4", "PNG", folder item count).

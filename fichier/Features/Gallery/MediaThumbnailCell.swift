@@ -48,16 +48,6 @@ struct MediaThumbnailCell: View {
     private var formatInfo: (label: String, color: Color, pictogramName: String) {
         MediaItemFormatStyle.formatInfo(for: item)
     }
-    
-    /// Distinctive accent color resolved for this media item's container format.
-    private var formatColor: Color {
-        formatInfo.color
-    }
-    
-    /// Display label for the media format capsule badge.
-    private var formatLabel: String {
-        formatInfo.label
-    }
 
     var body: some View {
         ZStack {
