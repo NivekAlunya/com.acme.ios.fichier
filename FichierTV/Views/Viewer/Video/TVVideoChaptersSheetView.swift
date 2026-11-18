@@ -35,7 +35,7 @@ public struct TVVideoChaptersSheetView: View {
         NavigationStack {
             List {
                 if !quickJumpOptions.isEmpty {
-                    Section("Quick Jump") {
+                    Section(.Strings.videoPlayerMenuQuickJump) {
                         ForEach(quickJumpOptions) { option in
                             Button {
                                 onSelectTime(option.targetTime)
@@ -54,7 +54,7 @@ public struct TVVideoChaptersSheetView: View {
                 }
 
                 if !chapters.isEmpty {
-                    Section("Chapters") {
+                    Section(.Strings.videoPlayerMenuChapters) {
                         ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
                             let nextStart = index + 1 < chapters.count ? chapters[index + 1].startTime : duration
                             let isCurrent = currentTime >= chapter.startTime && (nextStart <= chapter.startTime || currentTime < nextStart)
@@ -83,10 +83,10 @@ public struct TVVideoChaptersSheetView: View {
                     }
                 }
             }
-            .navigationTitle(chapters.isEmpty ? "Quick Jump" : "Chapters & Jump")
+            .navigationTitle(chapters.isEmpty ? .Strings.videoPlayerMenuQuickJump : .Strings.videoPlayerMenuChaptersAndQuickJump)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button(.Strings.commonDone) {
                         dismiss()
                     }
                 }

@@ -32,13 +32,13 @@ public struct TVSlideshowSettingsView: View {
     public var body: some View {
         NavigationStack {
             List {
-                Section("Slide Duration") {
+                Section(.Strings.tvSlideshowSlideDuration) {
                     ForEach(availableIntervals, id: \.self) { interval in
                         Button {
                             onSelectInterval(interval)
                         } label: {
                             HStack {
-                                Text("\(Int(interval)) seconds")
+                                Text(.Strings.tvSlideshowDurationSeconds(Int(interval)))
                                 Spacer()
                                 if currentInterval == interval {
                                     Image(systemName: "checkmark")
@@ -48,7 +48,7 @@ public struct TVSlideshowSettingsView: View {
                     }
                 }
 
-                Section("Transition Style") {
+                Section(.Strings.tvSlideshowTransitionStyle) {
                     ForEach(SlideshowTransitionStyle.allCases) { style in
                         Button {
                             onSelectStyle(style)
@@ -64,10 +64,10 @@ public struct TVSlideshowSettingsView: View {
                     }
                 }
             }
-            .navigationTitle("Slideshow Settings")
+            .navigationTitle(.Strings.tvSlideshowSettingsTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button(.Strings.commonDone) {
                         dismiss()
                     }
                 }

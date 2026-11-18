@@ -46,7 +46,7 @@ public struct TVServerCardView: View {
         .frame(width: 320, height: 220)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(card.name), \(card.host), \(card.status.rawValue)")
-        .accessibilityHint("Select to browse media, or press Play/Pause for server options")
+        .accessibilityHint(Text(.Strings.tvServerCardAccessibilityHint))
     }
 
     @ViewBuilder

@@ -161,7 +161,7 @@ public struct VideoTimelineBar: View {
             }
             .frame(height: 36)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(String(localized: "Playback Timeline", comment: "Accessibility label for playback scrubber"))
+            .accessibilityLabel(Text(.Strings.videoPlayerTimelineScrubber))
             .accessibilityValue("\(formatSeconds(effectiveCurrentTime)) of \(formatSeconds(duration))")
             .accessibilityAdjustableAction { direction in
                 guard duration > 0 else { return }
@@ -188,7 +188,7 @@ public struct VideoTimelineBar: View {
                     .frame(minWidth: 48, alignment: .trailing)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(showRemainingTime ? String(localized: "Remaining time, tap to show total duration", comment: "Accessibility label for remaining time button") : String(localized: "Total duration, tap to show remaining time", comment: "Accessibility label for total duration button"))
+            .accessibilityLabel(showRemainingTime ? Text(.Strings.videoPlayerTimelineRemainingHint) : Text(.Strings.videoPlayerTimelineDurationHint))
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)

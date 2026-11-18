@@ -142,8 +142,8 @@ struct AppSettingsView: View {
                 
                 // 5. PDF Reader Defaults
                 #if !os(tvOS)
-                Section(String(localized: "PDF Reader", comment: "PDF Reader settings section")) {
-                    Picker(String(localized: "Default Reading Mode", comment: "Default PDF reading mode"), selection: $readingMode) {
+                Section(.Strings.settingsSectionPdfReader) {
+                    Picker(.Strings.settingsPdfDefaultReadingMode, selection: $readingMode) {
                         ForEach(PDFReadingMode.allCases) { mode in
                             Label(mode.localizedTitle, systemImage: mode.iconName).tag(mode)
                         }

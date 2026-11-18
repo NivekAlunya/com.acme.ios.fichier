@@ -365,26 +365,26 @@ struct MediaGridView: View {
                     }
                 }
             }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
+            Button(.Strings.commonCancel, role: .cancel) {
                 viewModel.itemsPendingDelete = nil
             }
         } message: {
             Text(verbatim: deleteConfirmationMessage)
         }
         .alert(
-            String(localized: "New Folder", comment: "Alert title for creating new folder"),
+            .Strings.commonNewFolder,
             isPresented: $viewModel.isShowingNewFolderAlert
         ) {
-            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $viewModel.newFolderName)
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
-            Button(String(localized: "Create", comment: "Create button")) {
+            TextField(String(localized: .Strings.commonFolderName), text: $viewModel.newFolderName)
+            Button(.Strings.commonCancel, role: .cancel) {}
+            Button(.Strings.commonCreate) {
                 executeCreateFolder()
             }
             .disabled(viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
             if let folder = viewModel.manager.selectedFolder {
                 let displayName = folder.name.isEmpty ? folder.rootName : folder.name
-                Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
+                Text(.Strings.galleryCreateSubfolderPrompt(displayName))
             }
         }
         .alert(
@@ -412,13 +412,13 @@ struct MediaGridView: View {
             }
         }
         .alert(
-            String(localized: "File Operation Failed", comment: "Error alert title"),
+            .Strings.galleryErrorFileOperationFailed,
             isPresented: Binding(
                 get: { viewModel.fileOpErrorMessage != nil },
                 set: { if !$0 { viewModel.fileOpErrorMessage = nil } }
             )
         ) {
-            Button(String(localized: "OK", comment: "Dismiss button"), role: .cancel) {}
+            Button(.Strings.commonOk, role: .cancel) {}
         } message: {
             if let fileOpErrorMessage = viewModel.fileOpErrorMessage {
                 Text(fileOpErrorMessage)
@@ -1002,32 +1002,32 @@ struct MediaGridView: View {
         guard let items = viewModel.itemsPendingDelete, !items.isEmpty else { return "" }
         if isDeletingFromSMB {
             if items.count == 1, let first = items.first {
-                return String(localized: "Delete '\(first.name)' permanently?", comment: "Permanent delete single item confirmation title")
+                return String(localized: .Strings.galleryConfirmDeleteSinglePermanentTitle(first.name))
             }
-            return String(localized: "Permanently delete \(items.count) items?", comment: "Permanent delete multiple items confirmation title")
+            return String(localized: .Strings.galleryConfirmDeleteMultiplePermanentTitle(items.count))
         } else {
             if items.count == 1, let first = items.first {
-                return String(localized: "Move '\(first.name)' to Trash?", comment: "Delete single item confirmation title")
+                return String(localized: .Strings.galleryConfirmMoveSingleToTrashTitle(first.name))
             }
-            return String(localized: "Move \(items.count) items to Trash?", comment: "Delete multiple items confirmation title")
+            return String(localized: .Strings.galleryConfirmMoveMultipleToTrashTitle(items.count))
         }
     }
     
     /// Button title for confirming deletion.
     private var deleteConfirmationButtonTitle: String {
         if isDeletingFromSMB {
-            return String(localized: "Delete Permanently", comment: "Confirm permanent deletion button")
+            return String(localized: .Strings.galleryActionDeletePermanently)
         } else {
-            return String(localized: "Move to Trash", comment: "Confirm move to trash button")
+            return String(localized: .Strings.galleryActionMoveToTrash)
         }
     }
     
     /// Message explaining the permanent or trash nature of the pending delete.
     private var deleteConfirmationMessage: String {
         if isDeletingFromSMB {
-            return String(localized: "This file will be permanently deleted from the network share.", comment: "Warning when deleting from SMB share")
+            return String(localized: .Strings.galleryWarningPermanentDeleteSmb)
         } else {
-            return String(localized: "Items moved to the Trash can be restored from the Files app Trash.", comment: "Explanation of trash behavior")
+            return String(localized: .Strings.galleryInfoMoveToTrash)
         }
     }
     
@@ -1043,9 +1043,9 @@ struct MediaGridView: View {
                 }
             }
             if wasSMB {
-                showToastMessage(items.count == 1 ? String(localized: "Item permanently deleted", comment: "Toast when single item permanently deleted") : String(localized: "\(items.count) items permanently deleted", comment: "Toast when multiple items permanently deleted"))
+                showToastMessage(items.count == 1 ? String(localized: .Strings.galleryToastSingleItemPermanentlyDeleted) : String(localized: .Strings.galleryToastMultipleItemsPermanentlyDeleted(items.count)))
             } else {
-                showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
+                showToastMessage(items.count == 1 ? String(localized: .Strings.galleryToastSingleItemMovedToTrash) : String(localized: .Strings.galleryToastMultipleItemsMovedToTrash(items.count)))
             }
         } catch {
             viewModel.fileOpErrorMessage = error.localizedDescription
@@ -1064,7 +1064,7 @@ struct MediaGridView: View {
                     }
                 }
                 let destName = destination.name.isEmpty ? destination.rootName : destination.name
-                showToastMessage(items.count == 1 ? String(localized: "Item moved to '\(destName)'", comment: "Toast when single item moved") : String(localized: "\(items.count) items moved to '\(destName)'", comment: "Toast when multiple items moved"))
+                showToastMessage(items.count == 1 ? String(localized: .Strings.galleryToastSingleItemMoved(destName)) : String(localized: .Strings.galleryToastMultipleItemsMoved(items.count, destName)))
             } catch {
                 viewModel.fileOpErrorMessage = error.localizedDescription
             }
@@ -1078,7 +1078,7 @@ struct MediaGridView: View {
         Task {
             do {
                 try await viewModel.manager.createFolder(named: trimmed)
-                showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
+                showToastMessage(String(localized: .Strings.galleryToastFolderCreated(trimmed)))
             } catch {
                 viewModel.fileOpErrorMessage = error.localizedDescription
             }
@@ -1171,7 +1171,7 @@ struct MediaGridView: View {
                                     .foregroundColor(.blue)
                             }
                             .tint(.blue)
-                            .accessibilityLabel(String(localized: "New Folder", comment: "Accessibility label for create folder button"))
+                            .accessibilityLabel(Text(.Strings.commonNewFolder))
                         }
                         
                         if !displayPictures.isEmpty {

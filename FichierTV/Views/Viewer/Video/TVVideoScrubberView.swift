@@ -118,7 +118,7 @@ public struct TVVideoScrubberView: View {
                 .fill(isFocused ? Color.white.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Playback progress")
+        .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackProgress))
         .accessibilityValue("\(formatTimestamp(displayTime)) of \(formatTimestamp(duration))")
     }
 

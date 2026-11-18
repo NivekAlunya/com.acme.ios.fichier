@@ -60,9 +60,9 @@ final class MediaGridViewModel {
 
     var parentFolderAccessibilityLabel: String {
         if let parentName = manager.parentFolder?.name {
-            String(localized: "Navigate to parent folder: \(parentName)", comment: "Accessibility label for parent folder button")
+            String(localized: .Strings.galleryNavigateParentFolder(parentName))
         } else {
-            String(localized: "Parent folder", comment: "Accessibility label for parent folder button")
+            String(localized: .Strings.galleryParentFolder)
         }
     }
 

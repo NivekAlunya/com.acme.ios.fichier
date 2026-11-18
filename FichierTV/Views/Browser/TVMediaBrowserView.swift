@@ -144,7 +144,7 @@ public struct TVMediaBrowserView: View {
                 )
             }
 
-            Button("Cancel", role: .cancel) {}
+            Button(.Strings.commonCancel, role: .cancel) {}
         }
     }
 
@@ -246,10 +246,10 @@ public struct TVMediaBrowserView: View {
         Button {
             viewModel.setLayout(.grid)
         } label: {
-            Label("Grid", systemImage: "square.grid.2x2")
+            Label(.Strings.tvMediaViewGrid, systemImage: "square.grid.2x2")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .grid))
-        .accessibilityLabel("Grid layout")
+        .accessibilityLabel(Text(.Strings.tvMediaViewGridAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .grid ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_grid_button")
     }
@@ -259,10 +259,10 @@ public struct TVMediaBrowserView: View {
         Button {
             viewModel.setLayout(.list)
         } label: {
-            Label("List", systemImage: "list.bullet")
+            Label(.Strings.tvMediaViewList, systemImage: "list.bullet")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .list))
-        .accessibilityLabel("List layout")
+        .accessibilityLabel(Text(.Strings.tvMediaViewListAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .list ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_list_button")
     }
@@ -278,7 +278,7 @@ public struct TVMediaBrowserView: View {
             )
         }
         .buttonStyle(TVControlButtonStyle(isSelected: false))
-        .accessibilityLabel("Sort options")
+        .accessibilityLabel(Text(.Strings.tvMediaSortOptionsAccessibility))
         .accessibilityValue(
             "\(viewModel.selectedSortKey.displayTitle), \(viewModel.selectedSortOrder == .ascending ? "ascending" : "descending")"
         )

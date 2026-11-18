@@ -69,7 +69,7 @@ public struct VideoPlayerCenterControlsView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
-                    .accessibilityLabel(String(localized: "Retry Loading Video", comment: "Accessibility label to retry loading video"))
+                    .accessibilityLabel(Text(.Strings.videoPlayerControlRetryLoading))
                 }
                 .transition(.opacity)
             }
@@ -89,7 +89,7 @@ public struct VideoPlayerCenterControlsView: View {
                             .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Backward 15 seconds", comment: "Accessibility label to seek backward 15 seconds"))
+                    .accessibilityLabel(Text(.Strings.videoPlayerControlBackward15))
                     
                     // Center Play / Pause / Replay Toggle
                     Button {
@@ -102,7 +102,7 @@ public struct VideoPlayerCenterControlsView: View {
                             .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(controller.isAtEnd ? String(localized: "Replay", comment: "Accessibility label to replay video") : (controller.playbackState.isPlaying ? String(localized: "Pause", comment: "Accessibility label to pause playback") : String(localized: "Play", comment: "Accessibility label to start playback")))
+                    .accessibilityLabel(controller.isAtEnd ? Text(.Strings.commonReplay) : (controller.playbackState.isPlaying ? Text(.Strings.commonPause) : Text(.Strings.commonPlay)))
                     
                     // Forward 15s Button
                     Button {
@@ -115,7 +115,7 @@ public struct VideoPlayerCenterControlsView: View {
                             .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Forward 15 seconds", comment: "Accessibility label to seek forward 15 seconds"))
+                    .accessibilityLabel(Text(.Strings.videoPlayerControlForward15))
                 }
                 .opacity(controller.showControls ? 1 : 0)
                 .animation(.easeInOut(duration: 0.35), value: controller.showControls)

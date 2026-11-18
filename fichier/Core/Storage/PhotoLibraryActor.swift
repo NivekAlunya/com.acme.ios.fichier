@@ -216,7 +216,7 @@ public actor PhotoLibraryActor {
     /// Resolves an actionable file system URL for video playback via `FichierKit.PhotoVideoLoader`.
     public func fetchVideoURL(for item: MediaItem) async throws -> URL {
         guard let assetID = item.phAssetIdentifier else {
-            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: "Invalid asset identifier", comment: "Error message when a photo asset identifier is invalid")])
+            throw NSError(domain: "PhotoLibraryActor", code: 2, userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorInvalidAssetIdentifier)])
         }
         return try await PhotoVideoLoader.shared.loadVideoURL(for: assetID)
     }

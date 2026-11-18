@@ -84,7 +84,7 @@ public struct PDFViewerTopBarView: View {
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close document viewer"))
+        .accessibilityLabel(Text(.Strings.commonClose))
     }
     
     /// Centered capsule container displaying the document file name and playlist counter.

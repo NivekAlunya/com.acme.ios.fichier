@@ -35,9 +35,9 @@ public struct TVTracksMenuView: View {
     public var body: some View {
         NavigationStack {
             List {
-                Section("Audio") {
+                Section(.Strings.tvTracksAudioTitle) {
                     if audioTracks.isEmpty {
-                        Text("Default Audio")
+                        Text(.Strings.tvTracksDefaultAudio)
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(audioTracks) { track in
@@ -57,13 +57,13 @@ public struct TVTracksMenuView: View {
                     }
                 }
 
-                Section("Subtitles") {
+                Section(.Strings.tvTracksSubtitlesTitle) {
                     Button {
                         onSelectSubtitle(nil)
                         dismiss()
                     } label: {
                         HStack {
-                            Text("Off")
+                            Text(.Strings.videoPlayerSubtitlesOff)
                             Spacer()
                             if selectedSubtitle == nil {
                                 Image(systemName: "checkmark")
@@ -87,10 +87,10 @@ public struct TVTracksMenuView: View {
                     }
                 }
             }
-            .navigationTitle("Audio & Subtitles")
+            .navigationTitle(.Strings.tvTracksMenuTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button(.Strings.commonDone) {
                         dismiss()
                     }
                 }

@@ -72,7 +72,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to locate folder '\(location.name)'. If it is on an external drive, ensure the drive is connected.", comment: "Error message when resolving security-scoped bookmark fails")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorLocateFolder(location.name))]
             )
         }
         
@@ -80,7 +80,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Access permission expired for folder '\(location.name)'. Please re-select the folder in Settings or Sidebar.", comment: "Error message when security-scoped resource access is rejected")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorPermissionExpired(location.name))]
             )
         }
         
@@ -144,7 +144,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 3,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Missing local URL for folder: \(folder.name)", comment: "Error message when local URL is missing for a folder")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorMissingLocalUrl(folder.name))]
             )
         }
         
@@ -168,7 +168,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 4,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Cannot read contents of '\(folder.name)'. Please verify the folder or external volume is connected.", comment: "Error message when reading contents of a local folder fails")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorReadContentsFailed(folder.name))]
             )
         }
         
@@ -265,16 +265,9 @@ public actor LocalStorageActor {
             }
             return nil
         } else {
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: targetDimension
-            ]
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-                return UIImage(contentsOfFile: url.path)
+            guard let thumb = SMBImageLoader.decodeDownsampledImage(from: url, maxPixelSize: targetDimension) else {
+                return nil
             }
-            let thumb = UIImage(cgImage: cgImage)
             MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
             return thumb
         }
@@ -293,18 +286,7 @@ public actor LocalStorageActor {
     /// - Returns: A decoded `UIImage`, or `nil`.
     public func fetchImage(for item: MediaItem, maxPixelSize: CGFloat = 2048) -> UIImage? {
         guard let url = item.localURL else { return nil }
-        
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ]
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return UIImage(contentsOfFile: url.path)
-        }
-        return UIImage(cgImage: cgImage)
+        return SMBImageLoader.decodeDownsampledImage(from: url, maxPixelSize: maxPixelSize)
     }
     
     // MARK: - File Size Query
@@ -374,14 +356,7 @@ public actor LocalStorageActor {
         in parentFolder: MediaItem,
         locationID: String
     ) throws -> MediaItem {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains(":") else {
-            throw FileOperationError.invalidName(name)
-        }
+        let trimmed = try FileOperationError.validateName(name)
         
         guard let parentURL = parentFolder.localURL else {
             throw FileOperationError.missingURL(parentFolder.name)
@@ -504,15 +479,7 @@ public actor LocalStorageActor {
     /// - Returns: The updated `MediaItem`.
     /// - Throws: `FileOperationError` or filesystem errors.
     public func renameItem(_ item: MediaItem, to newName: String) throws -> MediaItem {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
-              !trimmed.hasSuffix(".") else {
-            throw FileOperationError.invalidName(newName)
-        }
+        let trimmed = try FileOperationError.validateName(newName)
         
         guard let sourceURL = item.localURL else {
             throw FileOperationError.missingURL(item.name)

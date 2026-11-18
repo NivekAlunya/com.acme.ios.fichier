@@ -51,9 +51,9 @@ struct FolderPickerSheetView: View {
     /// Title indicating number of items being moved.
     private var navigationTitle: String {
         if itemsToMove.count == 1, let first = itemsToMove.first {
-            return String(localized: "Move '\(first.name)'", comment: "Title when moving a single item")
+            return String(localized: .Strings.galleryMoveSingleItemTitle(first.name))
         }
-        return String(localized: "Move \(itemsToMove.count) Items", comment: "Title when moving multiple items")
+        return String(localized: .Strings.galleryMoveMultipleItemsTitle(itemsToMove.count))
     }
     
     /// Validates whether a given folder can accept the items to move.
@@ -130,12 +130,15 @@ struct FolderPickerSheetView: View {
         NavigationStack {
             Group {
                 if isLoading {
-                    ProgressView(String(localized: "Loading folders...", comment: "Progress text while loading folder hierarchy"))
+                    ProgressView(.Strings.galleryLoadingFolders)
                 } else if folderTree.isEmpty {
                     ContentUnavailableView(
-                        String(localized: "No Folders Available", comment: "Empty state title when no folders found"),
-                        systemImage: "folder.badge.questionmark",
-                        description: Text(String(localized: "No destination folders could be located.", comment: "Empty state description"))
+                        label: {
+                            Label(.Strings.galleryNoFoldersAvailableTitle, systemImage: "folder.badge.questionmark")
+                        },
+                        description: {
+                            Text(.Strings.galleryNoFoldersAvailableDescription)
+                        }
                     )
                 } else {
                     List {
@@ -167,7 +170,7 @@ struct FolderPickerSheetView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel", comment: "Cancel button")) {
+                    Button(.Strings.commonCancel) {
                         onDismiss()
                     }
                 }
@@ -177,13 +180,13 @@ struct FolderPickerSheetView: View {
                         newFolderName = ""
                         isShowingNewFolderAlert = true
                     } label: {
-                        Label(String(localized: "New Folder", comment: "New folder button"), systemImage: "folder.badge.plus")
+                        Label(.Strings.commonNewFolder, systemImage: "folder.badge.plus")
                     }
                     .disabled(isLoading || selectedDestination == nil)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Move Here", comment: "Move here confirmation button")) {
+                    Button(.Strings.galleryActionMoveHere) {
                         if let destination = selectedDestination {
                             onMoveTo(destination)
                         }
@@ -193,28 +196,28 @@ struct FolderPickerSheetView: View {
                 }
             }
             .alert(
-                String(localized: "New Folder", comment: "Alert title for creating new folder"),
+                .Strings.commonNewFolder,
                 isPresented: $isShowingNewFolderAlert
             ) {
-                TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $newFolderName)
-                Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
-                Button(String(localized: "Create", comment: "Create button")) {
+                TextField(String(localized: .Strings.commonFolderName), text: $newFolderName)
+                Button(.Strings.commonCancel, role: .cancel) {}
+                Button(.Strings.commonCreate) {
                     createNewFolder()
                 }
                 .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } message: {
                 if let target = selectedDestination {
-                    Text(String(localized: "Create a subfolder inside '\(target.name.isEmpty ? target.rootName : target.name)'.", comment: "Prompt explaining where folder will be created"))
+                    Text(.Strings.galleryCreateSubfolderPrompt(target.name.isEmpty ? target.rootName : target.name))
                 }
             }
             .alert(
-                String(localized: "Unable to Create Folder", comment: "Error alert title"),
+                .Strings.galleryErrorUnableToCreateFolder,
                 isPresented: Binding(
                     get: { errorMessage != nil },
                     set: { if !$0 { errorMessage = nil } }
                 )
             ) {
-                Button(String(localized: "OK", comment: "Dismiss error alert button"), role: .cancel) {}
+                Button(.Strings.commonOk, role: .cancel) {}
             } message: {
                 if let errorMessage {
                     Text(errorMessage)

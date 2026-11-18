@@ -275,7 +275,7 @@ public struct LocationsSidebarView: View {
                         await viewModel.manager.removeLocation(location)
                     }
                 } label: {
-                    Label(String(localized: "Remove Location"), systemImage: "trash")
+                    Label(.Strings.sidebarActionRemoveLocation, systemImage: "trash")
                 }
             }
         }

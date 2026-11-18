@@ -46,7 +46,7 @@ public struct VideoPlayerToastBannerView: View {
                             .background(Capsule().fill(engineTintColor))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Restart from beginning", comment: "Accessibility label to restart playback from start"))
+                    .accessibilityLabel(Text(.Strings.videoPlayerControlRestartBeginning))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)

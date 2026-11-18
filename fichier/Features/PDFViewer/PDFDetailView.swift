@@ -354,7 +354,7 @@ struct PDFDetailView: View {
                     .foregroundColor(.white.opacity(0.7))
             }
             
-            Button(String(localized: "Cancel", comment: "Cancel loading button")) {
+            Button(.Strings.commonCancel) {
                 dismiss()
             }
             .buttonStyle(.bordered)
@@ -372,7 +372,7 @@ struct PDFDetailView: View {
                 .font(.system(size: 40))
                 .foregroundColor(.yellow)
             
-            Text(String(localized: "Unable to Open Document", comment: "PDF load error title"))
+            Text(.Strings.pdfErrorUnableToOpen)
                 .font(.headline)
                 .foregroundColor(.white)
             
@@ -383,13 +383,13 @@ struct PDFDetailView: View {
                 .padding(.horizontal, 32)
             
             HStack(spacing: 16) {
-                Button(String(localized: "Close", comment: "Close button")) {
+                Button(.Strings.commonClose) {
                     dismiss()
                 }
                 .buttonStyle(.bordered)
                 .tint(.white)
                 
-                Button(String(localized: "Retry", comment: "Retry button")) {
+                Button(.Strings.commonRetry) {
                     viewModel.reloadAttempt += 1
                 }
                 .buttonStyle(.borderedProminent)
@@ -458,7 +458,7 @@ struct PDFDetailView: View {
             if let doc = PDFDocument(url: url) {
                 onDocumentLoaded(doc)
             } else {
-                self.viewModel.errorMessage = String(localized: "Unable to parse PDF content", comment: "Invalid PDF format")
+                self.viewModel.errorMessage = String(localized: .Strings.pdfErrorUnableToParse)
                 self.viewModel.isLoading = false
             }
         } catch {

@@ -90,7 +90,7 @@ public struct PDFThumbnailItemCell: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Page \(pageNumber)", comment: "Thumbnail page accessibility label"))
+        .accessibilityLabel(Text(.Strings.pdfPageCounter(pageNumber)))
         .task(id: page) {
             guard let page else { return }
             let targetSize = CGSize(width: 54, height: 74)

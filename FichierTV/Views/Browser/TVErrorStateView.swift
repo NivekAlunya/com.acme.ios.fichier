@@ -38,17 +38,17 @@ public struct TVErrorStateView: View {
             HStack(spacing: 24) {
                 if let onBack {
                     Button(action: onBack) {
-                        Label("Back", systemImage: "chevron.left")
+                        Label(.Strings.commonBack, systemImage: "chevron.left")
                     }
                     .buttonStyle(.bordered)
-                    .accessibilityLabel("Go back")
+                    .accessibilityLabel(Text(.Strings.commonGoBack))
                 }
 
                 Button(action: onRetry) {
-                    Label("Retry", systemImage: "arrow.clockwise")
+                    Label(.Strings.commonRetry, systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Retry operation")
+                .accessibilityLabel(Text(.Strings.commonRetry))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -55,7 +55,7 @@ public struct VideoVolumeBar: View {
                     .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isMuted ? String(localized: "Unmute", comment: "Accessibility label to unmute volume") : String(localized: "Mute", comment: "Accessibility label to mute volume"))
+            .accessibilityLabel(isMuted ? Text(.Strings.videoPlayerVolumeUnmute) : Text(.Strings.videoPlayerVolumeMute))
             
             GeometryReader { geo in
                 let trackWidth = geo.size.width
@@ -87,7 +87,7 @@ public struct VideoVolumeBar: View {
             }
             .frame(width: 60, height: 20)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(String(localized: "Volume", comment: "Accessibility label for volume slider"))
+            .accessibilityLabel(Text(.Strings.videoPlayerVolumeSlider))
             .accessibilityValue("\(Int(volume * 100))%")
             .accessibilityAdjustableAction { direction in
                 switch direction {
