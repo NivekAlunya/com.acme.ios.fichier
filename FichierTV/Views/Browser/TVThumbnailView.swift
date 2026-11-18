@@ -76,7 +76,7 @@ public struct TVThumbnailView: View {
             return
         }
 
-        let isCached = isPrecached(item: item)
+        let isCached = await isPrecached(item: item)
         if let loaded = await fetchThumbnailOnce() {
             if !Task.isCancelled {
                 thumbnailImage = loaded
@@ -98,18 +98,18 @@ public struct TVThumbnailView: View {
         }
     }
 
-    private func isPrecached(item: MediaSourceItem) -> Bool {
+    private func isPrecached(item: MediaSourceItem) async -> Bool {
         if item.type == .image {
             if let localURL = item.localURL, localURL.isFileURL {
-                return SMBImageLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
+                return await SMBImageLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
             } else if let sourceID = item.sourceID, let share = item.smbShare, let path = item.smbPath {
-                return SMBImageLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
+                return await SMBImageLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
             }
         } else if item.type == .video {
             if let localURL = item.localURL, localURL.isFileURL {
-                return SMBVideoThumbnailLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
+                return await SMBVideoThumbnailLoader.shared.hasCachedLocalThumbnail(url: localURL, targetSize: targetSize)
             } else if let sourceID = item.sourceID, let share = item.smbShare, let path = item.smbPath {
-                return SMBVideoThumbnailLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
+                return await SMBVideoThumbnailLoader.shared.hasCachedThumbnail(sourceID: sourceID, share: share, path: path, targetSize: targetSize)
             }
         }
         return false

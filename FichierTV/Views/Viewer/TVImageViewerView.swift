@@ -47,13 +47,22 @@ public struct TVImageViewerView: View {
                 .ignoresSafeArea()
                 .zIndex(0)
 
-            ZStack {
-                TVSlideImageView(
-                    item: viewModel.currentItem,
-                    image: viewModel.currentImage ?? viewModel.cachedImage(for: viewModel.currentItem.id)
-                )
-                .transition(imageTransition)
-                .id(viewModel.currentIndex)
+            Group {
+                if viewModel.transitionStyle == .slide && !reduceMotion {
+                    TVSlideCarouselView(
+                        items: viewModel.items,
+                        currentIndex: viewModel.currentIndex,
+                        currentImage: viewModel.currentImage,
+                        cachedImage: { viewModel.cachedImage(for: $0) }
+                    )
+                } else {
+                    TVSlideImageView(
+                        item: viewModel.currentItem,
+                        image: viewModel.currentImage ?? viewModel.cachedImage(for: viewModel.currentItem.id)
+                    )
+                    .transition(imageTransition)
+                    .id(viewModel.currentIndex)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
@@ -94,12 +103,14 @@ public struct TVImageViewerView: View {
                         break
                     }
                 }
+                .zIndex(2)
             }
 
             if viewModel.isLoadingImage && viewModel.currentImage == nil && viewModel.cachedImage(for: viewModel.currentItem.id) == nil {
                 ProgressView()
                     .tint(.white)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .zIndex(5)
             }
 
             if viewModel.showOverlay {
@@ -129,6 +140,7 @@ public struct TVImageViewerView: View {
                     onClose: { dismiss() }
                 )
                 .transition(.opacity)
+                .zIndex(10)
             }
         }
         .onPlayPauseCommand {

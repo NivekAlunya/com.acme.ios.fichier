@@ -28,14 +28,23 @@ struct FolderCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .task(id: folder.id) {
-            let loaded = await MediaCacheManager.shared.folderIcon(
-                folderPath: folder.path,
-                shareName: folder.shareName,
-                connectionID: folder.connectionID
-            )
-            guard !Task.isCancelled else { return }
-            thumbnail = loaded
+            await loadThumbnail()
         }
+        .onAppear {
+            Task {
+                await loadThumbnail()
+            }
+        }
+    }
+
+    private func loadThumbnail() async {
+        let loaded = await MediaCacheManager.shared.folderIcon(
+            folderPath: folder.path,
+            shareName: folder.shareName,
+            connectionID: folder.connectionID
+        )
+        guard !Task.isCancelled else { return }
+        thumbnail = loaded
     }
 
     @ViewBuilder

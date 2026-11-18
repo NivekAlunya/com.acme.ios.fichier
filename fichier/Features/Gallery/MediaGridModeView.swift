@@ -125,11 +125,9 @@ struct MediaGridModeView: View {
                         FolderCardView(folder: subfolder)
                     }
                     .buttonStyle(.plain)
-                    .contextMenu {
-                        if !isSelectionMode {
-                            folderContextMenu(for: subfolder)
-                        }
-                    }
+                    .contextMenu(isSelectionMode ? nil : ContextMenu {
+                        folderContextMenu(for: subfolder)
+                    })
                 }
             }
             .padding(.horizontal, 12)
@@ -209,11 +207,9 @@ struct MediaGridModeView: View {
                 onEnterSelectionMode(pic)
             }
         }
-        .contextMenu {
-            if !isSelectionMode {
-                pictureContextMenu(for: pic)
-            }
-        }
+        .contextMenu(isSelectionMode ? nil : ContextMenu {
+            pictureContextMenu(for: pic)
+        })
     }
 
     @ViewBuilder

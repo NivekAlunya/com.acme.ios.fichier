@@ -72,13 +72,15 @@ extension StorageLocationManager {
             if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
                 MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                MediaCacheManager.shared.linkFolderIcon(
-                    thumb,
-                    childPath: item.path,
-                    shareName: item.shareName,
-                    connectionID: item.connectionID,
-                    isVideo: item.isVideo
-                )
+                if item.isImage || item.isVideo {
+                    MediaCacheManager.shared.linkFolderIcon(
+                        thumb,
+                        childPath: item.path,
+                        shareName: item.shareName,
+                        connectionID: item.connectionID,
+                        isVideo: item.isVideo
+                    )
+                }
                 return thumb
             }
             return nil
