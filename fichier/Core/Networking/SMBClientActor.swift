@@ -539,53 +539,6 @@ actor SMBClientActor {
         return subfolders
     }
 
-    /// Recursively lists subfolders within an SMB share for destination picking in `FolderPickerSheetView`.
-    func listSubfoldersRecursively(
-        inShare shareName: String,
-        atPath path: String,
-        rootName: String,
-        locationID: String
-    ) async throws -> [MediaItem] {
-        var visitedPaths = Set<String>()
-        return try await listSubfoldersRecursively(
-            atPath: path,
-            currentDepth: 0,
-            context: (share: shareName, root: rootName, locationID: locationID, maxDepth: 10),
-            visitedPaths: &visitedPaths
-        )
-    }
-
-    private func listSubfoldersRecursively(
-        atPath path: String,
-        currentDepth: Int,
-        context: (share: String, root: String, locationID: String, maxDepth: Int),
-        visitedPaths: inout Set<String>
-    ) async throws -> [MediaItem] {
-        guard currentDepth < context.maxDepth else { return [] }
-        try Task.checkCancellation()
-
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !visitedPaths.contains(cleanPath) else { return [] }
-        visitedPaths.insert(cleanPath)
-
-        let (subfolders, _) = try await scanFolder(shareName: context.share, at: cleanPath)
-        var result: [MediaItem] = []
-
-        for var folder in subfolders {
-            if Task.isCancelled { throw CancellationError() }
-            folder.children = try await listSubfoldersRecursively(
-                atPath: folder.smbRelativePath,
-                currentDepth: currentDepth + 1,
-                context: context,
-                visitedPaths: &visitedPaths
-            )
-            result.append(folder)
-        }
-
-        result.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return result
-    }
-
     // MARK: - Thumbnail Retrieval & Downsampling
 
     /// Fetches and downsamples a media thumbnail using a 2-tier caching hierarchy (RAM + Disk).

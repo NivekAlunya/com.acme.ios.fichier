@@ -55,7 +55,8 @@ public struct TVVideoChaptersSheetView: View {
 
                 if !chapters.isEmpty {
                     Section(.Strings.videoPlayerMenuChapters) {
-                        ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                        ForEach(chapters.indices, id: \.self) { index in
+                            let chapter = chapters[index]
                             let nextStart = index + 1 < chapters.count ? chapters[index + 1].startTime : duration
                             let isCurrent = currentTime >= chapter.startTime && (nextStart <= chapter.startTime || currentTime < nextStart)
 

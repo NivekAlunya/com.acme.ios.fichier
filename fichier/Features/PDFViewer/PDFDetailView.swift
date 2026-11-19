@@ -312,17 +312,7 @@ struct PDFDetailView: View {
     
     /// Resets transient reader state before loading a newly switched viewModel.document.
     private func resetDocumentState() {
-        viewModel.document = nil
-        viewModel.localFileURL = nil
-        viewModel.isLoading = true
-        viewModel.errorMessage = nil
-        viewModel.currentPage = 1
-        viewModel.endVisiblePage = 1
-        viewModel.totalPages = 1
-        viewModel.currentSpreadIndex = 0
-        viewModel.bytesReceived = 0
-        viewModel.totalBytes = 0
-        viewModel.lastReportedBytes = 0
+        viewModel.resetForNewDocument()
     }
     
     // MARK: - Loading Overlay
@@ -390,7 +380,7 @@ struct PDFDetailView: View {
                 .tint(.white)
                 
                 Button(.Strings.commonRetry) {
-                    viewModel.reloadAttempt += 1
+                    viewModel.retryLoad()
                 }
                 .buttonStyle(.borderedProminent)
             }

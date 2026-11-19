@@ -170,14 +170,14 @@ public struct TVMediaBrowserView: View {
                 columns: Array(repeating: GridItem(.flexible(), spacing: 40), count: 4),
                 spacing: 40
             ) {
-                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaGridItemView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(at: index)
+                        viewModel.onItemAppear(item: item)
                     }
                 }
             }
