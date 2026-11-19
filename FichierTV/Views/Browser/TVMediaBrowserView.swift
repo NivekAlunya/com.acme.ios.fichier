@@ -121,7 +121,7 @@ public struct TVMediaBrowserView: View {
                 }
             }
         }
-        .confirmationDialog("Sort By", isPresented: $showingSortDialog, titleVisibility: .visible) {
+        .confirmationDialog(.Strings.galleryMenuSortBy, isPresented: $showingSortDialog, titleVisibility: .visible) {
             ForEach(orderedSortKeys, id: \.self) { key in
                 Button {
                     viewModel.applySort(key: key)
@@ -191,14 +191,14 @@ public struct TVMediaBrowserView: View {
     private func listLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaListRowView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(at: index)
+                        viewModel.onItemAppear(item: item)
                     }
                 }
             }
@@ -209,7 +209,7 @@ public struct TVMediaBrowserView: View {
 
     @ViewBuilder
     private var loadingView: some View {
-        ProgressView("Loading items...")
+        ProgressView(.Strings.tvMediaLoadingItems)
             .font(.headline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -230,7 +230,7 @@ public struct TVMediaBrowserView: View {
                 ProgressView()
                     .controlSize(.small)
             } else {
-                Text("\(viewModel.items.count) \(viewModel.items.count == 1 ? "item" : "items")")
+                Text(.Strings.tvMediaItemsCount(viewModel.items.count))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

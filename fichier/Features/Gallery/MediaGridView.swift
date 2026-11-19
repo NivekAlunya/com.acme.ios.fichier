@@ -116,10 +116,6 @@ struct MediaGridView: View {
         viewModel.filterAndSortData(sortOption: sortOption)
     }
     
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        viewModel.mediaSectionHeader(for: count)
-    }
-    
     /// Dynamic grid layout specification computed from the active `gridSize`.
     /// Uses adaptive sizing bounded between `minDimension` and `1.45 * minDimension` to balance row alignment and screen width.
     private var gridColumns: [GridItem] {
@@ -164,6 +160,7 @@ struct MediaGridView: View {
                                 gridColumns: gridColumns,
                                 gridSize: gridSize,
                                 sortOption: sortOption,
+                                mediaSectionHeader: viewModel.mediaSectionHeader(for: displayPictures.count),
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
@@ -207,6 +204,7 @@ struct MediaGridView: View {
                                 manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
+                                mediaSectionHeader: viewModel.mediaSectionHeader(for: displayPictures.count),
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
@@ -288,9 +286,6 @@ struct MediaGridView: View {
             if let shareSheetItems = viewModel.shareSheetItems {
                 MediaActivityShareSheet(activityItems: shareSheetItems)
             }
-        }
-        .sheet(isPresented: $viewModel.showingSettings) {
-            AppSettingsView(manager: viewModel.manager)
         }
         #if !os(tvOS)
         .sheet(isPresented: Binding(
@@ -762,15 +757,6 @@ struct MediaGridView: View {
                             }
                         } label: {
                             Image(systemName: "arrow.clockwise")
-                        }
-                        
-                        if horizontalSizeClass == .compact {
-                            Button {
-                                viewModel.showingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityLabel(.Strings.settingsTitle)
                         }
                     }.padding(.horizontal)
                 }

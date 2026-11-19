@@ -37,7 +37,6 @@ final class MediaGridViewModel {
 
     // MARK: - Sheet & File Management State
 
-    var showingSettings = false
     var isShowingNewFolderAlert = false
     var newFolderName = ""
     var itemToRename: MediaItem?
@@ -104,7 +103,7 @@ final class MediaGridViewModel {
         case .photos: return .Strings.gallerySectionPhotosCount(count)
         case .videos: return .Strings.gallerySectionVideosCount(count)
         #if !os(tvOS)
-        case .documents: return LocalizedStringResource("gallery_section_documents_count", defaultValue: "\(count) Documents")
+        case .documents: return .Strings.gallerySectionDocumentsCount(count)
         #endif
         }
     }

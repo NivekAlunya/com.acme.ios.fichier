@@ -39,6 +39,7 @@ final class PictureDetailViewModel {
     // MARK: - Auto-Hide Management
 
     private var autoHideTask: Task<Void, Never>?
+    private var prefetchTask: Task<Void, Never>?
 
     // MARK: - Derived State
 
@@ -122,6 +123,30 @@ final class PictureDetailViewModel {
             scheduleAutoHideControls()
         } else {
             cancelAutoHideTimer()
+        }
+    }
+
+    // MARK: - Lookahead Prefetching
+
+    /// Cancels any active prefetch task for upcoming photos.
+    func cancelPrefetch() {
+        prefetchTask?.cancel()
+        prefetchTask = nil
+    }
+
+    /// Dispatches an asynchronous prefetch task for the next upcoming photo into memory/disk cache.
+    func prefetchNext(after item: MediaItem) {
+        cancelPrefetch()
+        guard let idx = pictures.firstIndex(where: { $0.id == item.id }), pictures.count > 1 else { return }
+        let nextIdx = (idx + 1) % pictures.count
+        let nextItem = pictures[nextIdx]
+        guard !nextItem.isVideo else { return }
+        prefetchTask = Task { @MainActor in
+            guard !Task.isCancelled else { return }
+            if let img = await manager.downloadImage(for: nextItem) {
+                guard !Task.isCancelled else { return }
+                slideImageCache[nextItem.id] = img
+            }
         }
     }
 }

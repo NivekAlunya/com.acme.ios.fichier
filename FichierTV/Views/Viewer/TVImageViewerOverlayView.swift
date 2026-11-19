@@ -150,7 +150,7 @@ public struct TVImageViewerOverlayView: View {
 
                 // Line 2: rest of the information
                 HStack(spacing: 8) {
-                    Text("\(currentIndex + 1) of \(totalCount)")
+                    Text(.Strings.tvImageViewerCounter(currentIndex + 1, totalCount))
 
                     if fileSize > 0 {
                         Text("•")

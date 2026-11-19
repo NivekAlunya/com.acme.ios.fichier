@@ -15,6 +15,7 @@ struct MediaGridModeView: View {
     let gridColumns: [GridItem]
     let gridSize: GridSize
     let sortOption: SortOption
+    let mediaSectionHeader: LocalizedStringResource
     let isSelectionMode: Bool
     let selectedItems: Set<MediaItem>
     let currentDirectoryID: String
@@ -34,6 +35,7 @@ struct MediaGridModeView: View {
         gridColumns: [GridItem],
         gridSize: GridSize,
         sortOption: SortOption,
+        mediaSectionHeader: LocalizedStringResource = .Strings.gallerySectionMediaCount(0),
         isSelectionMode: Bool,
         selectedItems: Set<MediaItem>,
         currentDirectoryID: String,
@@ -52,6 +54,7 @@ struct MediaGridModeView: View {
         self.gridColumns = gridColumns
         self.gridSize = gridSize
         self.sortOption = sortOption
+        self.mediaSectionHeader = mediaSectionHeader
         self.isSelectionMode = isSelectionMode
         self.selectedItems = selectedItems
         self.currentDirectoryID = currentDirectoryID
@@ -63,10 +66,6 @@ struct MediaGridModeView: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
-    }
-    
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        .Strings.gallerySectionMediaCount(count)
     }
     
     var body: some View {
@@ -146,7 +145,7 @@ struct MediaGridModeView: View {
     private var picturesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(mediaSectionHeader(for: pictures.count))
+                Text(mediaSectionHeader)
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.secondary)
                 

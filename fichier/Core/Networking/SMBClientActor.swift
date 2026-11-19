@@ -902,7 +902,10 @@ actor SMBClientActor {
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
 
-            guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
+            let decodedImage = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                AnimatedImageDecoder.decode(from: data)
+            }.value
+            guard let image = decodedImage else { return nil }
 
             let widthInPixels = image.size.width * image.scale
             let heightInPixels = image.size.height * image.scale

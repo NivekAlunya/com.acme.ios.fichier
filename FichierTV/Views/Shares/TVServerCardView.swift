@@ -45,7 +45,7 @@ public struct TVServerCardView: View {
         .padding(24)
         .frame(width: 320, height: 220)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(card.name), \(card.host), \(card.status.rawValue)")
+        .accessibilityLabel(Text(.Strings.tvServerCardAccessibility(card.name, card.host, String(localized: statusTitle))))
         .accessibilityHint(Text(.Strings.tvServerCardAccessibilityHint))
     }
 
@@ -56,13 +56,26 @@ public struct TVServerCardView: View {
                 .fill(statusColor)
                 .frame(width: 10, height: 10)
 
-            Text(card.status.rawValue)
+            Text(statusTitle)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private var statusTitle: LocalizedStringResource {
+        switch card.status {
+        case .online:
+            return .Strings.tvServerStatusOnline
+        case .offline:
+            return .Strings.tvServerStatusOffline
+        case .connecting:
+            return .Strings.tvServerStatusConnecting
+        case .unknown:
+            return .Strings.tvServerStatusUnknown
+        }
     }
 
     private var statusColor: Color {

@@ -278,7 +278,7 @@ public final class VideoPlayerController {
                 }
 
                 guard !Task.isCancelled else { return }
-                self.presentPlaybackError("Unable to construct direct SMB playback URL for extended video format.")
+                self.presentPlaybackError(String(localized: .Strings.videoPlayerErrorExtendedFormat))
                 return
             }
             

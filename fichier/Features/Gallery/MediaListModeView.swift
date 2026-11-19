@@ -13,6 +13,7 @@ struct MediaListModeView: View {
     let folders: [MediaItem]
     let pictures: [MediaItem]
     let isSelectionMode: Bool
+    let mediaSectionHeader: LocalizedStringResource
     let selectedItems: Set<MediaItem>
     let currentDirectoryID: String
     let onNavigateToFolder: (MediaItem) -> Void
@@ -28,6 +29,7 @@ struct MediaListModeView: View {
         manager: StorageLocationManager,
         folders: [MediaItem],
         pictures: [MediaItem],
+        mediaSectionHeader: LocalizedStringResource = .Strings.gallerySectionMediaCount(0),
         isSelectionMode: Bool,
         selectedItems: Set<MediaItem>,
         currentDirectoryID: String,
@@ -43,6 +45,7 @@ struct MediaListModeView: View {
         self.manager = manager
         self.folders = folders
         self.pictures = pictures
+        self.mediaSectionHeader = mediaSectionHeader
         self.isSelectionMode = isSelectionMode
         self.selectedItems = selectedItems
         self.currentDirectoryID = currentDirectoryID
@@ -54,10 +57,6 @@ struct MediaListModeView: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
-    }
-    
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        .Strings.gallerySectionMediaCount(count)
     }
     
     var body: some View {
@@ -98,7 +97,7 @@ struct MediaListModeView: View {
                 }
                 
                 if !pictures.isEmpty {
-                    Section(String(localized: mediaSectionHeader(for: pictures.count))) {
+                    Section(String(localized: mediaSectionHeader)) {
                         ForEach(pictures) { pic in
                             Button {
                                 if isSelectionMode {

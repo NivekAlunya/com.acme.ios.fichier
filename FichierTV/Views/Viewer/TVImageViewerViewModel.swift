@@ -242,6 +242,9 @@ public final class TVImageViewerViewModel {
             self.currentImage = cached
             self.isLoadingImage = false
             prefetchNeighbors()
+            if isSlideshowPlaying {
+                scheduleNextSlide()
+            }
             return
         }
 
@@ -259,6 +262,9 @@ public final class TVImageViewerViewModel {
             }
             self.isLoadingImage = false
             self.prefetchNeighbors()
+            if self.isSlideshowPlaying {
+                self.scheduleNextSlide()
+            }
         }
     }
 
@@ -337,9 +343,6 @@ public final class TVImageViewerViewModel {
 
             withAnimation(self.slideAnimation) {
                 self.showNext()
-            }
-            if self.isSlideshowPlaying {
-                self.scheduleNextSlide()
             }
         }
     }

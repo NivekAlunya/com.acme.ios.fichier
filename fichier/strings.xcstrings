@@ -27234,6 +27234,150 @@
           }
         }
       }
+    },
+    "video_player_error_locate_source": {
+      "comment": "Error message when video source cannot be located",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to locate video source for %@"
+          }
+        }
+      }
+    },
+    "video_player_error_resolve_server": {
+      "comment": "Error message when SMB server connection cannot be resolved",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to resolve SMB server connection."
+          }
+        }
+      }
+    },
+    "video_player_error_direct_smb_url": {
+      "comment": "Error message when direct SMB playback URL cannot be constructed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to construct direct SMB playback URL."
+          }
+        }
+      }
+    },
+    "video_player_error_extended_format": {
+      "comment": "Error message when direct SMB playback URL cannot be constructed for extended format",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to construct direct SMB playback URL for extended video format."
+          }
+        }
+      }
+    },
+    "tv_media_loading_items": {
+      "comment": "Loading indicator label in media browser",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading items..."
+          }
+        }
+      }
+    },
+    "tv_media_items_count": {
+      "comment": "Total item count display in media browser",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld items"
+          }
+        }
+      }
+    },
+    "tv_image_viewer_counter": {
+      "comment": "Image index out of total count",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "tv_server_status_online": {
+      "comment": "Server reachability online badge",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
+          }
+        }
+      }
+    },
+    "tv_server_status_offline": {
+      "comment": "Server reachability offline badge",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
+          }
+        }
+      }
+    },
+    "tv_server_status_connecting": {
+      "comment": "Server reachability connecting badge",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting"
+          }
+        }
+      }
+    },
+    "tv_server_status_unknown": {
+      "comment": "Server reachability unknown badge",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown"
+          }
+        }
+      }
+    },
+    "tv_server_card_accessibility": {
+      "comment": "Accessibility label for SMB server card combining name, host, and status",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@, %3$@"
+          }
+        }
+      }
     }
   },
   "version": "1.3"

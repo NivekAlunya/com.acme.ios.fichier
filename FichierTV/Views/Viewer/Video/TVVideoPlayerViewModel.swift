@@ -264,8 +264,9 @@ public final class TVVideoPlayerViewModel {
         } else if item.sourceID != nil, item.smbShare != nil, item.smbPath != nil {
             loadSMBVideo(item: item, preferredKind: initialKind)
         } else {
-            playbackState = .failed("Unable to locate video source for \(item.name).")
-            errorMessage = "Unable to locate video source for \(item.name)."
+            let errorDesc = String(localized: .Strings.videoPlayerErrorLocateSource(item.name))
+            playbackState = .failed(errorDesc)
+            errorMessage = errorDesc
         }
     }
 
@@ -1025,8 +1026,9 @@ public final class TVVideoPlayerViewModel {
 
             guard let sharesSource = await self.resolver.resolve(sourceID: sourceID) as? SharesMediaSource else {
                 guard !Task.isCancelled, self.currentItem.id == itemID else { return }
-                self.playbackState = .failed("Unable to resolve SMB server connection.")
-                self.errorMessage = "Unable to resolve SMB server connection."
+                let errorDesc = String(localized: .Strings.videoPlayerErrorResolveServer)
+                self.playbackState = .failed(errorDesc)
+                self.errorMessage = errorDesc
                 return
             }
 
@@ -1036,8 +1038,9 @@ public final class TVVideoPlayerViewModel {
                 relativePath: path
             ) else {
                 guard !Task.isCancelled, self.currentItem.id == itemID else { return }
-                self.playbackState = .failed("Unable to construct direct SMB playback URL.")
-                self.errorMessage = "Unable to construct direct SMB playback URL."
+                let errorDesc = String(localized: .Strings.videoPlayerErrorDirectSmbUrl)
+                self.playbackState = .failed(errorDesc)
+                self.errorMessage = errorDesc
                 return
             }
 
