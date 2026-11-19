@@ -254,13 +254,13 @@ public actor LocalStorageActor {
         let targetDimension = MediaCacheManager.standardThumbnailDimension
         if item.isVideo {
             if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: targetDimension) {
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
         } else if item.isPDF {
             if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: url, maxDimension: targetDimension) {
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
@@ -268,7 +268,7 @@ public actor LocalStorageActor {
             guard let thumb = SMBImageLoader.decodeDownsampledImage(from: url, maxPixelSize: targetDimension) else {
                 return nil
             }
-            MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+            await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
             return thumb
         }
     }

@@ -98,6 +98,7 @@ public final class TVVideoPlayerViewModel {
     private var autoHideTask: Task<Void, Never>?
     private var progressPersistenceTask: Task<Void, Never>?
     private var mediaLoadTask: Task<Void, Never>?
+    private var playbackPositionRestoreTask: Task<Void, Never>?
     private var resolvedMediaURL: URL?
     private var directSMBURL: URL?
     private var vlcPlaybackOptions: VLCPlaybackOptions?
@@ -207,6 +208,8 @@ public final class TVVideoPlayerViewModel {
 
         mediaLoadTask?.cancel()
         mediaLoadTask = nil
+        playbackPositionRestoreTask?.cancel()
+        playbackPositionRestoreTask = nil
         progressPersistenceTask?.cancel()
         progressPersistenceTask = nil
         autoHideTask?.cancel()
@@ -645,7 +648,7 @@ public final class TVVideoPlayerViewModel {
     }
 
     private func resetCachedSeekThumbnails() {
-        thumbnailCoordinator.reset(forAssetKey: currentItem.id)
+        thumbnailCoordinator.reset(forAssetKey: nil)
     }
 
     private func activateRemoteCommandBridgeIfNeeded() {
@@ -733,7 +736,7 @@ public final class TVVideoPlayerViewModel {
         case .chapters:
             openChaptersMenu()
         case .tracks:
-            isShowingTracksSheet = true
+            openTracksMenu()
         case .speed:
             openSpeedMenu()
         }
@@ -776,9 +779,11 @@ public final class TVVideoPlayerViewModel {
     }
 
     private func restorePlaybackPosition(for itemID: String, on engine: any PlayerEngine) {
-        Task { [weak self] in
+        playbackPositionRestoreTask?.cancel()
+        playbackPositionRestoreTask = Task { [weak self] in
             guard let self else { return }
             if let savedTime = await self.playbackStore.playbackPosition(for: itemID),
+               !Task.isCancelled,
                self.currentItem.id == itemID {
                 engine.seek(to: savedTime)
                 self.currentTime = engine.currentTime
@@ -1164,6 +1169,8 @@ public final class TVVideoPlayerViewModel {
         deactivateRemoteCommandBridge()
         mediaLoadTask?.cancel()
         mediaLoadTask = nil
+        playbackPositionRestoreTask?.cancel()
+        playbackPositionRestoreTask = nil
         thumbnailCoordinator.cancelSeekThumbnails(clearState: true)
         autoHideTask?.cancel()
         autoHideTask = nil

@@ -21,6 +21,7 @@ public final class TVVideoSeekThumbnailCoordinator {
     private var cachedBucketImages: [Int: UIImage] = [:]
     private var cachedBucketOrder: [Int] = []
     private var assetRegistrationTask: Task<Void, Never>?
+    private var currentAssetKey: String?
     private let thumbnailProvider: any TVSeekThumbnailProviding
 
     public init(thumbnailProvider: any TVSeekThumbnailProviding = TVSeekThumbnailService()) {
@@ -32,19 +33,24 @@ public final class TVVideoSeekThumbnailCoordinator {
     }
 
     public func registerAsset(_ asset: AVURLAsset, forAssetKey assetKey: String) {
+        currentAssetKey = assetKey
         assetRegistrationTask?.cancel()
         assetRegistrationTask = Task { [thumbnailProvider] in
             await thumbnailProvider.registerAsset(asset, forAssetKey: assetKey)
         }
     }
 
-    public func reset(forAssetKey assetKey: String) {
+    public func reset(forAssetKey assetKey: String? = nil) {
         cancelSeekThumbnails(clearState: true)
         cachedBucketImages.removeAll()
         cachedBucketOrder.removeAll()
         assetRegistrationTask?.cancel()
-        assetRegistrationTask = Task { [thumbnailProvider] in
-            await thumbnailProvider.invalidateAsset(forAssetKey: assetKey)
+        let keyToInvalidate = assetKey ?? currentAssetKey
+        currentAssetKey = nil
+        if let keyToInvalidate {
+            assetRegistrationTask = Task { [thumbnailProvider] in
+                await thumbnailProvider.invalidateAsset(forAssetKey: keyToInvalidate)
+            }
         }
     }
 

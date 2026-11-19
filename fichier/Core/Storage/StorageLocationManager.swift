@@ -314,9 +314,7 @@ public final class StorageLocationManager {
     public func removeSavedConnection(_ connection: SavedSMBConnection) async {
         savedConnections = await persistenceStore.removeSavedConnection(connection, from: savedConnections)
         if currentLocation?.smbConnection?.id == connection.id {
-            Task {
-                await disconnect()
-            }
+            await disconnect()
         }
     }
     
@@ -406,8 +404,11 @@ public final class StorageLocationManager {
 
         switch location.kind {
         case .smb:
-            guard let conn = location.smbConnection else { return }
-            await disconnect()
+            guard let conn = location.smbConnection else {
+                connectionState = .idle
+                return
+            }
+            await disconnect(resetConnectionState: false)
             guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             let pass = await password(for: conn)
@@ -415,8 +416,11 @@ public final class StorageLocationManager {
             await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
             
         case .localFolder, .iCloudFolder:
-            guard let folderLoc = location.folderLocation else { return }
-            await disconnect()
+            guard let folderLoc = location.folderLocation else {
+                connectionState = .idle
+                return
+            }
+            await disconnect(resetConnectionState: false)
             guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             currentConnectionID = location.id
@@ -434,13 +438,16 @@ public final class StorageLocationManager {
                 let locID = location.id
                 let targetFolder = lastSelectedFolderPerLocation[locID] ?? rootItem
                 await selectAndLoadFolder(targetFolder)
+            } catch is CancellationError {
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .idle
             } catch {
                 guard currentGen == locationSelectionGeneration else { return }
                 self.connectionState = .failed(error.localizedDescription)
             }
             
         case .photos:
-            await disconnect()
+            await disconnect(resetConnectionState: false)
             guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             currentConnectionID = location.id
@@ -465,6 +472,9 @@ public final class StorageLocationManager {
                 } else {
                     await selectAndLoadFolder(rootWithChildren)
                 }
+            } catch is CancellationError {
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .idle
             } catch {
                 guard currentGen == locationSelectionGeneration else { return }
                 self.connectionState = .failed(error.localizedDescription)
@@ -924,7 +934,10 @@ public final class StorageLocationManager {
     // MARK: - Disconnect
     
     /// Disconnects from the active storage location and resets all navigation and selection state.
-    public func disconnect() async {
+    ///
+    /// - Parameter resetConnectionState: Whether to transition `connectionState` to `.idle`. Pass `false`
+    ///   when transitioning directly into another connection attempt to avoid transient state flicker.
+    public func disconnect(resetConnectionState: Bool = true) async {
         folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
@@ -932,7 +945,9 @@ public final class StorageLocationManager {
         currentConnectionID = ""
         currentLocation = nil
         
-        connectionState = .idle
+        if resetConnectionState {
+            connectionState = .idle
+        }
         isLoading = false
         operationErrorMessage = nil
         selectedShare = nil

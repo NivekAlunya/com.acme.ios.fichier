@@ -364,6 +364,7 @@ actor SMBClientActor {
         let trimmedName = try FileOperationError.validateName(name)
         let cleanParent = parentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let newFolderPath = cleanParent.isEmpty ? trimmedName : "\(cleanParent)/\(trimmedName)"
+        let canonicalPath = "/\(newFolderPath)"
         let connID = self.currentConnectionID
 
         try await client.createDirectory(share: shareName, path: newFolderPath)
@@ -372,7 +373,7 @@ actor SMBClientActor {
             locationID: connID,
             name: trimmedName,
             rootName: shareName,
-            path: newFolderPath,
+            path: canonicalPath,
             isDirectory: true,
             size: 0,
             modifiedDate: Date(),

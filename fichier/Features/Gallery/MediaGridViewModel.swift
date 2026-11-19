@@ -32,6 +32,7 @@ final class MediaGridViewModel {
     var batchProgressMessage: String?
     var batchStatusToast: String?
     var batchTask: Task<Void, Never>?
+    private var toastTask: Task<Void, Never>?
     var shareSheetItems: [Any]?
 
     // MARK: - Sheet & File Management State
@@ -595,11 +596,13 @@ final class MediaGridViewModel {
 
     /// Displays a transient animated notification pill at the top of the gallery.
     func showToastMessage(_ message: String) {
+        toastTask?.cancel()
         withAnimation {
             batchStatusToast = message
         }
-        Task {
+        toastTask = Task {
             try? await Task.sleep(for: .seconds(2.5))
+            guard !Task.isCancelled else { return }
             withAnimation {
                 batchStatusToast = nil
             }
