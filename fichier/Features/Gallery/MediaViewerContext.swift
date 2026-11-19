@@ -20,4 +20,14 @@ public struct MediaViewerContext: Identifiable, Sendable {
         self.item = item
         self.contextItems = contextItems
     }
+    
+    /// Resolves the active playlist or gallery items matching a given predicate, guaranteeing inclusion of the focused `item`.
+    public func resolvedItems(matching predicate: (MediaItem) -> Bool) -> [MediaItem] {
+        let filtered = contextItems.filter(predicate)
+        var result = filtered.isEmpty ? [item] : filtered
+        if !result.contains(where: { $0.id == item.id }) {
+            result.append(item)
+        }
+        return result
+    }
 }

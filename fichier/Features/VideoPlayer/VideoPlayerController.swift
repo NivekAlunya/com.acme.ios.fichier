@@ -1075,23 +1075,7 @@ public final class VideoPlayerController {
     }
     
     private func clearCallbacks(for engine: (any PlayerEngine)?) {
-        if let native = engine as? AVPlayerEngine {
-            native.onPlaybackEnded = nil
-            native.onError = nil
-            native.onStateUpdate = nil
-            native.onTimeUpdate = nil
-            native.onDurationUpdate = nil
-            native.onTracksChanged = nil
-            native.onChaptersChanged = nil
-        } else if let extended = engine as? TVVLCPlayerEngine {
-            extended.onPlaybackEnded = nil
-            extended.onError = nil
-            extended.onStateUpdate = nil
-            extended.onTimeUpdate = nil
-            extended.onDurationUpdate = nil
-            extended.onTracksChanged = nil
-            extended.onChaptersChanged = nil
-        }
+        engine?.clearCallbacks()
     }
     
     /// Centralized completion handler invoked when playback reaches the end timestamp.

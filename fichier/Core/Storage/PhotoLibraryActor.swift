@@ -96,7 +96,23 @@ public actor PhotoLibraryActor {
         try Task.checkCancellation()
 
         if folder.path.isEmpty {
-            return (loadAlbums(), [])
+            let albumSourceItems = try await mediaSource.fetchItems(
+                in: nil,
+                sortBy: .name,
+                order: .ascending,
+                page: 0,
+                pageSize: Int.max
+            )
+            try Task.checkCancellation()
+            let folders = albumSourceItems.map { sourceItem in
+                MediaItem(
+                    sourceItem: sourceItem,
+                    locationID: StorageLocation.photosLocationID,
+                    rootName: "Photos",
+                    folderIconName: albumIconName(for: sourceItem.name)
+                )
+            }
+            return (folders, [])
         } else {
             let sourceItems = try await mediaSource.fetchItems(
                 in: folder.asMediaSourceItem,
@@ -117,68 +133,20 @@ public actor PhotoLibraryActor {
         }
     }
 
-    /// Helper computing estimated or exact asset counts for an album collection.
-    private func countOfAssets(in collection: PHAssetCollection) -> Int {
-        if collection.estimatedAssetCount != NSNotFound {
-            return collection.estimatedAssetCount
+    /// Helper resolving SF Symbol icons for standard and custom photo albums.
+    private func albumIconName(for name: String) -> String {
+        switch name {
+        case "Recents", String(localized: .Strings.photosSmartAlbumRecents):
+            return "clock.arrow.circlepath"
+        case "Favorites", String(localized: .Strings.photosSmartAlbumFavorites):
+            return "heart.fill"
+        case "Videos", String(localized: .Strings.photosSmartAlbumVideos):
+            return "video.fill"
+        case "Screenshots", String(localized: .Strings.photosSmartAlbumScreenshots):
+            return "camera.viewfinder"
+        default:
+            return "rectangle.stack"
         }
-        return PHAsset.fetchAssets(in: collection, options: nil).count
-    }
-
-    /// Queries smart albums (Recents, Favorites, Videos, Screenshots) and user-created custom albums.
-    private func loadAlbums() -> [MediaItem] {
-        var albums: [MediaItem] = []
-
-        let smartSubtypes: [(PHAssetCollectionSubtype, LocalizedStringResource, String)] = [
-            (.smartAlbumUserLibrary, .Strings.photosSmartAlbumRecents, "clock.arrow.circlepath"),
-            (.smartAlbumFavorites, .Strings.photosSmartAlbumFavorites, "heart.fill"),
-            (.smartAlbumVideos, .Strings.photosSmartAlbumVideos, "video.fill"),
-            (.smartAlbumScreenshots, .Strings.photosSmartAlbumScreenshots, "camera.viewfinder")
-        ]
-
-        for (subtype, titleKey, icon) in smartSubtypes {
-            let fetchResult = PHAssetCollection.fetchAssetCollections(with: .smartAlbum, subtype: subtype, options: nil)
-            for index in 0..<fetchResult.count {
-                let collection = fetchResult.object(at: index)
-                let count = countOfAssets(in: collection)
-                if count > 0 || subtype == .smartAlbumUserLibrary {
-                    let albumItem = MediaItem(
-                        locationID: StorageLocation.photosLocationID,
-                        name: collection.localizedTitle ?? String(localized: titleKey),
-                        rootName: "Photos",
-                        path: collection.localIdentifier,
-                        isDirectory: true,
-                        size: Int64(count),
-                        modifiedDate: collection.startDate ?? collection.endDate,
-                        children: nil,
-                        localURL: nil,
-                        folderIconName: icon
-                    )
-                    albums.append(albumItem)
-                }
-            }
-        }
-
-        let userAlbumsFetch = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: nil)
-        for index in 0..<userAlbumsFetch.count {
-            let collection = userAlbumsFetch.object(at: index)
-            let count = countOfAssets(in: collection)
-            let albumItem = MediaItem(
-                locationID: StorageLocation.photosLocationID,
-                name: collection.localizedTitle ?? "Album",
-                rootName: "Photos",
-                path: collection.localIdentifier,
-                isDirectory: true,
-                size: Int64(count),
-                modifiedDate: collection.startDate ?? collection.endDate,
-                children: nil,
-                localURL: nil,
-                folderIconName: "rectangle.stack"
-            )
-            albums.append(albumItem)
-        }
-
-        return albums
     }
 
     // MARK: - Asynchronous Image Loading via FichierKit

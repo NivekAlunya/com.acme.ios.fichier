@@ -111,14 +111,7 @@ struct AppSettingsView: View {
                         }
                     }
                     
-                    Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
-                        Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                        Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                        Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                        Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                        Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                        Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                    }
+                    SlideshowDurationPickerView(selection: $slideshowInterval)
                 }
                 
                 // 4. Gallery Display Defaults
