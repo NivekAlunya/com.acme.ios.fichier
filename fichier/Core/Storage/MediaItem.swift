@@ -159,12 +159,7 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
             return true
         case (.some(let lc), .some(let rc)):
             guard lc.count == rc.count else { return false }
-            return zip(lc, rc).allSatisfy {
-                $0.id == $1.id &&
-                $0.size == $1.size &&
-                $0.modifiedDate == $1.modifiedDate &&
-                $0.name == $1.name
-            }
+            return zip(lc, rc).allSatisfy { $0 == $1 }
         default:
             return false
         }
@@ -245,5 +240,40 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     /// Indicates whether the item represents a photo or image format (excluding videos and documents).
     public var isImage: Bool {
         !isVideo && !isPDF && !isDocument
+    }
+    
+    /// Numerical kind classification rank for multi-type gallery grouping:
+    /// - 0: Images
+    /// - 1: Videos
+    /// - 2: Documents and PDFs
+    /// - 3: Other
+    public var kindRank: Int {
+        if isImage { return 0 }
+        if isVideo { return 1 }
+        if isPDF || isDocument { return 2 }
+        return 3
+    }
+
+    /// Total pixel count (width * height) resolved from cache or storage metadata.
+    @MainActor
+    public var pixelResolution: Int {
+        if let detail = MediaDetailStore.shared.cachedDetail(for: id),
+           let (w, h) = MediaFormatHelper.parseDimensions(detail), w > 0, h > 0 {
+            return w * h
+        }
+        return 0
+    }
+
+    /// Playback duration in seconds resolved from playback store or metadata cache.
+    @MainActor
+    public var durationSeconds: Double {
+        if let dur = VideoPlaybackStore.shared.records[id]?.duration, dur > 0 {
+            return dur
+        }
+        if let detail = MediaDetailStore.shared.cachedDetail(for: id),
+           let parsed = MediaFormatHelper.parseDuration(detail), parsed > 0 {
+            return parsed
+        }
+        return 0
     }
 }

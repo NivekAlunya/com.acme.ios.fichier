@@ -122,6 +122,72 @@ final class MediaGridViewModel {
             return items.sorted { $0.size > $1.size }
         case .sizeAsc:
             return items.sorted { $0.size < $1.size }
+        case .kindAsc:
+            return items.sorted { lhs, rhs in
+                if lhs.kindRank != rhs.kindRank {
+                    return lhs.kindRank < rhs.kindRank
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .kindDesc:
+            return items.sorted { lhs, rhs in
+                if lhs.kindRank != rhs.kindRank {
+                    return lhs.kindRank > rhs.kindRank
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+            }
+        case .resolutionDesc:
+            let mapped = items.map { (item: $0, res: $0.pixelResolution) }
+            return mapped.sorted { lhs, rhs in
+                if lhs.res <= 0 && rhs.res <= 0 {
+                    return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+                }
+                if lhs.res <= 0 { return false }
+                if rhs.res <= 0 { return true }
+                if lhs.res != rhs.res {
+                    return lhs.res > rhs.res
+                }
+                return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+            }.map(\.item)
+        case .resolutionAsc:
+            let mapped = items.map { (item: $0, res: $0.pixelResolution) }
+            return mapped.sorted { lhs, rhs in
+                if lhs.res <= 0 && rhs.res <= 0 {
+                    return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+                }
+                if lhs.res <= 0 { return false }
+                if rhs.res <= 0 { return true }
+                if lhs.res != rhs.res {
+                    return lhs.res < rhs.res
+                }
+                return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+            }.map(\.item)
+        case .durationDesc:
+            let mapped = items.map { (item: $0, dur: $0.durationSeconds) }
+            return mapped.sorted { lhs, rhs in
+                if lhs.dur <= 0 && rhs.dur <= 0 {
+                    return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+                }
+                if lhs.dur <= 0 { return false }
+                if rhs.dur <= 0 { return true }
+                if lhs.dur != rhs.dur {
+                    return lhs.dur > rhs.dur
+                }
+                return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+            }.map(\.item)
+        case .durationAsc:
+            let mapped = items.map { (item: $0, dur: $0.durationSeconds) }
+            return mapped.sorted { lhs, rhs in
+                if lhs.dur <= 0 && rhs.dur <= 0 {
+                    return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+                }
+                if lhs.dur <= 0 { return false }
+                if rhs.dur <= 0 { return true }
+                if lhs.dur != rhs.dur {
+                    return lhs.dur < rhs.dur
+                }
+                return lhs.item.name.localizedStandardCompare(rhs.item.name) == .orderedAscending
+            }.map(\.item)
         }
     }
 

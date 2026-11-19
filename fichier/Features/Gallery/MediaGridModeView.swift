@@ -90,6 +90,7 @@ struct MediaGridModeView: View {
             }
             #if !os(tvOS)
             .scrollDismissesKeyboard(.immediately)
+            .toolbarBackground(Material.bar, for: .navigationBar)
             #endif
             .id(currentDirectoryID)
             .onChange(of: currentDirectoryID) { _, _ in

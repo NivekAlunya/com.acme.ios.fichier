@@ -46,6 +46,12 @@ struct FolderPickerSheetView: View {
     /// User-presentable error message if an operation fails.
     @State private var errorMessage: String?
     
+    /// Focus state for keyboard/hardware navigation on folder rows.
+    @FocusState private var focusedFolderID: String?
+    
+    /// Accessibility focus state for assistive navigation.
+    @AccessibilityFocusState private var accessibilityFocusedFolderID: String?
+    
     // MARK: - Computed Properties
     
     /// Title indicating number of items being moved.
@@ -141,33 +147,52 @@ struct FolderPickerSheetView: View {
                         }
                     )
                 } else {
-                    List {
-                        let nodes = visibleNodes(from: folderTree)
-                        ForEach(nodes, id: \.folder.id) { node in
-                            FolderPickerRowView(
-                                folder: node.folder,
-                                level: node.level,
-                                isSelected: selectedDestination?.id == node.folder.id,
-                                isExpanded: expandedIDs.contains(node.folder.id),
-                                isEnabled: isDestinationValid(node.folder),
-                                isLoading: loadingNodeIDs.contains(node.folder.id),
-                                onToggleExpand: {
-                                    toggleExpand(for: node.folder)
-                                },
-                                onSelect: {
-                                    selectedDestination = node.folder
-                                    if !expandedIDs.contains(node.folder.id) {
+                    ScrollViewReader { proxy in
+                        List {
+                            let nodes = visibleNodes(from: folderTree)
+                            ForEach(nodes, id: \.folder.id) { node in
+                                FolderPickerRowView(
+                                    folder: node.folder,
+                                    level: node.level,
+                                    isSelected: selectedDestination?.id == node.folder.id,
+                                    isExpanded: expandedIDs.contains(node.folder.id),
+                                    isEnabled: isDestinationValid(node.folder),
+                                    isLoading: loadingNodeIDs.contains(node.folder.id),
+                                    onToggleExpand: {
                                         toggleExpand(for: node.folder)
+                                    },
+                                    onSelect: {
+                                        selectedDestination = node.folder
+                                        if !expandedIDs.contains(node.folder.id) {
+                                            toggleExpand(for: node.folder)
+                                        }
                                     }
+                                )
+                                .id(node.folder.id)
+                                .focused($focusedFolderID, equals: node.folder.id)
+                                .accessibilityFocused($accessibilityFocusedFolderID, equals: node.folder.id)
+                            }
+                        }
+                        .listStyle(.insetGrouped)
+                        .task {
+                            await scrollToSelectedFolder(proxy: proxy)
+                        }
+                        .onChange(of: selectedDestination?.id) { _, newID in
+                            if let newID {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo(newID, anchor: .center)
                                 }
-                            )
+                                focusedFolderID = newID
+                                accessibilityFocusedFolderID = newID
+                            }
                         }
                     }
-                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Material.bar, for: .navigationBar)
+            .toolbar(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(.Strings.commonCancel) {
@@ -238,15 +263,74 @@ struct FolderPickerSheetView: View {
             folderTree = tree
             if let root = tree.first {
                 expandedIDs.insert(root.id)
-                // Default selection to root if valid
-                if isDestinationValid(root) {
-                    selectedDestination = root
-                }
+            }
+            
+            // Prefer selecting the current folder (manager.selectedFolder), falling back to root
+            if let current = manager.selectedFolder {
+                await expandBranchAndSelect(target: current)
+            } else if let root = tree.first {
+                selectedDestination = root
             }
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+    
+    /// Scrolls and focuses the currently selected destination folder.
+    private func scrollToSelectedFolder(proxy: ScrollViewProxy) async {
+        guard let targetID = selectedDestination?.id else { return }
+        // Brief yield for SwiftUI List geometry to complete initial layout pass
+        try? await Task.sleep(for: .milliseconds(150))
+        withAnimation(.easeInOut(duration: 0.25)) {
+            proxy.scrollTo(targetID, anchor: .center)
+        }
+        focusedFolderID = targetID
+        accessibilityFocusedFolderID = targetID
+    }
+    
+    /// Traverses and lazily populates the folder tree hierarchy down to `target`, expanding all ancestors.
+    private func expandBranchAndSelect(target: MediaItem) async {
+        guard var current = folderTree.first else {
+            selectedDestination = target
+            return
+        }
+        
+        expandedIDs.insert(current.id)
+        
+        // If target is root
+        if current.id == target.id || (current.rootName == target.rootName && (current.path == target.path || (current.path == "/" && target.path.isEmpty))) {
+            selectedDestination = current
+            return
+        }
+        
+        // For subfolders, traverse down matching paths
+        let targetComponents = target.normalizedComponents
+        var accumulatedPath = ""
+        
+        for component in targetComponents {
+            accumulatedPath += "/\(component)"
+            
+            // Ensure children are loaded for the current node
+            if current.children == nil {
+                if let subs = try? await manager.fetchSubfoldersForPicker(at: current) {
+                    folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: current.id, children: subs)
+                    current.children = subs
+                }
+            }
+            
+            // Find child matching the next component
+            if let matchingChild = (current.children ?? []).first(where: { child in
+                child.name == String(component) || child.path == accumulatedPath
+            }) {
+                expandedIDs.insert(matchingChild.id)
+                current = matchingChild
+            } else {
+                break
+            }
+        }
+        
+        selectedDestination = current
     }
     
     /// Toggles folder expansion state, lazily loading its child subfolders on demand if not yet cached.

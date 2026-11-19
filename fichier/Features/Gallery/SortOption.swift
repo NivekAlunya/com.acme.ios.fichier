@@ -25,6 +25,24 @@ enum SortOption: String, CaseIterable, Identifiable {
     /// Ascending order by file size in bytes, smallest items first.
     case sizeAsc = "Size (Smallest First)"
     
+    /// Grouped by media category: Images first, then Videos, then Documents and PDFs.
+    case kindAsc = "Kind (Images, Videos, PDFs)"
+    
+    /// Grouped by media category: Documents and PDFs first, then Videos, then Images.
+    case kindDesc = "Kind (PDFs, Videos, Images)"
+    
+    /// Descending order by total pixel resolution (highest resolution first).
+    case resolutionDesc = "Resolution (Highest First)"
+    
+    /// Ascending order by total pixel resolution (lowest resolution first).
+    case resolutionAsc = "Resolution (Lowest First)"
+    
+    /// Descending order by playback duration (longest videos first).
+    case durationDesc = "Duration (Longest First)"
+    
+    /// Ascending order by playback duration (shortest videos first).
+    case durationAsc = "Duration (Shortest First)"
+    
     /// Stable string identifier for `Identifiable` conformance.
     var id: String { rawValue }
     
@@ -37,6 +55,12 @@ enum SortOption: String, CaseIterable, Identifiable {
         case .dateAsc: return .Strings.gallerySortDateOldest
         case .sizeDesc: return .Strings.gallerySortSizeLargest
         case .sizeAsc: return .Strings.gallerySortSizeSmallest
+        case .kindAsc: return .Strings.gallerySortKindAscending
+        case .kindDesc: return .Strings.gallerySortKindDescending
+        case .resolutionDesc: return .Strings.gallerySortResolutionHighest
+        case .resolutionAsc: return .Strings.gallerySortResolutionLowest
+        case .durationDesc: return .Strings.gallerySortDurationLongest
+        case .durationAsc: return .Strings.gallerySortDurationShortest
         }
     }
     
@@ -46,6 +70,9 @@ enum SortOption: String, CaseIterable, Identifiable {
         case .nameAsc, .nameDesc: return "textformat.abc"
         case .dateDesc, .dateAsc: return "calendar"
         case .sizeDesc, .sizeAsc: return "arrow.up.arrow.down.circle"
+        case .kindAsc, .kindDesc: return "square.stack.3d.up"
+        case .resolutionDesc, .resolutionAsc: return "viewfinder"
+        case .durationDesc, .durationAsc: return "clock"
         }
     }
 }

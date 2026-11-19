@@ -44,7 +44,7 @@ struct FolderPickerRowView: View {
                     .frame(width: 20, height: 20)
             } else if folder.children?.isEmpty == true {
                 Spacer()
-                    .frame(width: 20)
+                    .frame(width: 28)
             } else {
                 Button {
                     onToggleExpand()
@@ -52,9 +52,10 @@ struct FolderPickerRowView: View {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
             }
             
             Button {

@@ -157,7 +157,7 @@ public struct FolderTreeContentView: View {
         }
     }
     
-    /// Computes the column title reflecting the current connection name or active folder.
+    /// Computes the column title reflecting the current connection or root drive name.
     private var navigationTitle: String {
         guard manager.hasSelectedDrive else {
             return String(localized: .Strings.folders)
@@ -180,12 +180,6 @@ public struct FolderTreeContentView: View {
             return String(localized: .Strings.folders)
         }
         
-        if let folder = manager.selectedFolder {
-            let isRoot = folder.path.isEmpty || folder.path == "/" || folder.name == shareDrive || folder.name == "/"
-            if !isRoot {
-                return "\(shareDrive) / \(folder.name)"
-            }
-        }
         return shareDrive
     }
 }
