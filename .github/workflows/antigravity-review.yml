@@ -132,23 +132,39 @@ jobs:
 
           for attempt in $(seq 1 $MAX_RETRIES); do
             echo "Calling Gemini API with model '${GEMINI_MODEL}' (attempt $attempt of $MAX_RETRIES)..."
-            HTTP_STATUS=$(curl -s --connect-timeout 15 --max-time 60 -o response.json -w "%{http_code}" \
+            rm -f response.json
+            CURL_EXIT=0
+            HTTP_STATUS=$(curl -sS --connect-timeout 20 --max-time 180 -o response.json -w "%{http_code}" \
               -H "Content-Type: application/json" \
-              "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}" \
-              -d @request.json)
+              -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+              "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent" \
+              -d @request.json) || CURL_EXIT=$?
 
-            if [ "$HTTP_STATUS" -eq 200 ]; then
+            if ! [[ "$HTTP_STATUS" =~ ^[0-9]{3}$ ]]; then
+              HTTP_STATUS="000"
+            fi
+
+            if [ "$CURL_EXIT" -eq 3 ]; then
+              echo "❌ Invalid Gemini API URL for model '${GEMINI_MODEL}' (curl exit code 3). Verify the GEMINI_MODEL variable."
+              exit 1
+            elif [ "$CURL_EXIT" -ne 0 ]; then
+              echo "⚠️ curl exited with code $CURL_EXIT (HTTP status: $HTTP_STATUS)."
+            fi
+
+            if [ "$CURL_EXIT" -eq 0 ] && [ "$HTTP_STATUS" -eq 200 ]; then
               SUCCESS=true
               break
-            elif [ "$HTTP_STATUS" -eq 429 ] || [ "$HTTP_STATUS" -eq 500 ] || [ "$HTTP_STATUS" -eq 502 ] || [ "$HTTP_STATUS" -eq 503 ] || [ "$HTTP_STATUS" -eq 504 ] || [ "$HTTP_STATUS" -eq 000 ]; then
+            elif [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_STATUS" -eq 429 ] || [ "$HTTP_STATUS" -eq 500 ] || [ "$HTTP_STATUS" -eq 502 ] || [ "$HTTP_STATUS" -eq 503 ] || [ "$HTTP_STATUS" -eq 504 ] || [ "$HTTP_STATUS" -eq 000 ]; then
               if [ "$attempt" -lt "$MAX_RETRIES" ]; then
                 RETRY_DELAY=$((attempt * 15))
-                echo "⚠️ Transient HTTP status '$HTTP_STATUS' received. Retrying in ${RETRY_DELAY}s (attempt $attempt of $MAX_RETRIES)..."
+                echo "⚠️ Transient error (HTTP status '$HTTP_STATUS', curl exit '$CURL_EXIT'). Retrying in ${RETRY_DELAY}s (attempt $attempt of $MAX_RETRIES)..."
                 sleep $RETRY_DELAY
               fi
             else
               echo "❌ API request failed with unrecoverable HTTP $HTTP_STATUS:"
-              cat response.json
+              if [ -s response.json ]; then
+                cat response.json
+              fi
               exit 1
             fi
           done
