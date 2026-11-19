@@ -27,9 +27,9 @@ public final class TVServerFormViewModel {
     public var modeTitle: String {
         switch mode {
         case .add:
-            return "Add Server"
+            return String(localized: .Strings.tvServerAddTitle)
         case .edit:
-            return "Edit Server"
+            return String(localized: .Strings.tvServerActionEdit)
         }
     }
 

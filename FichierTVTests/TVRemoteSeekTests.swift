@@ -286,6 +286,14 @@ struct TVRemoteSeekTests {
         view.pressesBegan([leftPress], with: nil)
         view.pressesCancelled([leftPress], with: nil)
         #expect(events == ["began:false:30", "cancelled:false"])
+
+        // Moving off-window while holding cancels active seek gesture cleanly
+        events.removeAll()
+        let holdPress = MockRemoteUIPress(type: .rightArrow, timestamp: 40.0)
+        view.pressesBegan([holdPress], with: nil)
+        #expect(events == ["began:true:40"])
+        view.willMove(toWindow: nil)
+        #expect(events == ["began:true:40", "cancelled:true"])
     }
 
     @MainActor

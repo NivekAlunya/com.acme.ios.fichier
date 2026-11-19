@@ -37,10 +37,10 @@ public struct TVEmptyStateView: View {
 
             if isShares {
                 Button(action: onBack) {
-                    Label("Back", systemImage: "chevron.left")
+                    Label(.Strings.commonBack, systemImage: "chevron.left")
                 }
                 .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Go back")
+                .accessibilityLabel(Text(.Strings.commonGoBack))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

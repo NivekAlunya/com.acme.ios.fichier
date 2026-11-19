@@ -13,6 +13,7 @@ struct MediaListModeView: View {
     let folders: [MediaItem]
     let pictures: [MediaItem]
     let isSelectionMode: Bool
+    let mediaSectionHeader: LocalizedStringResource
     let selectedItems: Set<MediaItem>
     let currentDirectoryID: String
     let onNavigateToFolder: (MediaItem) -> Void
@@ -28,6 +29,7 @@ struct MediaListModeView: View {
         manager: StorageLocationManager,
         folders: [MediaItem],
         pictures: [MediaItem],
+        mediaSectionHeader: LocalizedStringResource = .Strings.gallerySectionMediaCount(0),
         isSelectionMode: Bool,
         selectedItems: Set<MediaItem>,
         currentDirectoryID: String,
@@ -43,6 +45,7 @@ struct MediaListModeView: View {
         self.manager = manager
         self.folders = folders
         self.pictures = pictures
+        self.mediaSectionHeader = mediaSectionHeader
         self.isSelectionMode = isSelectionMode
         self.selectedItems = selectedItems
         self.currentDirectoryID = currentDirectoryID
@@ -54,10 +57,6 @@ struct MediaListModeView: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
-    }
-    
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        .Strings.gallerySectionMediaCount(count)
     }
     
     var body: some View {
@@ -84,25 +83,13 @@ struct MediaListModeView: View {
                                 }
                             }
                             .contextMenu(isSelectionMode ? nil : ContextMenu {
-                                if manager.canManageItem(subfolder) {
-                                    Button {
-                                        onRequestRename?(subfolder)
-                                    } label: {
-                                        Label(.Strings.galleryActionRename, systemImage: "pencil")
-                                    }
-                                    
-                                    Button {
-                                        onRequestMove?(subfolder)
-                                    } label: {
-                                        Label(String(localized: "Move to Folder...", comment: "Context menu action to move folder"), systemImage: "folder")
-                                    }
-                                    
-                                    Button(role: .destructive) {
-                                        onRequestDelete?(subfolder)
-                                    } label: {
-                                        Label(String(localized: "Delete", comment: "Context menu action to delete folder"), systemImage: "trash")
-                                    }
-                                }
+                                MediaFolderContextMenu(
+                                    folder: subfolder,
+                                    canManage: manager.canManageItem(subfolder),
+                                    onRequestRename: onRequestRename,
+                                    onRequestMove: onRequestMove,
+                                    onRequestDelete: onRequestDelete
+                                )
                             })
                         }
                     }
@@ -110,7 +97,7 @@ struct MediaListModeView: View {
                 }
                 
                 if !pictures.isEmpty {
-                    Section(String(localized: mediaSectionHeader(for: pictures.count))) {
+                    Section(String(localized: mediaSectionHeader)) {
                         ForEach(pictures) { pic in
                             Button {
                                 if isSelectionMode {
@@ -135,48 +122,17 @@ struct MediaListModeView: View {
                                 }
                             )
                             .contextMenu(isSelectionMode ? nil : ContextMenu {
-                                Button {
-                                    onEnterSelectionMode(pic)
-                                } label: {
-                                    Label(String(localized: "Select", comment: "Context menu action to select item"), systemImage: "checkmark.circle")
-                                }
-                                
-                                if manager.canManageItem(pic) {
-                                    Button {
-                                        onRequestRename?(pic)
-                                    } label: {
-                                        Label(.Strings.galleryActionRename, systemImage: "pencil")
+                                MediaItemContextMenu(
+                                    item: pic,
+                                    canManage: manager.canManageItem(pic),
+                                    onEnterSelectionMode: onEnterSelectionMode,
+                                    onRequestRename: onRequestRename,
+                                    onRequestMove: onRequestMove,
+                                    onRequestDelete: onRequestDelete,
+                                    onInvalidateThumbnail: { item in
+                                        await manager.invalidateThumbnail(for: item)
                                     }
-                                    
-                                    Button {
-                                        onRequestMove?(pic)
-                                    } label: {
-                                        Label(String(localized: "Move to Folder...", comment: "Context menu action to move item"), systemImage: "folder")
-                                    }
-                                    
-                                    Button(role: .destructive) {
-                                        onRequestDelete?(pic)
-                                    } label: {
-                                        Label(String(localized: "Delete", comment: "Context menu action to delete item"), systemImage: "trash")
-                                    }
-                                }
-                                
-                                Button {
-                                    FavoritesManager.shared.toggleFavorite(pic)
-                                } label: {
-                                    Label(
-                                        FavoritesManager.shared.isFavorite(pic) ? String(localized: "Remove from Favorites", comment: "Context menu unfavorite") : String(localized: "Add to Favorites", comment: "Context menu favorite"),
-                                        systemImage: FavoritesManager.shared.isFavorite(pic) ? "heart.slash" : "heart"
-                                    )
-                                }
-                                
-                                Button {
-                                    Task {
-                                        await manager.invalidateThumbnail(for: pic)
-                                    }
-                                } label: {
-                                    Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
-                                }
+                                )
                             })
                         }
                     }

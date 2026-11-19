@@ -163,6 +163,12 @@ public final class TVBrowserViewModel {
     }
 
     /// Triggers pagination when approaching the trailing items in the collection.
+    public func onItemAppear(item: MediaSourceItem) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        onItemAppear(at: index)
+    }
+
+    /// Triggers pagination when approaching the trailing items in the collection.
     public func onItemAppear(at index: Int) {
         guard !isLoading, !isPaginating, canLoadMore,
               index >= 0, index < items.count,

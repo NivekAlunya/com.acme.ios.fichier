@@ -161,7 +161,7 @@ public struct VideoTimelineBar: View {
             }
             .frame(height: 36)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(String(localized: "Playback Timeline", comment: "Accessibility label for playback scrubber"))
+            .accessibilityLabel(Text(.Strings.videoPlayerTimelineScrubber))
             .accessibilityValue("\(formatSeconds(effectiveCurrentTime)) of \(formatSeconds(duration))")
             .accessibilityAdjustableAction { direction in
                 guard duration > 0 else { return }
@@ -188,7 +188,7 @@ public struct VideoTimelineBar: View {
                     .frame(minWidth: 48, alignment: .trailing)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(showRemainingTime ? String(localized: "Remaining time, tap to show total duration", comment: "Accessibility label for remaining time button") : String(localized: "Total duration, tap to show remaining time", comment: "Accessibility label for total duration button"))
+            .accessibilityLabel(showRemainingTime ? Text(.Strings.videoPlayerTimelineRemainingHint) : Text(.Strings.videoPlayerTimelineDurationHint))
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 2)
@@ -207,15 +207,6 @@ public struct VideoTimelineBar: View {
     
     /// Formats a time in seconds into a digital clock string.
     private func formatSeconds(_ totalSeconds: Double) -> String {
-        guard totalSeconds.isFinite && !totalSeconds.isNaN && totalSeconds >= 0 else { return "0:00" }
-        let secs = Int(totalSeconds)
-        let hours = secs / 3600
-        let minutes = (secs % 3600) / 60
-        let seconds = secs % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%d:%02d", minutes, seconds)
-        }
+        MediaFormatHelper.formatTimestamp(totalSeconds, zeroPaddedHours: false, zeroPaddedMinutes: false)
     }
 }

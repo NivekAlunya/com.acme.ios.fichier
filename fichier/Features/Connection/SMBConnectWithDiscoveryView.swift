@@ -154,8 +154,8 @@ struct SMBConnectWithDiscoveryView: View {
                     .accessibilityLabel(.Strings.commonCancel)
                 }
             }
-            .onChange(of: viewModel.isConnected) { _, isConnected in
-                if isConnected {
+            .onChange(of: viewModel.connectionState) { _, state in
+                if state == .connected {
                     dismiss()
                 }
             }

@@ -15,6 +15,7 @@ struct MediaGridModeView: View {
     let gridColumns: [GridItem]
     let gridSize: GridSize
     let sortOption: SortOption
+    let mediaSectionHeader: LocalizedStringResource
     let isSelectionMode: Bool
     let selectedItems: Set<MediaItem>
     let currentDirectoryID: String
@@ -34,6 +35,7 @@ struct MediaGridModeView: View {
         gridColumns: [GridItem],
         gridSize: GridSize,
         sortOption: SortOption,
+        mediaSectionHeader: LocalizedStringResource = .Strings.gallerySectionMediaCount(0),
         isSelectionMode: Bool,
         selectedItems: Set<MediaItem>,
         currentDirectoryID: String,
@@ -52,6 +54,7 @@ struct MediaGridModeView: View {
         self.gridColumns = gridColumns
         self.gridSize = gridSize
         self.sortOption = sortOption
+        self.mediaSectionHeader = mediaSectionHeader
         self.isSelectionMode = isSelectionMode
         self.selectedItems = selectedItems
         self.currentDirectoryID = currentDirectoryID
@@ -63,10 +66,6 @@ struct MediaGridModeView: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
-    }
-    
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        .Strings.gallerySectionMediaCount(count)
     }
     
     var body: some View {
@@ -126,34 +125,17 @@ struct MediaGridModeView: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu(isSelectionMode ? nil : ContextMenu {
-                        folderContextMenu(for: subfolder)
+                        MediaFolderContextMenu(
+                            folder: subfolder,
+                            canManage: manager.canManageItem(subfolder),
+                            onRequestRename: onRequestRename,
+                            onRequestMove: onRequestMove,
+                            onRequestDelete: onRequestDelete
+                        )
                     })
                 }
             }
             .padding(.horizontal, 12)
-        }
-    }
-
-    @ViewBuilder
-    private func folderContextMenu(for subfolder: MediaItem) -> some View {
-        if manager.canManageItem(subfolder) {
-            Button {
-                onRequestRename?(subfolder)
-            } label: {
-                Label(.Strings.galleryActionRename, systemImage: "pencil")
-            }
-            
-            Button {
-                onRequestMove?(subfolder)
-            } label: {
-                Label(String(localized: "Move to Folder...", comment: "Context menu action to move folder"), systemImage: "folder")
-            }
-            
-            Button(role: .destructive) {
-                onRequestDelete?(subfolder)
-            } label: {
-                Label(String(localized: "Delete", comment: "Context menu action to delete folder"), systemImage: "trash")
-            }
         }
     }
 
@@ -163,7 +145,7 @@ struct MediaGridModeView: View {
     private var picturesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(mediaSectionHeader(for: pictures.count))
+                Text(mediaSectionHeader)
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.secondary)
                 
@@ -208,61 +190,18 @@ struct MediaGridModeView: View {
             }
         }
         .contextMenu(isSelectionMode ? nil : ContextMenu {
-            pictureContextMenu(for: pic)
+            MediaItemContextMenu(
+                item: pic,
+                canManage: manager.canManageItem(pic),
+                onEnterSelectionMode: onEnterSelectionMode,
+                onRequestRename: onRequestRename,
+                onRequestMove: onRequestMove,
+                onRequestDelete: onRequestDelete,
+                onInvalidateThumbnail: { item in
+                    await manager.invalidateThumbnail(for: item)
+                }
+            )
         })
-    }
-
-    @ViewBuilder
-    private func pictureContextMenu(for pic: MediaItem) -> some View {
-        Button {
-            onEnterSelectionMode(pic)
-        } label: {
-            Label(String(localized: "Select", comment: "Context menu action to select item"), systemImage: "checkmark.circle")
-        }
-        
-        if manager.canManageItem(pic) {
-            Button {
-                onRequestRename?(pic)
-            } label: {
-                Label(.Strings.galleryActionRename, systemImage: "pencil")
-            }
-            
-            Button {
-                onRequestMove?(pic)
-            } label: {
-                Label(String(localized: "Move to Folder...", comment: "Context menu action to move item"), systemImage: "folder")
-            }
-            
-            Button(role: .destructive) {
-                onRequestDelete?(pic)
-            } label: {
-                Label(String(localized: "Delete", comment: "Context menu action to delete item"), systemImage: "trash")
-            }
-        }
-        
-        favoriteButton(for: pic)
-        
-        Button {
-            Task {
-                await manager.invalidateThumbnail(for: pic)
-            }
-        } label: {
-            Label(.Strings.galleryThumbnailRetryPreview, systemImage: "arrow.clockwise")
-        }
-    }
-
-    @ViewBuilder
-    private func favoriteButton(for pic: MediaItem) -> some View {
-        let isFav = FavoritesManager.shared.isFavorite(pic)
-        Button {
-            FavoritesManager.shared.toggleFavorite(pic)
-        } label: {
-            if isFav {
-                Label(String(localized: "Remove from Favorites", comment: "Context menu unfavorite"), systemImage: "heart.slash")
-            } else {
-                Label(String(localized: "Add to Favorites", comment: "Context menu favorite"), systemImage: "heart")
-            }
-        }
     }
 
     // MARK: - Empty State

@@ -321,7 +321,7 @@ final class FileOperationsTests: XCTestCase {
         // Create folder
         let createdFolder = try await actor.createFolder(named: "NewFolder", inShare: "Media", atPath: "")
         XCTAssertEqual(createdFolder.name, "NewFolder")
-        XCTAssertEqual(createdFolder.path, "NewFolder")
+        XCTAssertEqual(createdFolder.path, "/NewFolder")
         XCTAssertTrue(createdFolder.isDirectory)
         let created = await mockClient.createdDirectories
         XCTAssertEqual(created.count, 1)

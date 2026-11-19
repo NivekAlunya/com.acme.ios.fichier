@@ -39,8 +39,8 @@ public struct MediaThumbnailView: View {
     /// Successfully loaded and decoded thumbnail image.
     @State private var image: UIImage?
     
-    /// In-flight asynchronous thumbnail loading task.
-    @State private var loadTask: Task<Void, Never>?
+    /// Unique identifier key tracked for item recycling and version updates.
+    @State private var currentKey: String = ""
     
     /// Indicates whether thumbnail generation or download failed.
     @State private var loadFailed: Bool = false
@@ -182,21 +182,8 @@ public struct MediaThumbnailView: View {
                 }
             }
         }
-        .onAppear {
-            if image == nil {
-                startLoading()
-            }
-        }
-        .onDisappear {
-            cancelLoading()
-        }
-        .onChange(of: manager.thumbnailVersions[item.id]) { _, _ in
-            startLoading(force: true)
-        }
-        .onChange(of: item.id) { _, _ in
-            if self.image == nil {
-                startLoading()
-            }
+        .task(id: "\(item.id)-\(manager.thumbnailVersions[item.id] ?? 0)") {
+            await loadThumbnail()
         }
     }
     
@@ -262,35 +249,46 @@ public struct MediaThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
     
-    // MARK: - Loading & Retry Logic
+    // MARK: - Loading Logic
     
-    /// Spawns an asynchronous task to download or retrieve the thumbnail from cache.
-    ///
-    /// - Parameter force: When `true`, overrides currently displayed image to fetch freshly upgraded thumbnails.
-    private func startLoading(force: Bool = false) {
-        if !force && image != nil { return }
-        loadTask?.cancel()
-        loadFailed = false
+    /// Asynchronously fetches or downloads the thumbnail from cache, updating image state cooperatively.
+    private func loadThumbnail() async {
+        let taskKey = "\(item.id)-\(manager.thumbnailVersions[item.id] ?? 0)"
+        if currentKey != taskKey {
+            if !currentKey.hasPrefix("\(item.id)-") {
+                // Different media item (cell reuse): discard stale thumbnail immediately
+                self.image = nil
+            }
+            self.currentKey = taskKey
+            self.retryCount = 0
+            self.loadFailed = false
+        } else if image != nil {
+            return
+        }
         
-        loadTask = Task { @MainActor in
-            if Task.isCancelled { return }
-            let loaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
-            guard !Task.isCancelled else { return }
-            
-            if let loaded {
-                withAnimation(.easeIn(duration: 0.2)) {
-                    self.image = loaded
-                    self.loadFailed = false
-                }
-            } else if item.isPDF {
-                // Remote PDF without a cached thumbnail: display lightweight SwiftUI placeholder without error
+        let loaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
+        guard !Task.isCancelled else { return }
+        
+        if let loaded {
+            withAnimation(.easeIn(duration: 0.2)) {
+                self.image = loaded
                 self.loadFailed = false
-            } else if item.isVideo {
-                if retryCount < 1 {
-                    retryCount += 1
-                    try? await Task.sleep(for: .milliseconds(1500))
-                    guard !Task.isCancelled && self.image == nil else { return }
-                    startLoading()
+            }
+        } else if item.isPDF {
+            // Remote PDF without a cached thumbnail: display lightweight SwiftUI placeholder without error
+            self.loadFailed = false
+        } else if item.isVideo {
+            if retryCount < 1 {
+                retryCount += 1
+                try? await Task.sleep(for: .milliseconds(1500))
+                guard !Task.isCancelled && self.image == nil else { return }
+                let retryLoaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
+                guard !Task.isCancelled else { return }
+                if let retryLoaded {
+                    withAnimation(.easeIn(duration: 0.2)) {
+                        self.image = retryLoaded
+                        self.loadFailed = false
+                    }
                 } else {
                     withAnimation {
                         self.loadFailed = true
@@ -301,18 +299,10 @@ public struct MediaThumbnailView: View {
                     self.loadFailed = true
                 }
             }
+        } else {
+            withAnimation {
+                self.loadFailed = true
+            }
         }
-    }
-    
-    /// Resets the retry counter and reinitiates thumbnail loading.
-    private func retryLoading() {
-        retryCount = 0
-        startLoading(force: true)
-    }
-    
-    /// Cancels in-flight loading tasks and clears references.
-    private func cancelLoading() {
-        loadTask?.cancel()
-        loadTask = nil
     }
 }

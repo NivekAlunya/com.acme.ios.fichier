@@ -177,15 +177,7 @@ extension StorageLocationManager {
             throw FileOperationError.unsupportedStorage
         }
         
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
-              !trimmed.hasSuffix(".") else {
-            throw FileOperationError.invalidName(newName)
-        }
+        let trimmed = try FileOperationError.validateName(newName)
         
         guard trimmed != item.name else {
             return item

@@ -184,16 +184,13 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     
     /// Formatted human-readable file size string (e.g. "14.2 MB").
     public var formattedSize: String {
-        ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        MediaFormatHelper.formatByteCount(size)
     }
     
     /// Localized medium date and short time string representing the last modification date.
     public var formattedDate: String? {
         guard let modifiedDate else { return nil }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: modifiedDate)
+        return MediaFormatHelper.formatDate(modifiedDate)
     }
     
     // MARK: - Media Type Discrimination

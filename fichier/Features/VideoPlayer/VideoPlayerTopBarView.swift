@@ -109,7 +109,7 @@ public struct VideoPlayerTopBarView: View {
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close video player"))
+        .accessibilityLabel(Text(.Strings.commonClose))
     }
     
     #if DEBUG
@@ -161,7 +161,7 @@ public struct VideoPlayerTopBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(controller.videos.count <= 1)
-        .accessibilityLabel(String(localized: "Previous Video", comment: "Accessibility label for previous video"))
+        .accessibilityLabel(Text(.Strings.videoPlayerControlPreviousVideo))
     }
     
     /// Next video button.
@@ -177,7 +177,7 @@ public struct VideoPlayerTopBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(controller.videos.count <= 1)
-        .accessibilityLabel(String(localized: "Next Video", comment: "Accessibility label for next video"))
+        .accessibilityLabel(Text(.Strings.videoPlayerControlNextVideo))
     }
     
     /// Subtle vertical divider between tool sections.
@@ -229,7 +229,7 @@ public struct VideoPlayerTopBarView: View {
         
         return Menu {
             if !options.isEmpty {
-                Section(String(localized: "Quick Jump", comment: "Section header for quick jump options")) {
+                Section(.Strings.videoPlayerMenuQuickJump) {
                     ForEach(options) { option in
                         Button {
                             controller.jumpToTime(option.targetTime)
@@ -241,7 +241,7 @@ public struct VideoPlayerTopBarView: View {
             }
             
             if !chapters.isEmpty {
-                Section(String(localized: "Chapters", comment: "Section header for video chapters")) {
+                Section(.Strings.videoPlayerMenuChapters) {
                     ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
                         let nextStart = index + 1 < chapters.count ? chapters[index + 1].startTime : duration
                         let isCurrent = currentTime >= chapter.startTime && (nextStart <= chapter.startTime || currentTime < nextStart)
@@ -266,7 +266,7 @@ public struct VideoPlayerTopBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Chapters & Quick Jump", comment: "Accessibility label for chapters and quick jump menu"))
+        .accessibilityLabel(Text(.Strings.videoPlayerMenuChaptersAndQuickJump))
         .accessibilityIdentifier("video_player_chapters_jump_menu")
     }
     
@@ -356,7 +356,7 @@ public struct VideoPlayerTopBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Playback Options", comment: "Accessibility label for playback options menu"))
+        .accessibilityLabel(Text(.Strings.videoPlayerMenuPlaybackOptions))
     }
     
     /// Row of action tool icon buttons.
@@ -373,7 +373,7 @@ public struct VideoPlayerTopBarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(FavoritesManager.shared.isFavorite(controller.currentItem) ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite"))
+            .accessibilityLabel(FavoritesManager.shared.isFavorite(controller.currentItem) ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
             
             if !controller.currentItem.isPhotoAsset {
                 Button {
@@ -393,7 +393,7 @@ public struct VideoPlayerTopBarView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(controller.isSaving)
-                .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save video to Photos"))
+                .accessibilityLabel(Text(.Strings.galleryActionSaveToPhotos))
             }
             
             #if !os(tvOS)
@@ -409,13 +409,13 @@ public struct VideoPlayerTopBarView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Share Video", comment: "Accessibility label to share video"))
+                .accessibilityLabel(Text(.Strings.videoPlayerShareVideo))
             }
             #endif
             
             AirPlayButtonView()
                 .frame(width: 30, height: 30)
-                .accessibilityLabel(String(localized: "AirPlay", comment: "Accessibility label for AirPlay"))
+                .accessibilityLabel(Text(.Strings.videoPlayerActionAirplay))
             
             if !controller.availableChapters.isEmpty || !quickJumpOptions.isEmpty {
                 chaptersAndJumpMenu
@@ -444,7 +444,7 @@ public struct VideoPlayerTopBarView: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isVLC ? String(localized: "Switch to Native Player", comment: "Accessibility label to switch to native AVPlayer") : String(localized: "Switch to VLC Player", comment: "Accessibility label to switch to VLC player"))
+        .accessibilityLabel(isVLC ? Text(.Strings.videoPlayerActionSwitchNative) : Text(.Strings.videoPlayerActionSwitchVlc))
         .accessibilityIdentifier("video_player_switch_engine_button")
     }
 }

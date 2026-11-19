@@ -92,20 +92,6 @@ struct MediaGridView: View {
     // MARK: - Filtered and Sorted Data Pipeline
     
     @ViewBuilder
-    private var slideshowDurationSection: some View {
-        Section(.Strings.slideshowSectionSlideDuration) {
-            Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
-                Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-            }
-        }
-    }
-
-    @ViewBuilder
     private var filterMenuSection: some View {
         Section(.Strings.galleryMenuFilter) {
             Picker(.Strings.galleryPickerMediaType, selection: $viewModel.mediaFilter) {
@@ -128,10 +114,6 @@ struct MediaGridView: View {
 
     private func filterAndSortData() -> (folders: [MediaItem], pictures: [MediaItem]) {
         viewModel.filterAndSortData(sortOption: sortOption)
-    }
-    
-    private func mediaSectionHeader(for count: Int) -> LocalizedStringResource {
-        viewModel.mediaSectionHeader(for: count)
     }
     
     /// Dynamic grid layout specification computed from the active `gridSize`.
@@ -178,6 +160,7 @@ struct MediaGridView: View {
                                 gridColumns: gridColumns,
                                 gridSize: gridSize,
                                 sortOption: sortOption,
+                                mediaSectionHeader: viewModel.mediaSectionHeader(for: displayPictures.count),
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
@@ -186,7 +169,7 @@ struct MediaGridView: View {
                                     AppKeyboardDismissal.dismiss()
                                     onSelectPicture($0, $1)
                                 },
-                                onToggleSelection: { toggleSelection(for: $0) },
+                                onToggleSelection: { viewModel.toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {
                                         viewModel.isSelectionMode = true
@@ -221,6 +204,7 @@ struct MediaGridView: View {
                                 manager: viewModel.manager,
                                 folders: displayFolders,
                                 pictures: displayPictures,
+                                mediaSectionHeader: viewModel.mediaSectionHeader(for: displayPictures.count),
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
@@ -229,7 +213,7 @@ struct MediaGridView: View {
                                     AppKeyboardDismissal.dismiss()
                                     onSelectPicture($0, $1)
                                 },
-                                onToggleSelection: { toggleSelection(for: $0) },
+                                onToggleSelection: { viewModel.toggleSelection(for: $0) },
                                 onEnterSelectionMode: { item in
                                     withAnimation {
                                         viewModel.isSelectionMode = true
@@ -275,11 +259,11 @@ struct MediaGridView: View {
                     progressMessage: viewModel.batchProgressMessage,
                     showSaveToPhotos: viewModel.manager.currentLocation?.kind != .photos,
                     showFileManagement: viewModel.manager.canManageCurrentFolder,
-                    onCancel: { cancelBatchTask() },
-                    onToggleFavorite: { batchToggleFavorites() },
-                    onSaveToPhotos: { batchSaveToPhotos() },
-                    onDownloadToFiles: { batchDownloadToFiles() },
-                    onShare: { batchShare() },
+                    onCancel: { viewModel.cancelBatchTask() },
+                    onToggleFavorite: { viewModel.batchToggleFavorites() },
+                    onSaveToPhotos: { viewModel.batchSaveToPhotos() },
+                    onDownloadToFiles: { viewModel.batchDownloadToFiles() },
+                    onShare: { viewModel.batchShare() },
                     onMove: {
                         viewModel.itemsPendingMove = Array(viewModel.selectedItems)
                     },
@@ -303,9 +287,6 @@ struct MediaGridView: View {
                 MediaActivityShareSheet(activityItems: shareSheetItems)
             }
         }
-        .sheet(isPresented: $viewModel.showingSettings) {
-            AppSettingsView()
-        }
         #if !os(tvOS)
         .sheet(isPresented: Binding(
             get: { viewModel.itemsPendingFileExport != nil },
@@ -316,16 +297,10 @@ struct MediaGridView: View {
                     viewModel.itemsPendingFileExport = nil
                     if success {
                         withAnimation {
-                            viewModel.batchStatusToast = String(localized: .Strings.galleryBatchSavedToFiles(urls.count))
                             viewModel.isSelectionMode = false
                             viewModel.selectedItems.removeAll()
                         }
-                        Task {
-                            try? await Task.sleep(for: .seconds(2.5))
-                            withAnimation {
-                                viewModel.batchStatusToast = nil
-                            }
-                        }
+                        viewModel.showToastMessage(String(localized: .Strings.galleryBatchSavedToFiles(urls.count)))
                     }
                 }
             }
@@ -341,7 +316,7 @@ struct MediaGridView: View {
                     itemsToMove: items,
                     onMoveTo: { destination in
                         viewModel.itemsPendingMove = nil
-                        executeMove(items: items, to: destination)
+                        viewModel.executeMove(items: items, to: destination)
                     },
                     onDismiss: {
                         viewModel.itemsPendingMove = nil
@@ -350,41 +325,41 @@ struct MediaGridView: View {
             }
         }
         .confirmationDialog(
-            deleteConfirmationTitle,
+            viewModel.deleteConfirmationTitle,
             isPresented: Binding(
                 get: { viewModel.itemsPendingDelete != nil },
                 set: { if !$0 { viewModel.itemsPendingDelete = nil } }
             ),
             titleVisibility: .visible
         ) {
-            Button(deleteConfirmationButtonTitle, role: .destructive) {
+            Button(viewModel.deleteConfirmationButtonTitle, role: .destructive) {
                 if let items = viewModel.itemsPendingDelete {
                     viewModel.itemsPendingDelete = nil
                     Task {
-                        await executeDelete(items: items)
+                        await viewModel.executeDelete(items: items)
                     }
                 }
             }
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
+            Button(.Strings.commonCancel, role: .cancel) {
                 viewModel.itemsPendingDelete = nil
             }
         } message: {
-            Text(verbatim: deleteConfirmationMessage)
+            Text(verbatim: viewModel.deleteConfirmationMessage)
         }
         .alert(
-            String(localized: "New Folder", comment: "Alert title for creating new folder"),
+            .Strings.commonNewFolder,
             isPresented: $viewModel.isShowingNewFolderAlert
         ) {
-            TextField(String(localized: "Folder Name", comment: "Placeholder for new folder name"), text: $viewModel.newFolderName)
-            Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {}
-            Button(String(localized: "Create", comment: "Create button")) {
-                executeCreateFolder()
+            TextField(String(localized: .Strings.commonFolderName), text: $viewModel.newFolderName)
+            Button(.Strings.commonCancel, role: .cancel) {}
+            Button(.Strings.commonCreate) {
+                viewModel.executeCreateFolder()
             }
             .disabled(viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         } message: {
             if let folder = viewModel.manager.selectedFolder {
                 let displayName = folder.name.isEmpty ? folder.rootName : folder.name
-                Text(String(localized: "Create a subfolder inside '\(displayName)'.", comment: "Prompt explaining where folder will be created"))
+                Text(.Strings.galleryCreateSubfolderPrompt(displayName))
             }
         }
         .alert(
@@ -402,7 +377,7 @@ struct MediaGridView: View {
             }
             Button(String(localized: .Strings.galleryRenameButton)) {
                 if let item = viewModel.itemToRename {
-                    executeRename(item: item, to: viewModel.renameText)
+                    viewModel.executeRename(item: item, to: viewModel.renameText)
                 }
             }
             .disabled(viewModel.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.renameText == viewModel.itemToRename?.name)
@@ -412,13 +387,13 @@ struct MediaGridView: View {
             }
         }
         .alert(
-            String(localized: "File Operation Failed", comment: "Error alert title"),
+            .Strings.galleryErrorFileOperationFailed,
             isPresented: Binding(
                 get: { viewModel.fileOpErrorMessage != nil },
                 set: { if !$0 { viewModel.fileOpErrorMessage = nil } }
             )
         ) {
-            Button(String(localized: "OK", comment: "Dismiss button"), role: .cancel) {}
+            Button(.Strings.commonOk, role: .cancel) {}
         } message: {
             if let fileOpErrorMessage = viewModel.fileOpErrorMessage {
                 Text(fileOpErrorMessage)
@@ -463,7 +438,7 @@ struct MediaGridView: View {
                         withAnimation {
                             viewModel.isSelectionMode = false
                             viewModel.selectedItems.removeAll()
-                            cancelBatchTask()
+                            viewModel.cancelBatchTask()
                         }
                     }
                 }
@@ -472,7 +447,7 @@ struct MediaGridView: View {
                 // Cmd+A: Select All / Deselect All (when in selection mode)
                 Button("") {
                     if viewModel.isSelectionMode {
-                        toggleAllSelection(for: displayPictures)
+                        viewModel.toggleAllSelection(for: displayPictures)
                     } else if !displayPictures.isEmpty {
                         withAnimation {
                             viewModel.isSelectionMode = true
@@ -603,531 +578,13 @@ struct MediaGridView: View {
             AppHapticFeedback.medium()
         }
     }
-    
-    // MARK: - Batch Selection Actions
-    
-    /// Toggles the selection status of a single media item, triggering light haptic feedback.
-    ///
-    /// - Parameter item: The `MediaItem` to add to or remove from `viewModel.selectedItems`.
-    private func toggleSelection(for item: MediaItem) {
-        if viewModel.selectedItems.contains(item) {
-            viewModel.selectedItems.remove(item)
-        } else {
-            viewModel.selectedItems.insert(item)
-        }
-        AppHapticFeedback.light()
-    }
-    
-    /// Selects all visible media items if not already all selected; otherwise, clears the selection set.
-    ///
-    /// - Parameter pictures: The currently visible array of pictures subject to selection.
-    private func toggleAllSelection(for pictures: [MediaItem]) {
-        if viewModel.selectedItems.count == pictures.count && !pictures.isEmpty {
-            viewModel.selectedItems.removeAll()
-        } else {
-            viewModel.selectedItems = Set(pictures)
-        }
-        AppHapticFeedback.medium()
-    }
-    
-    /// Toggles the favorite status across all selected items.
-    /// If all selected items are already marked as favorites, unmarks all of them; otherwise, marks any un-favorited items as favorite.
-    private func batchToggleFavorites() {
-        let items = Array(viewModel.selectedItems)
-        guard !items.isEmpty else { return }
-        let allAreFavs = items.allSatisfy { FavoritesManager.shared.isFavorite($0) }
-        for item in items {
-            if allAreFavs {
-                if FavoritesManager.shared.isFavorite(item) {
-                    FavoritesManager.shared.toggleFavorite(item)
-                }
-            } else {
-                if !FavoritesManager.shared.isFavorite(item) {
-                    FavoritesManager.shared.toggleFavorite(item)
-                }
-            }
-        }
-        AppHapticFeedback.medium()
-    }
-    
-    /// Cancels any currently active batch save or batch share operation and resets progress flags.
-    private func cancelBatchTask() {
-        viewModel.batchTask?.cancel()
-        viewModel.batchTask = nil
-        viewModel.isBatchProcessing = false
-        viewModel.batchProgressMessage = nil
-    }
-    
-    // MARK: - Batch Export to Photos
-    
-    /// Exports selected media files to the user's Photos library concurrently using a bounded worker pool.
-    ///
-    /// ### Complex Concurrency Architecture:
-    /// - **Bounded Worker Concurrency**: Uses `withTaskGroup` with a maximum concurrency limit (`maxConcurrent = 3`).
-    ///   Spawning unbounded download tasks over SMB or local networks would cause TCP socket starvation and high memory
-    ///   consumption from simultaneous image decoding.
-    /// - **Sliding Window Dispatch**: Seeds 3 initial workers. As each worker finishes via `group.next()`, progress counters
-    ///   are updated and the next item is dequeued from `iterator.next()`.
-    /// - **Cooperative Task Cancellation**: Polls `Task.isCancelled` at each stage to ensure immediate response if the user taps Cancel.
-    /// - **Transient Toast Timer**: Displays a result summary in a top capsule banner and schedules an auto-dismissing
-    ///   timer using structured `Task.sleep(for: .seconds(2.5))`.
-    private func batchSaveToPhotos() {
-        let items = Array(viewModel.selectedItems)
-        guard !items.isEmpty else { return }
-        viewModel.isBatchProcessing = true
-        viewModel.batchTask?.cancel()
-        
-        viewModel.batchTask = Task { @MainActor in
-            var completedCount = 0
-            var savedCount = 0
-            var failedCount = 0
-            let total = items.count
-            
-            if total == 1, let item = items.first {
-                viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
-                let throttler = DownloadProgressThrottler()
-                let success = await Self.saveSingleMediaItemToPhotos(item, manager: viewModel.manager) { bytes, totalBytes in
-                    Task {
-                        guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
-                        await MainActor.run {
-                            guard totalBytes > 0 else { return }
-                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                            let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                            let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
-                            self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
-                        }
-                    }
-                }
-                completedCount = 1
-                if success {
-                    savedCount = 1
-                } else {
-                    failedCount = 1
-                }
-            } else {
-                // Bounded concurrency pool (up to 3 parallel downloads to maximize network throughput without saturating memory)
-                await withTaskGroup(of: Bool.self) { group in
-                    var iterator = items.makeIterator()
-                    let maxConcurrent = 3
-                    
-                    // Seed initial workers
-                    for _ in 0..<min(maxConcurrent, total) {
-                        if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.viewModel.manager] in
-                                await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
-                            }
-                        }
-                    }
-                    
-                    // As each worker finishes, update progress and schedule the next queued item
-                    while let success = await group.next() {
-                        guard !Task.isCancelled else { break }
-                        completedCount += 1
-                        if success {
-                            savedCount += 1
-                        } else {
-                            failedCount += 1
-                        }
-                        viewModel.batchProgressMessage = String(localized: .Strings.galleryBatchSavingToPhotos(completedCount, total))
-                        
-                        if let nextItem = iterator.next() {
-                            group.addTask { [manager = self.viewModel.manager] in
-                                await Self.saveSingleMediaItemToPhotos(nextItem, manager: manager)
-                            }
-                        }
-                    }
-                }
-            }
-            
-            guard !Task.isCancelled else {
-                viewModel.isBatchProcessing = false
-                viewModel.batchProgressMessage = nil
-                return
-            }
-            
-            viewModel.isBatchProcessing = false
-            viewModel.batchProgressMessage = nil
-            
-            withAnimation {
-                if failedCount > 0 && savedCount > 0 {
-                    viewModel.batchStatusToast = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
-                } else if failedCount > 0 && savedCount == 0 {
-                    viewModel.batchStatusToast = String(localized: .Strings.gallerySavedToPhotosFailed)
-                } else {
-                    viewModel.batchStatusToast = savedCount == 1
-                        ? String(localized: .Strings.gallerySavedToPhotosSingle)
-                        : String(localized: .Strings.gallerySavedToPhotosMultiple(savedCount))
-                }
-                viewModel.isSelectionMode = false
-                viewModel.selectedItems.removeAll()
-            }
-            
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            withAnimation {
-                viewModel.batchStatusToast = nil
-            }
-        }
-    }
-    
-    // MARK: - Batch Download to Files
-    
-    /// Downloads selected media items directly to local files and presents the native document picker
-    /// so the user can choose where to export or save them (e.g., iCloud Drive, Downloads, On My iPhone).
-    private func batchDownloadToFiles() {
-        let items = Array(viewModel.selectedItems)
-        guard !items.isEmpty else { return }
-        viewModel.isBatchProcessing = true
-        viewModel.batchTask?.cancel()
-        
-        viewModel.batchTask = Task { @MainActor in
-            var downloadedURLs: [URL] = []
-            let total = items.count
-            
-            if total == 1, let item = items.first {
-                viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadStartingItem(item.name))
-                let throttler = DownloadProgressThrottler()
-                do {
-                    let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
-                        Task {
-                            guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
-                            await MainActor.run {
-                                guard totalBytes > 0 else { return }
-                                let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                                let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                                let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
-                                self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent))
-                            }
-                        }
-                    }
-                    downloadedURLs.append(url)
-                } catch {
-                    loge("Failed to download \(item.name) to file: \(error.localizedDescription)")
-                }
-            } else {
-                for (index, item) in items.enumerated() {
-                    guard !Task.isCancelled else { break }
-                    viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemTitle(index + 1, total, item.name))
-                    let throttler = DownloadProgressThrottler()
-                    do {
-                        let url = try await viewModel.manager.downloadItemToFile(for: item) { bytes, totalBytes in
-                            Task {
-                                guard await throttler.shouldReport(bytes: bytes, total: totalBytes) else { return }
-                                await MainActor.run {
-                                    guard totalBytes > 0 else { return }
-                                    let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                                    let totalStr = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
-                                    let percent = (Double(bytes) / Double(totalBytes)).formatted(.percent.precision(.fractionLength(0)))
-                                    self.viewModel.batchProgressMessage = String(localized: .Strings.galleryDownloadBatchItemDetail(index + 1, total, item.name, readStr, totalStr, percent))
-                                }
-                            }
-                        }
-                        downloadedURLs.append(url)
-                    } catch {
-                        loge("Failed to download \(item.name) to file: \(error.localizedDescription)")
-                    }
-                }
-            }
-            
-            guard !Task.isCancelled else {
-                viewModel.isBatchProcessing = false
-                viewModel.batchProgressMessage = nil
-                return
-            }
-            
-            viewModel.isBatchProcessing = false
-            viewModel.batchProgressMessage = nil
-            
-            if downloadedURLs.isEmpty {
-                withAnimation {
-                    viewModel.batchStatusToast = String(localized: .Strings.galleryBatchDownloadFailed)
-                }
-                try? await Task.sleep(for: .seconds(2.5))
-                withAnimation {
-                    viewModel.batchStatusToast = nil
-                }
-            } else {
-                #if !os(tvOS)
-                viewModel.itemsPendingFileExport = downloadedURLs
-                #else
-                withAnimation {
-                    viewModel.batchStatusToast = String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count))
-                }
-                #endif
-            }
-        }
-    }
-    
-    /// Saves an individual media item (image or video) to the system Photos library.
-    ///
-    /// Declared `static` to ensure no implicit capture of the enclosing SwiftUI `View` struct
-    /// inside concurrent `@Sendable` task closures.
-    ///
-    /// - Parameters:
-    ///   - item: The `MediaItem` representing the photo or video to export.
-    ///   - manager: The `StorageLocationManager` instance used to fetch the remote file or image data.
-    ///   - progress: Optional callback for reporting download progress.
-    /// - Returns: `true` if the media item was successfully saved to Photos; otherwise, `false`.
-    private static func saveSingleMediaItemToPhotos(
-        _ item: MediaItem,
-        manager: StorageLocationManager,
-        progress: (@Sendable (Int64, Int64) -> Void)? = nil
-    ) async -> Bool {
-        do {
-            if item.isVideo {
-                let localURL = try await manager.fetchVideoURL(for: item, progress: progress)
-                try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
-            } else {
-                if let progress {
-                    let localURL = try await manager.downloadItemToFile(for: item, progress: progress)
-                    guard let image = UIImage(contentsOfFile: localURL.path) else {
-                        return false
-                    }
-                    try await PhotoLibrarySaver.saveImageToPhotos(image)
-                } else {
-                    guard let image = await manager.downloadImage(for: item) else {
-                        return false
-                    }
-                    try await PhotoLibrarySaver.saveImageToPhotos(image)
-                }
-            }
-            return true
-        } catch {
-            loge("Failed to save \(item.name): \(error.localizedDescription)")
-            return false
-        }
-    }
-    
-    // MARK: - Batch Share Preparation
-    
-    /// Prepares selected media items for the system share sheet concurrently while strictly preserving selection order.
-    ///
-    /// ### Complex Code Breakdown:
-    /// - **Order Preservation**: Each download task carries an enumerated index `(idx, item)`. Because parallel downloads
-    ///   may finish out-of-order, results are collected into `indexedResults: [(Int, Any)]` and stably sorted by index
-    ///   prior to presenting `UIActivityViewController`.
-    /// - **Bounded Worker Concurrency**: Employs the same sliding window pattern as `batchSaveToPhotos()` (`maxConcurrent = 3`)
-    ///   to avoid memory bloat when buffering multiple full-resolution images or videos simultaneously.
-    private func batchShare() {
-        let items = Array(viewModel.selectedItems)
-        guard !items.isEmpty else { return }
-        viewModel.isBatchProcessing = true
-        viewModel.batchProgressMessage = String(localized: .Strings.galleryBatchPreparingShare)
-        viewModel.batchTask?.cancel()
-        
-        viewModel.batchTask = Task { @MainActor in
-            var shareables: [Any] = []
-            let total = items.count
-            var completedCount = 0
-            
-            // Use bounded concurrent workers to fetch and prepare shareables while preserving selection order
-            await withTaskGroup(of: (Int, (any Sendable)?).self) { group in
-                let itemQueue = Array(items.enumerated())
-                var queueIndex = 0
-                let maxConcurrent = 3
-                
-                for _ in 0..<min(maxConcurrent, total) where queueIndex < itemQueue.count {
-                    let (idx, item) = itemQueue[queueIndex]
-                    queueIndex += 1
-                    group.addTask { [manager = self.viewModel.manager] in
-                        let result = await Self.prepareSingleItemForShare(item, manager: manager)
-                        return (idx, result)
-                    }
-                }
-                
-                var indexedResults: [(Int, any Sendable)] = []
-                while let (idx, result) = await group.next() {
-                    guard !Task.isCancelled else { break }
-                    completedCount += 1
-                    viewModel.batchProgressMessage = "\(String(localized: .Strings.galleryBatchPreparingShare)) (\(completedCount)/\(total))"
-                    
-                    if let result {
-                        indexedResults.append((idx, result))
-                    }
-                    
-                    if queueIndex < itemQueue.count {
-                        let (nextIdx, nextItem) = itemQueue[queueIndex]
-                        queueIndex += 1
-                        group.addTask { [manager = self.viewModel.manager] in
-                            let nextResult = await Self.prepareSingleItemForShare(nextItem, manager: manager)
-                            return (nextIdx, nextResult)
-                        }
-                    }
-                }
-                
-                indexedResults.sort { $0.0 < $1.0 }
-                shareables = indexedResults.map { $0.1 as Any }
-            }
-            
-            guard !Task.isCancelled else {
-                viewModel.isBatchProcessing = false
-                viewModel.batchProgressMessage = nil
-                return
-            }
-            
-            viewModel.isBatchProcessing = false
-            viewModel.batchProgressMessage = nil
-            
-            if !shareables.isEmpty {
-                self.viewModel.shareSheetItems = shareables
-            }
-        }
-    }
-    
-    /// Prepares an individual media item for sharing by downloading its image or fetching its local video URL.
-    ///
-    /// Declared `static` to eliminate `self` captures within parallel task group operations.
-    ///
-    /// - Parameters:
-    ///   - item: The `MediaItem` to prepare for sharing.
-    ///   - manager: The `StorageLocationManager` instance used to resolve the media resource.
-    /// - Returns: A `UIImage` for photos, a `URL` for videos, or `nil` if preparation failed.
-    private static func prepareSingleItemForShare(_ item: MediaItem, manager: StorageLocationManager) async -> (any Sendable)? {
-        if item.isVideo {
-            return try? await manager.fetchVideoURL(for: item)
-        } else {
-            return await manager.downloadImage(for: item)
-        }
-    }
-    
-    // MARK: - File Management Operations
-    
-    /// Indicates whether the currently pending delete batch targets items on an SMB network share.
-    private var isDeletingFromSMB: Bool {
-        viewModel.itemsPendingDelete?.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty }) ?? false
-    }
-    
-    /// Title presented inside the trash deletion confirmation dialog.
-    private var deleteConfirmationTitle: String {
-        guard let items = viewModel.itemsPendingDelete, !items.isEmpty else { return "" }
-        if isDeletingFromSMB {
-            if items.count == 1, let first = items.first {
-                return String(localized: "Delete '\(first.name)' permanently?", comment: "Permanent delete single item confirmation title")
-            }
-            return String(localized: "Permanently delete \(items.count) items?", comment: "Permanent delete multiple items confirmation title")
-        } else {
-            if items.count == 1, let first = items.first {
-                return String(localized: "Move '\(first.name)' to Trash?", comment: "Delete single item confirmation title")
-            }
-            return String(localized: "Move \(items.count) items to Trash?", comment: "Delete multiple items confirmation title")
-        }
-    }
-    
-    /// Button title for confirming deletion.
-    private var deleteConfirmationButtonTitle: String {
-        if isDeletingFromSMB {
-            return String(localized: "Delete Permanently", comment: "Confirm permanent deletion button")
-        } else {
-            return String(localized: "Move to Trash", comment: "Confirm move to trash button")
-        }
-    }
-    
-    /// Message explaining the permanent or trash nature of the pending delete.
-    private var deleteConfirmationMessage: String {
-        if isDeletingFromSMB {
-            return String(localized: "This file will be permanently deleted from the network share.", comment: "Warning when deleting from SMB share")
-        } else {
-            return String(localized: "Items moved to the Trash can be restored from the Files app Trash.", comment: "Explanation of trash behavior")
-        }
-    }
-    
-    /// Executes deletion across selected or targeted items.
-    private func executeDelete(items: [MediaItem]) async {
-        do {
-            let wasSMB = items.contains(where: { $0.localURL == nil && !$0.shareName.isEmpty })
-            try await viewModel.manager.deleteItems(items)
-            if viewModel.isSelectionMode {
-                withAnimation {
-                    viewModel.isSelectionMode = false
-                    viewModel.selectedItems.removeAll()
-                }
-            }
-            if wasSMB {
-                showToastMessage(items.count == 1 ? String(localized: "Item permanently deleted", comment: "Toast when single item permanently deleted") : String(localized: "\(items.count) items permanently deleted", comment: "Toast when multiple items permanently deleted"))
-            } else {
-                showToastMessage(items.count == 1 ? String(localized: "Item moved to Trash", comment: "Toast when single item moved to trash") : String(localized: "\(items.count) items moved to Trash", comment: "Toast when multiple items moved to trash"))
-            }
-        } catch {
-            viewModel.fileOpErrorMessage = error.localizedDescription
-        }
-    }
-    
-    /// Dispatches moving items to the selected destination folder.
-    private func executeMove(items: [MediaItem], to destination: MediaItem) {
-        Task {
-            do {
-                try await viewModel.manager.moveItems(items, to: destination)
-                if viewModel.isSelectionMode {
-                    withAnimation {
-                        viewModel.isSelectionMode = false
-                        viewModel.selectedItems.removeAll()
-                    }
-                }
-                let destName = destination.name.isEmpty ? destination.rootName : destination.name
-                showToastMessage(items.count == 1 ? String(localized: "Item moved to '\(destName)'", comment: "Toast when single item moved") : String(localized: "\(items.count) items moved to '\(destName)'", comment: "Toast when multiple items moved"))
-            } catch {
-                viewModel.fileOpErrorMessage = error.localizedDescription
-            }
-        }
-    }
-    
-    /// Creates a new directory inside the current folder.
-    private func executeCreateFolder() {
-        let trimmed = viewModel.newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        Task {
-            do {
-                try await viewModel.manager.createFolder(named: trimmed)
-                showToastMessage(String(localized: "Folder '\(trimmed)' created", comment: "Toast when folder created"))
-            } catch {
-                viewModel.fileOpErrorMessage = error.localizedDescription
-            }
-        }
-    }
-    
-    /// Renames a file or folder and updates selection and toast notification.
-    private func executeRename(item: MediaItem, to newName: String) {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        Task {
-            do {
-                let renamed = try await viewModel.manager.renameItem(item, to: trimmed)
-                if viewModel.isSelectionMode {
-                    withAnimation {
-                        viewModel.selectedItems.remove(item)
-                        viewModel.selectedItems.insert(renamed)
-                    }
-                }
-                showToastMessage(
-                    item.isDirectory
-                        ? String(localized: .Strings.galleryToastFolderRenamed(renamed.name))
-                        : String(localized: .Strings.galleryToastFileRenamed(renamed.name))
-                )
-            } catch {
-                viewModel.fileOpErrorMessage = error.localizedDescription
-            }
-        }
-    }
-    
-    /// Displays a transient animated notification pill at the top of the gallery.
-    private func showToastMessage(_ message: String) {
-        withAnimation {
-            viewModel.batchStatusToast = message
-        }
-        Task {
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            withAnimation {
-                viewModel.batchStatusToast = nil
-            }
-        }
-    }
 
     @ToolbarContentBuilder
     private func galleryToolbarContent(displayPictures: [MediaItem], hasImages: Bool) -> some ToolbarContent {
             if viewModel.isSelectionMode {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(viewModel.selectedItems.count == displayPictures.count && !displayPictures.isEmpty ? .Strings.galleryButtonDeselectAll : .Strings.galleryButtonSelectAll) {
-                        toggleAllSelection(for: displayPictures)
+                        viewModel.toggleAllSelection(for: displayPictures)
                     }
                 }
                 
@@ -1171,7 +628,7 @@ struct MediaGridView: View {
                                     .foregroundColor(.blue)
                             }
                             .tint(.blue)
-                            .accessibilityLabel(String(localized: "New Folder", comment: "Accessibility label for create folder button"))
+                            .accessibilityLabel(Text(.Strings.commonNewFolder))
                         }
                         
                         if !displayPictures.isEmpty {
@@ -1202,14 +659,7 @@ struct MediaGridView: View {
                             }
                             
                             Section(.Strings.slideshowSectionSlideDuration) {
-                                Picker(.Strings.slideshowPickerDuration, selection: $slideshowInterval) {
-                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                }
+                                SlideshowDurationPickerView(selection: $slideshowInterval)
                             }
                         } label: {
                             Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
@@ -1254,14 +704,7 @@ struct MediaGridView: View {
                                     }
                                 }
                                 
-                                Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
-                                    Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                                    Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                                    Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                                    Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                                    Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                                    Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                                }
+                                SlideshowDurationPickerView(selection: $slideshowInterval)
                             }
                             
                             Section(String(localized: .Strings.gallerySectionDiskCache(viewModel.manager.mediaCacheSize))) {
@@ -1284,16 +727,6 @@ struct MediaGridView: View {
                                 }
                             }
                             #endif
-                            
-                            if horizontalSizeClass == .compact {
-                                Section {
-                                    Button {
-                                        viewModel.showingSettings = true
-                                    } label: {
-                                        Label(.Strings.settingsTitle, systemImage: "gearshape")
-                                    }
-                                }
-                            }
                         } label: {
                             Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
                         }
@@ -1304,15 +737,6 @@ struct MediaGridView: View {
                             }
                         } label: {
                             Image(systemName: "arrow.clockwise")
-                        }
-                        
-                        if horizontalSizeClass == .compact {
-                            Button {
-                                viewModel.showingSettings = true
-                            } label: {
-                                Image(systemName: "gearshape")
-                            }
-                            .accessibilityLabel(.Strings.settingsTitle)
                         }
                     }.padding(.horizontal)
                 }

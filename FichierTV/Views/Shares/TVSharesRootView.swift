@@ -35,10 +35,10 @@ public struct TVSharesRootView: View {
                         }
                         .buttonStyle(.card)
                         .contextMenu {
-                            Button("Edit Server") {
+                            Button(.Strings.tvServerActionEdit) {
                                 editingServer = card.connection
                             }
-                            Button("Remove Server", role: .destructive) {
+                            Button(.Strings.tvServerActionRemove, role: .destructive) {
                                 Task {
                                     await viewModel.removeServer(card.connection)
                                 }
@@ -75,26 +75,28 @@ public struct TVSharesRootView: View {
             titleVisibility: .visible
         ) {
             if let server = viewModel.selectedServerForAction?.connection {
-                Button("Edit Server") {
+                Button(.Strings.tvServerActionEdit) {
                     editingServer = server
                 }
-                Button("Remove Server", role: .destructive) {
+                Button(.Strings.tvServerActionRemove, role: .destructive) {
                     Task {
                         await viewModel.removeServer(server)
                     }
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(.Strings.commonCancel, role: .cancel) {}
         }
-        .task {
-            await viewModel.loadServers()
+        .onAppear {
+            Task {
+                await viewModel.loadServers()
+            }
         }
     }
 
     @ViewBuilder
     private var headerBar: some View {
         HStack(spacing: 16) {
-            Text("SMB Servers")
+            Text(.Strings.tvSharesTitle)
                 .font(.headline)
                 .foregroundStyle(.secondary)
 

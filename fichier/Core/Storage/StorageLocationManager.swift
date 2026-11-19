@@ -31,14 +31,69 @@ import FichierKit
 @Observable
 @MainActor
 public final class StorageLocationManager {
+    /// Current discrete connection lifecycle state.
+    public var connectionState: StorageLocationConnectionState = .idle
+    
     /// Indicates whether a storage location is currently connected and ready for browsing.
-    public var isConnected = false
+    public var isConnected: Bool {
+        get {
+            if case .connected = connectionState {
+                return true
+            }
+            return false
+        }
+        set {
+            if newValue {
+                connectionState = .connected
+            } else if connectionState == .connected {
+                connectionState = .idle
+            }
+        }
+    }
     
     /// Indicates whether a network request or folder scanning operation is currently in flight.
-    public var isLoading = false
+    public var isLoading: Bool {
+        get {
+            if case .connecting = connectionState {
+                return true
+            }
+            return isPerformingOperation
+        }
+        set {
+            isPerformingOperation = newValue
+            if newValue && connectionState == .idle {
+                connectionState = .connecting
+            } else if !newValue && connectionState == .connecting {
+                connectionState = .idle
+            }
+        }
+    }
     
     /// User-presentable error message from the most recent failed operation, or `nil` if healthy.
-    public var errorMessage: String?
+    public var errorMessage: String? {
+        get {
+            if case .failed(let message) = connectionState {
+                return message
+            }
+            return operationErrorMessage
+        }
+        set {
+            operationErrorMessage = newValue
+            if let newValue {
+                if case .connected = connectionState {
+                    // Retain active connection when recording an incidental operation failure
+                } else {
+                    connectionState = .failed(newValue)
+                }
+            } else if case .failed = connectionState {
+                connectionState = .idle
+            }
+        }
+    }
+
+    private var isPerformingOperation = false
+    private var operationErrorMessage: String?
+    private var locationSelectionGeneration: UInt64 = 0
     
     /// Persisted list of validated SMB server credentials and connection metadata.
     public var savedConnections: [SavedSMBConnection] = []
@@ -214,6 +269,13 @@ public final class StorageLocationManager {
         }
     }
     
+    // MARK: - Cache Management
+    
+    /// Flushes in-memory folder and thumbnail caches from the underlying worker actor.
+    public func clearMemoryCache() async {
+        await worker.clearMemoryCache()
+    }
+    
     // MARK: - Saved Connections Persistence
     
     /// Loads and decodes persisted SMB connections from `UserDefaults`.
@@ -252,9 +314,7 @@ public final class StorageLocationManager {
     public func removeSavedConnection(_ connection: SavedSMBConnection) async {
         savedConnections = await persistenceStore.removeSavedConnection(connection, from: savedConnections)
         if currentLocation?.smbConnection?.id == connection.id {
-            Task {
-                await disconnect()
-            }
+            await disconnect()
         }
     }
     
@@ -287,12 +347,10 @@ public final class StorageLocationManager {
     /// Removes a saved local folder location from `UserDefaults` and disconnects if it is active.
     ///
     /// - Parameter location: The folder location to remove.
-    public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
+    public func removeSavedFolderLocation(_ location: SavedFolderLocation) async {
         savedFolderLocations = persistenceStore.removeSavedFolderLocation(location, from: savedFolderLocations)
         if currentLocation?.folderLocation?.id == location.id {
-            Task {
-                await disconnect()
-            }
+            await disconnect()
         }
     }
     
@@ -320,7 +378,7 @@ public final class StorageLocationManager {
             }
         case .localFolder, .iCloudFolder:
             if let folder = location.folderLocation {
-                removeSavedFolderLocation(folder)
+                await removeSavedFolderLocation(folder)
             }
         case .photos:
             break
@@ -336,55 +394,71 @@ public final class StorageLocationManager {
     ///
     /// - Parameter location: The target location to activate.
     public func selectLocation(_ location: StorageLocation) async {
+        locationSelectionGeneration &+= 1
+        let currentGen = locationSelectionGeneration
+
+        connectionState = .connecting
+        operationErrorMessage = nil
+
         switch location.kind {
         case .smb:
-            guard let conn = location.smbConnection else { return }
-            await disconnect()
+            guard let conn = location.smbConnection else {
+                connectionState = .idle
+                return
+            }
+            await disconnect(resetConnectionState: false)
+            guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             let pass = await password(for: conn)
+            guard currentGen == locationSelectionGeneration else { return }
             await connect(host: conn.host, user: conn.username, pass: pass, hostname: conn.hostname)
             
         case .localFolder, .iCloudFolder:
-            guard let folderLoc = location.folderLocation else { return }
-            await disconnect()
-            isLoading = true
-            errorMessage = nil
+            guard let folderLoc = location.folderLocation else {
+                connectionState = .idle
+                return
+            }
+            await disconnect(resetConnectionState: false)
+            guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             currentConnectionID = location.id
             
             do {
                 let (rootItem, updatedBookmark) = try await localWorker.activateLocation(folderLoc)
+                guard currentGen == locationSelectionGeneration else { return }
                 if let newBookmark = updatedBookmark {
                     updateBookmarkData(newBookmark, for: folderLoc)
                 }
                 self.folderTree = [rootItem]
-                self.isConnected = true
-                self.isLoading = false
+                self.connectionState = .connected
                 
                 // Restore previously selected folder or default to root
                 let locID = location.id
                 let targetFolder = lastSelectedFolderPerLocation[locID] ?? rootItem
                 await selectAndLoadFolder(targetFolder)
+            } catch is CancellationError {
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .idle
             } catch {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .failed(error.localizedDescription)
             }
             
         case .photos:
-            await disconnect()
-            isLoading = true
-            errorMessage = nil
+            await disconnect(resetConnectionState: false)
+            guard currentGen == locationSelectionGeneration else { return }
             currentLocation = location
             currentConnectionID = location.id
             
             do {
                 let rootItem = try await photosWorker.activateLocation()
+                guard currentGen == locationSelectionGeneration else { return }
                 let (albums, _) = try await photosWorker.listContents(at: rootItem)
+                guard currentGen == locationSelectionGeneration else { return }
                 var rootWithChildren = rootItem
                 rootWithChildren.children = albums.isEmpty ? nil : albums
                 self.folderTree = [rootWithChildren]
-                self.isConnected = true
-                self.isLoading = false
+                self.connectionState = .connected
                 
                 // Restore previously selected album/folder if available
                 let locID = location.id
@@ -396,9 +470,12 @@ public final class StorageLocationManager {
                 } else {
                     await selectAndLoadFolder(rootWithChildren)
                 }
+            } catch is CancellationError {
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .idle
             } catch {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
+                guard currentGen == locationSelectionGeneration else { return }
+                self.connectionState = .failed(error.localizedDescription)
             }
         }
     }
@@ -416,12 +493,15 @@ public final class StorageLocationManager {
     ///   - pass: Plaintext password.
     ///   - hostname: Optional NetBIOS/Bonjour name for display.
     public func connect(host: String, user: String, pass: String, hostname: String? = nil) async {
+        locationSelectionGeneration &+= 1
+        let currentGen = locationSelectionGeneration
+
         folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
 
-        isLoading = true
-        errorMessage = nil
+        connectionState = .connecting
+        operationErrorMessage = nil
         
         let cleanHost = host
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -429,36 +509,35 @@ public final class StorageLocationManager {
             .components(separatedBy: "%").first ?? host
         
         if cleanHost.contains(":") && !cleanHost.hasPrefix("[") {
-            errorMessage = String(localized: .Strings.networkingErrorEnterValidAddress)
-            isLoading = false
+            connectionState = .failed(String(localized: .Strings.networkingErrorEnterValidAddress))
             return
         }
         
         guard URL(string: "smb://\(cleanHost)") != nil else {
-            errorMessage = String(localized: .Strings.networkingErrorInvalidHostUrl)
-            isLoading = false
+            connectionState = .failed(String(localized: .Strings.networkingErrorInvalidHostUrl))
             return
         }
         
-        let connID = user.isEmpty ? cleanHost : "\(user)@\(cleanHost)"
-        self.currentConnectionID = connID
         let server = SavedSMBConnection(host: cleanHost, username: user, lastConnected: Date(), hostname: hostname)
+        let connID = server.id
+        self.currentConnectionID = connID
         
         do {
             let discoveredShares = try await worker.connectAndListShares(server: server, password: pass, connectionID: connID)
+            guard currentGen == locationSelectionGeneration else { return }
             guard !discoveredShares.isEmpty else {
                 await worker.disconnect()
-                errorMessage = String(localized: .Strings.networkingErrorNoSharedFolders)
-                isConnected = false
+                guard currentGen == locationSelectionGeneration else { return }
+                connectionState = .failed(String(localized: .Strings.networkingErrorNoSharedFolders))
                 currentConnectionID = ""
                 folderTree = []
-                isLoading = false
                 return
             }
             
             // Connection verified! Save server credentials for future use
             await saveValidatedConnection(host: cleanHost, user: user, pass: pass, hostname: hostname)
-            if let saved = savedConnections.first(where: { $0.id == "\(user)@\(cleanHost)" }) {
+            guard currentGen == locationSelectionGeneration else { return }
+            if let saved = savedConnections.first(where: { $0.id == server.id }) {
                 self.currentLocation = StorageLocation(smb: saved)
             }
             
@@ -468,22 +547,20 @@ public final class StorageLocationManager {
             self.currentFolders = []
             self.pictures = []
             self.folderTree = discoveredShares
-            self.isConnected = true
+            self.connectionState = .connected
         } catch is CancellationError {
             await worker.disconnect()
-            self.errorMessage = nil
-            self.isConnected = false
+            guard currentGen == locationSelectionGeneration else { return }
+            self.connectionState = .idle
             self.currentConnectionID = ""
             self.folderTree = []
         } catch {
             await worker.disconnect()
-            self.errorMessage = String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription))
-            self.isConnected = false
+            guard currentGen == locationSelectionGeneration else { return }
+            self.connectionState = .failed(String(localized: .Strings.networkingErrorConnectionFailed(error.localizedDescription)))
             self.currentConnectionID = ""
             self.folderTree = []
         }
-        
-        isLoading = false
     }
     
     // MARK: - Refresh Shares & Current Folder
@@ -855,7 +932,10 @@ public final class StorageLocationManager {
     // MARK: - Disconnect
     
     /// Disconnects from the active storage location and resets all navigation and selection state.
-    public func disconnect() async {
+    ///
+    /// - Parameter resetConnectionState: Whether to transition `connectionState` to `.idle`. Pass `false`
+    ///   when transitioning directly into another connection attempt to avoid transient state flicker.
+    public func disconnect(resetConnectionState: Bool = true) async {
         folderGeneration &+= 1
         loadFolderTask?.cancel()
         loadFolderTask = nil
@@ -863,9 +943,11 @@ public final class StorageLocationManager {
         currentConnectionID = ""
         currentLocation = nil
         
-        isConnected = false
-        isLoading = false
-        errorMessage = nil
+        if resetConnectionState {
+            connectionState = .idle
+        }
+        isPerformingOperation = false
+        operationErrorMessage = nil
         selectedShare = nil
         folderTree = []
         currentFolders = []

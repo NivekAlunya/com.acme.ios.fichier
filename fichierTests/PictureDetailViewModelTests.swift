@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import UIKit
 import FichierKit
 @testable import fichier
 
@@ -95,5 +96,22 @@ struct PictureDetailViewModelTests {
 
         #expect(viewModel.isPlayingSlideshow)
         #expect(viewModel.showControls)
+    }
+
+    @Test("SlideImageCache stores, retrieves, and removes images cleanly")
+    func slideImageCacheOperations() {
+        let cache = SlideImageCache()
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10))
+        let image = renderer.image { _ in }
+
+        cache["item1"] = image
+        #expect(cache["item1"] != nil)
+
+        cache["item1"] = nil
+        #expect(cache["item1"] == nil)
+
+        cache["item2"] = image
+        cache.removeAll()
+        #expect(cache["item2"] == nil)
     }
 }

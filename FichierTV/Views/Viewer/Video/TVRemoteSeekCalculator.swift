@@ -5,6 +5,7 @@
 //
 
 import Foundation
+import FichierKit
 
 /// Pure seek calculation and formatting rules for tvOS remote tap, double-tap, and hold seeking.
 public enum TVRemoteSeekCalculator {
@@ -151,17 +152,6 @@ public enum TVRemoteSeekCalculator {
 
     /// Formats a playback timestamp as `MM:SS` or `HH:MM:SS`.
     public static func formattedTimestamp(_ totalSeconds: Double) -> String {
-        guard totalSeconds.isFinite && !totalSeconds.isNaN && totalSeconds > 0 else {
-            return "00:00"
-        }
-        let seconds = Int(totalSeconds)
-        let hrs = seconds / 3600
-        let mins = (seconds % 3600) / 60
-        let secs = seconds % 60
-
-        if hrs > 0 {
-            return String(format: "%02d:%02d:%02d", hrs, mins, secs)
-        }
-        return String(format: "%02d:%02d", mins, secs)
+        MediaFormatHelper.formatTimestamp(totalSeconds, zeroPaddedHours: true)
     }
 }

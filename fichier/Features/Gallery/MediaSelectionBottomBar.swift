@@ -77,7 +77,7 @@ struct MediaSelectionBottomBar: View {
                                 .padding(.leading, 2)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(String(localized: "Cancel batch operation", comment: "Accessibility label to cancel batch action"))
+                        .accessibilityLabel(Text(.Strings.galleryBatchCancel))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -99,8 +99,8 @@ struct MediaSelectionBottomBar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(selectedCount == 0 || isProcessing)
-                .accessibilityLabel(isAllFavorites ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite selected items") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite selected items"))
-                .accessibilityHint(String(localized: "Applies to \(selectedCount) selected items", comment: "Accessibility hint indicating selected count"))
+                .accessibilityLabel(isAllFavorites ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
+                .accessibilityHint(Text(.Strings.galleryBatchSelectionAppliesCount(selectedCount)))
                 
                 // 2. Download Options (Save to Photos & Download to Files)
                 Menu {
@@ -161,8 +161,8 @@ struct MediaSelectionBottomBar: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(selectedCount == 0 || isProcessing)
-                    .accessibilityLabel(String(localized: "Move Items", comment: "Accessibility label to move selected items"))
-                    .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to another folder", comment: "Accessibility hint for batch move"))
+                    .accessibilityLabel(Text(.Strings.galleryActionMoveItems))
+                    .accessibilityHint(Text(.Strings.galleryBatchMoveHint(selectedCount)))
                     
                     // 5. Delete / Trash Button
                     Button {
@@ -175,8 +175,8 @@ struct MediaSelectionBottomBar: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(selectedCount == 0 || isProcessing)
-                    .accessibilityLabel(String(localized: "Delete Items", comment: "Accessibility label to delete selected items"))
-                    .accessibilityHint(String(localized: "Moves \(selectedCount) selected items to the trash", comment: "Accessibility hint for batch delete"))
+                    .accessibilityLabel(Text(.Strings.galleryActionDeleteItems))
+                    .accessibilityHint(Text(.Strings.galleryBatchDeleteHint(selectedCount)))
                 }
                 
                 // 5. Share Button
@@ -190,8 +190,8 @@ struct MediaSelectionBottomBar: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(selectedCount == 0 || isProcessing)
-                .accessibilityLabel(String(localized: "Share Items", comment: "Accessibility label to share selected items"))
-                .accessibilityHint(String(localized: "Prepares \(selectedCount) selected items for sharing", comment: "Accessibility hint for batch share"))
+                .accessibilityLabel(Text(.Strings.galleryActionShareItems))
+                .accessibilityHint(Text(.Strings.galleryBatchShareHint(selectedCount)))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

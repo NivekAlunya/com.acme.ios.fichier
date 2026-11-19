@@ -18,6 +18,7 @@ import FichierKit
 /// 6. **Diagnostics**: Share the most recent crash report captured by `CrashReporting` (a placeholder is shown when none exists).
 /// 7. **About**: Application version, build number, and SMB protocol support details.
 struct AppSettingsView: View {
+    var manager: StorageLocationManager?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     
@@ -110,14 +111,7 @@ struct AppSettingsView: View {
                         }
                     }
                     
-                    Picker(.Strings.slideshowSectionSlideDuration, selection: $slideshowInterval) {
-                        Text(.Strings.slideshowDurationTwoSeconds).tag(2.0)
-                        Text(.Strings.slideshowDurationThreeSeconds).tag(3.0)
-                        Text(.Strings.slideshowDurationFiveSeconds).tag(5.0)
-                        Text(.Strings.slideshowDurationTenSeconds).tag(10.0)
-                        Text(.Strings.slideshowDurationFifteenSeconds).tag(15.0)
-                        Text(.Strings.slideshowDurationThirtySeconds).tag(30.0)
-                    }
+                    SlideshowDurationPickerView(selection: $slideshowInterval)
                 }
                 
                 // 4. Gallery Display Defaults
@@ -142,8 +136,8 @@ struct AppSettingsView: View {
                 
                 // 5. PDF Reader Defaults
                 #if !os(tvOS)
-                Section(String(localized: "PDF Reader", comment: "PDF Reader settings section")) {
-                    Picker(String(localized: "Default Reading Mode", comment: "Default PDF reading mode"), selection: $readingMode) {
+                Section(.Strings.settingsSectionPdfReader) {
+                    Picker(.Strings.settingsPdfDefaultReadingMode, selection: $readingMode) {
                         ForEach(PDFReadingMode.allCases) { mode in
                             Label(mode.localizedTitle, systemImage: mode.iconName).tag(mode)
                         }
@@ -211,6 +205,7 @@ struct AppSettingsView: View {
         isClearingCache = true
         Task {
             await MediaCacheManager.shared.clearAllCacheAsync()
+            await manager?.clearMemoryCache()
             AppHapticFeedback.medium()
             let newSize = await MediaCacheManager.shared.formattedCacheSize()
             cacheSizeString = newSize

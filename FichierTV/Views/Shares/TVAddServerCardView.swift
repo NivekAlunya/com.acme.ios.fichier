@@ -17,13 +17,13 @@ public struct TVAddServerCardView: View {
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
-            Text("Add Server")
+            Text(.Strings.tvServerAddTitle)
                 .font(.headline)
                 .foregroundStyle(.secondary)
         }
         .frame(width: 320, height: 220)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Add Server")
-        .accessibilityHint("Discover via Bonjour or configure a new SMB server")
+        .accessibilityLabel(Text(.Strings.tvServerAddTitle))
+        .accessibilityHint(Text(.Strings.tvServerAddAccessibilityHint))
     }
 }

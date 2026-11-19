@@ -17,6 +17,7 @@ public struct TVVideoScrubberView: View {
     public let seekThumbnailState: TVSeekThumbnailState?
     public let previewBubbleLabel: String?
     public let showsPreviewBubble: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
         currentTime: Double,
@@ -96,7 +97,7 @@ public struct TVVideoScrubberView: View {
                 }
             }
             .frame(height: isFocused ? 22 : 12)
-            .animation(.snappy(duration: 0.15), value: isFocused)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.15), value: isFocused)
 
             HStack {
                 Text(formatTimestamp(displayTime))
@@ -118,8 +119,8 @@ public struct TVVideoScrubberView: View {
                 .fill(isFocused ? Color.white.opacity(0.15) : Color.clear)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Playback progress")
-        .accessibilityValue("\(formatTimestamp(displayTime)) of \(formatTimestamp(duration))")
+        .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackProgress))
+        .accessibilityValue(String(localized: .Strings.tvVideoProgressOfFormat(formatTimestamp(displayTime), formatTimestamp(duration))))
     }
 
     @ViewBuilder

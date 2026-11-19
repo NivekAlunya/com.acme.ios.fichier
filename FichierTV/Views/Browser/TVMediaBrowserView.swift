@@ -121,14 +121,14 @@ public struct TVMediaBrowserView: View {
                 }
             }
         }
-        .confirmationDialog("Sort By", isPresented: $showingSortDialog, titleVisibility: .visible) {
+        .confirmationDialog(.Strings.galleryMenuSortBy, isPresented: $showingSortDialog, titleVisibility: .visible) {
             ForEach(orderedSortKeys, id: \.self) { key in
                 Button {
                     viewModel.applySort(key: key)
                 } label: {
                     Text(
                         viewModel.selectedSortKey == key
-                            ? "✓ \(key.displayTitle)"
+                            ? String(localized: .Strings.tvSortSelectedItemFormat(key.displayTitle))
                             : key.displayTitle
                     )
                 }
@@ -139,12 +139,12 @@ public struct TVMediaBrowserView: View {
             } label: {
                 Text(
                     viewModel.selectedSortOrder == .ascending
-                        ? "Order: Ascending ↑ (Switch to Descending ↓)"
-                        : "Order: Descending ↓ (Switch to Ascending ↑)"
+                        ? .Strings.tvSortOrderAscendingToggle
+                        : .Strings.tvSortOrderDescendingToggle
                 )
             }
 
-            Button("Cancel", role: .cancel) {}
+            Button(.Strings.commonCancel, role: .cancel) {}
         }
     }
 
@@ -170,14 +170,14 @@ public struct TVMediaBrowserView: View {
                 columns: Array(repeating: GridItem(.flexible(), spacing: 40), count: 4),
                 spacing: 40
             ) {
-                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaGridItemView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(at: index)
+                        viewModel.onItemAppear(item: item)
                     }
                 }
             }
@@ -191,14 +191,14 @@ public struct TVMediaBrowserView: View {
     private func listLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaListRowView(item: item)
                     }
                     .buttonStyle(.card)
                     .focused($focusedItemID, equals: item.id)
                     .onAppear {
-                        viewModel.onItemAppear(at: index)
+                        viewModel.onItemAppear(item: item)
                     }
                 }
             }
@@ -209,7 +209,7 @@ public struct TVMediaBrowserView: View {
 
     @ViewBuilder
     private var loadingView: some View {
-        ProgressView("Loading items...")
+        ProgressView(.Strings.tvMediaLoadingItems)
             .font(.headline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -230,7 +230,7 @@ public struct TVMediaBrowserView: View {
                 ProgressView()
                     .controlSize(.small)
             } else {
-                Text("\(viewModel.items.count) \(viewModel.items.count == 1 ? "item" : "items")")
+                Text(.Strings.tvMediaItemsCount(viewModel.items.count))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -246,10 +246,10 @@ public struct TVMediaBrowserView: View {
         Button {
             viewModel.setLayout(.grid)
         } label: {
-            Label("Grid", systemImage: "square.grid.2x2")
+            Label(.Strings.tvMediaViewGrid, systemImage: "square.grid.2x2")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .grid))
-        .accessibilityLabel("Grid layout")
+        .accessibilityLabel(Text(.Strings.tvMediaViewGridAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .grid ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_grid_button")
     }
@@ -259,10 +259,10 @@ public struct TVMediaBrowserView: View {
         Button {
             viewModel.setLayout(.list)
         } label: {
-            Label("List", systemImage: "list.bullet")
+            Label(.Strings.tvMediaViewList, systemImage: "list.bullet")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .list))
-        .accessibilityLabel("List layout")
+        .accessibilityLabel(Text(.Strings.tvMediaViewListAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .list ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_list_button")
     }
@@ -273,14 +273,14 @@ public struct TVMediaBrowserView: View {
             showingSortDialog = true
         } label: {
             Label(
-                "Sort: \(viewModel.selectedSortKey.displayTitle)",
+                String(localized: .Strings.tvSortButtonLabel(viewModel.selectedSortKey.displayTitle)),
                 systemImage: viewModel.selectedSortOrder == .ascending ? "arrow.up" : "arrow.down"
             )
         }
         .buttonStyle(TVControlButtonStyle(isSelected: false))
-        .accessibilityLabel("Sort options")
+        .accessibilityLabel(Text(.Strings.tvMediaSortOptionsAccessibility))
         .accessibilityValue(
-            "\(viewModel.selectedSortKey.displayTitle), \(viewModel.selectedSortOrder == .ascending ? "ascending" : "descending")"
+            "\(viewModel.selectedSortKey.displayTitle), \(String(localized: viewModel.selectedSortOrder == .ascending ? .Strings.tvSortOrderAscending : .Strings.tvSortOrderDescending))"
         )
         .accessibilityIdentifier("browser_sort_button")
     }
@@ -302,7 +302,11 @@ public struct TVMediaBrowserView: View {
                 pagination: viewModel.paginationContext
             )
         case .video:
-            return .videoPlayer(item: item, context: viewModel.items)
+            return .videoPlayer(
+                item: item,
+                context: viewModel.items,
+                pagination: viewModel.paginationContext
+            )
         }
     }
 }

@@ -164,46 +164,31 @@ public struct MediaBrowserSplitView: View {
             }
         }
         .fullScreenCover(item: $activePictureContext) { context in
-            let activeImages = context.contextItems.filter(\.isImage)
-            var gallery = activeImages.isEmpty ? [context.item] : activeImages
-            if !gallery.contains(where: { $0.id == context.item.id }) {
-                gallery.append(context.item)
-            }
-            return PictureDetailView(
+            PictureDetailView(
                 manager: storageManager,
-                pictures: gallery,
+                pictures: context.resolvedItems(matching: \.isImage),
                 initialItem: context.item,
                 autoStartSlideshow: shouldAutoStartSlideshow
             )
         }
         .fullScreenCover(item: $activeVideoContext) { context in
-            let activeVideos = context.contextItems.filter(\.isVideo)
-            var playlist = activeVideos.isEmpty ? [context.item] : activeVideos
-            if !playlist.contains(where: { $0.id == context.item.id }) {
-                playlist.append(context.item)
-            }
-            return VideoDetailView(
+            VideoDetailView(
                 manager: storageManager,
-                videos: playlist,
+                videos: context.resolvedItems(matching: \.isVideo),
                 initialItem: context.item
             )
         }
         #if !os(tvOS)
         .fullScreenCover(item: $activePDFContext) { context in
-            let activeDocuments = context.contextItems.filter(\.isPDF)
-            var documents = activeDocuments.isEmpty ? [context.item] : activeDocuments
-            if !documents.contains(where: { $0.id == context.item.id }) {
-                documents.append(context.item)
-            }
-            return PDFDetailView(
+            PDFDetailView(
                 manager: storageManager,
-                documents: documents,
+                documents: context.resolvedItems(matching: \.isPDF),
                 initialItem: context.item
             )
         }
         #endif
         .sheet(isPresented: $showingSettings) {
-            AppSettingsView()
+            AppSettingsView(manager: storageManager)
         }
         .sheet(isPresented: $showingAddRemote) {
             SMBConnectWithDiscoveryView(smbManager: storageManager)

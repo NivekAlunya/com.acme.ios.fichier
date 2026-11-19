@@ -100,7 +100,7 @@ public struct PictureViewerTopBarView: View {
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Close", comment: "Accessibility label to close photo viewer"))
+        .accessibilityLabel(Text(.Strings.commonClose))
     }
     
     /// Centered container presenting the image name on the first line and

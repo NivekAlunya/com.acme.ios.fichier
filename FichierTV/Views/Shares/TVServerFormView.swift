@@ -33,17 +33,17 @@ public struct TVServerFormView: View {
 
     public var body: some View {
         Form {
-            Section("Discovered Servers (Bonjour)") {
+            Section(.Strings.tvServerSectionBonjour) {
                 if viewModel.discovery.isScanning && viewModel.discovery.discoveredHosts.isEmpty {
                     HStack(spacing: 16) {
                         ProgressView()
-                        Text("Searching local network...")
+                        Text(.Strings.tvServerSearchingLocalNetwork)
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Searching local network for SMB servers")
+                    .accessibilityLabel(Text(.Strings.tvServerSearchingAccessibility))
                 } else if viewModel.discovery.discoveredHosts.isEmpty {
-                    Text("No SMB servers found on the local network.")
+                    Text(.Strings.tvServerNoServersFound)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.discovery.discoveredHosts) { host in
@@ -66,7 +66,7 @@ public struct TVServerFormView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     } else {
-                                        Text("Resolving address...")
+                                        Text(.Strings.tvServerResolvingAddress)
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -84,7 +84,7 @@ public struct TVServerFormView: View {
                         .disabled(host.resolvedHost == nil || viewModel.isSaving)
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(
-                            "\(host.name), \(host.resolvedHost ?? "resolving address")"
+                            "\(host.name), \(host.resolvedHost ?? String(localized: .Strings.tvServerResolvingAddress))"
                         )
                         .accessibilityHint(
                             viewModel.isSelectedDiscoveredHost(host)
@@ -98,7 +98,7 @@ public struct TVServerFormView: View {
                     viewModel.rescanNetwork()
                 } label: {
                     HStack {
-                        Label("Rescan Local Network", systemImage: "arrow.clockwise")
+                        Label(.Strings.tvServerRescanButton, systemImage: "arrow.clockwise")
                         Spacer()
                         if viewModel.discovery.isScanning {
                             ProgressView()
@@ -106,24 +106,24 @@ public struct TVServerFormView: View {
                     }
                 }
                 .disabled(viewModel.isSaving)
-                .accessibilityHint("Scans the local network for Bonjour SMB servers")
+                .accessibilityHint(Text(.Strings.tvServerRescanAccessibilityHint))
             }
 
-            Section("Server Information") {
-                TextField("Server Name (e.g. Mac mini)", text: $viewModel.model.hostname)
+            Section(.Strings.tvServerSectionServerInfo) {
+                TextField(String(localized: .Strings.connectionFieldServerName), text: $viewModel.model.hostname)
                     .textContentType(.name)
 
-                TextField("Host Address or IP (e.g. 192.168.1.50)", text: $viewModel.model.host)
+                TextField(String(localized: .Strings.connectionFieldHostAddress), text: $viewModel.model.host)
                     .textContentType(.URL)
                     .autocorrectionDisabled()
             }
 
-            Section("Authentication") {
-                TextField("Username", text: $viewModel.model.username)
+            Section(.Strings.tvServerSectionAuth) {
+                TextField(String(localized: .Strings.connectionFieldMacUsername), text: $viewModel.model.username)
                     .textContentType(.username)
                     .autocorrectionDisabled()
 
-                SecureField("Password", text: $viewModel.model.password)
+                SecureField(String(localized: .Strings.connectionFieldMacPassword), text: $viewModel.model.password)
                     .textContentType(.password)
             }
 
@@ -141,7 +141,7 @@ public struct TVServerFormView: View {
                         Spacer()
                         if viewModel.isSaving {
                             ProgressView()
-                            Text("Verifying Connection & Shares...")
+                            Text(.Strings.tvServerVerifyingConnection)
                                 .fontWeight(.semibold)
                         } else {
                             Text(viewModel.modeTitle)
@@ -156,7 +156,7 @@ public struct TVServerFormView: View {
         .navigationTitle(viewModel.modeTitle)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
+                Button(.Strings.commonCancel) {
                     dismiss()
                 }
             }

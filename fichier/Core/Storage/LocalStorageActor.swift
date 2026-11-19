@@ -72,7 +72,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Unable to locate folder '\(location.name)'. If it is on an external drive, ensure the drive is connected.", comment: "Error message when resolving security-scoped bookmark fails")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorLocateFolder(location.name))]
             )
         }
         
@@ -80,7 +80,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Access permission expired for folder '\(location.name)'. Please re-select the folder in Settings or Sidebar.", comment: "Error message when security-scoped resource access is rejected")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorPermissionExpired(location.name))]
             )
         }
         
@@ -144,7 +144,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 3,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Missing local URL for folder: \(folder.name)", comment: "Error message when local URL is missing for a folder")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorMissingLocalUrl(folder.name))]
             )
         }
         
@@ -168,7 +168,7 @@ public actor LocalStorageActor {
             throw NSError(
                 domain: "LocalStorageActor",
                 code: 4,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "Cannot read contents of '\(folder.name)'. Please verify the folder or external volume is connected.", comment: "Error message when reading contents of a local folder fails")]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: .Strings.storageErrorReadContentsFailed(folder.name))]
             )
         }
         
@@ -254,28 +254,21 @@ public actor LocalStorageActor {
         let targetDimension = MediaCacheManager.standardThumbnailDimension
         if item.isVideo {
             if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(from: url, maxDimension: targetDimension) {
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
         } else if item.isPDF {
             if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: url, maxDimension: targetDimension) {
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
             return nil
         } else {
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: targetDimension
-            ]
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-                return UIImage(contentsOfFile: url.path)
+            guard let thumb = SMBImageLoader.decodeDownsampledImage(from: url, maxPixelSize: targetDimension) else {
+                return nil
             }
-            let thumb = UIImage(cgImage: cgImage)
-            MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+            await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
             return thumb
         }
     }
@@ -293,18 +286,7 @@ public actor LocalStorageActor {
     /// - Returns: A decoded `UIImage`, or `nil`.
     public func fetchImage(for item: MediaItem, maxPixelSize: CGFloat = 2048) -> UIImage? {
         guard let url = item.localURL else { return nil }
-        
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ]
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return UIImage(contentsOfFile: url.path)
-        }
-        return UIImage(cgImage: cgImage)
+        return SMBImageLoader.decodeDownsampledImage(from: url, maxPixelSize: maxPixelSize)
     }
     
     // MARK: - File Size Query
@@ -374,14 +356,7 @@ public actor LocalStorageActor {
         in parentFolder: MediaItem,
         locationID: String
     ) throws -> MediaItem {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains(":") else {
-            throw FileOperationError.invalidName(name)
-        }
+        let trimmed = try FileOperationError.validateName(name)
         
         guard let parentURL = parentFolder.localURL else {
             throw FileOperationError.missingURL(parentFolder.name)
@@ -504,15 +479,7 @@ public actor LocalStorageActor {
     /// - Returns: The updated `MediaItem`.
     /// - Throws: `FileOperationError` or filesystem errors.
     public func renameItem(_ item: MediaItem, to newName: String) throws -> MediaItem {
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
-              !trimmed.hasSuffix(".") else {
-            throw FileOperationError.invalidName(newName)
-        }
+        let trimmed = try FileOperationError.validateName(newName)
         
         guard let sourceURL = item.localURL else {
             throw FileOperationError.missingURL(item.name)
@@ -576,86 +543,6 @@ public actor LocalStorageActor {
     /// - Returns: An array of immediate subfolder `MediaItem`s.
     public func listSubfolders(at folder: MediaItem, locationID: String) throws -> [MediaItem] {
         let (subfolders, _) = try listContents(at: folder, locationID: locationID)
-        return subfolders
-    }
-
-    /// Recursively lists all subfolders within a local or iCloud folder for destination picking.
-    ///
-    /// Protects against symlink loops and deep hierarchies by enforcing a maximum recursion depth
-    /// and tracking canonical visited filesystem paths.
-    ///
-    /// - Parameters:
-    ///   - folder: The parent folder `MediaItem`.
-    ///   - locationID: Owning storage location identifier.
-    /// - Returns: An array of subfolder `MediaItem`s with their children recursively populated.
-    public func listSubfoldersRecursively(at folder: MediaItem, locationID: String) throws -> [MediaItem] {
-        var visitedPaths = Set<String>()
-        if let canonicalPath = folder.localURL?.resolvingSymlinksInPath().standardizedFileURL.path {
-            visitedPaths.insert(canonicalPath)
-        }
-        return try listSubfoldersRecursively(
-            at: folder,
-            locationID: locationID,
-            currentDepth: 0,
-            maxDepth: 10,
-            visitedPaths: &visitedPaths
-        )
-    }
-    
-    private func listSubfoldersRecursively(
-        at folder: MediaItem,
-        locationID: String,
-        currentDepth: Int,
-        maxDepth: Int,
-        visitedPaths: inout Set<String>
-    ) throws -> [MediaItem] {
-        guard currentDepth < maxDepth, let folderURL = folder.localURL else { return [] }
-        
-        let keys: [URLResourceKey] = [.nameKey, .isDirectoryKey, .contentModificationDateKey]
-        let fileManager = FileManager.default
-        guard let contents = try? fileManager.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
-        
-        var subfolders: [MediaItem] = []
-        for url in contents {
-            let resourceValues = try? url.resourceValues(forKeys: Set(keys))
-            guard resourceValues?.isDirectory == true else { continue }
-            
-            let canonicalPath = url.resolvingSymlinksInPath().standardizedFileURL.path
-            guard !visitedPaths.contains(canonicalPath) else { continue }
-            visitedPaths.insert(canonicalPath)
-            
-            let name = resourceValues?.name ?? url.lastPathComponent
-            let date = resourceValues?.contentModificationDate
-            let relativePath = folder.path.isEmpty ? name : "\(folder.path)/\(name)"
-            
-            var item = MediaItem(
-                locationID: locationID,
-                name: name,
-                rootName: folder.rootName,
-                path: relativePath,
-                isDirectory: true,
-                size: 0,
-                modifiedDate: date,
-                children: nil,
-                localURL: url
-            )
-            item.children = try? listSubfoldersRecursively(
-                at: item,
-                locationID: locationID,
-                currentDepth: currentDepth + 1,
-                maxDepth: maxDepth,
-                visitedPaths: &visitedPaths
-            )
-            subfolders.append(item)
-        }
-        
-        subfolders.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return subfolders
     }
 }

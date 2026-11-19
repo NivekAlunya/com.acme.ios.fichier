@@ -234,7 +234,7 @@ public struct PictureDetailView: View {
             let targetID = viewModel.currentItem.id
             viewModel.activeMetadata = nil
             viewModel.currentImage = nil
-            prefetchNext(after: viewModel.currentItem)
+            viewModel.prefetchNext(after: viewModel.currentItem)
             
             await withTaskGroup(of: (isMeta: Bool, meta: PictureEXIFData?, image: UIImage?).self) { group in
                 group.addTask {
@@ -275,6 +275,10 @@ public struct PictureDetailView: View {
         .onAppear {
             AppKeyboardDismissal.dismiss()
         }
+        .onDisappear {
+            viewModel.cancelPrefetch()
+            viewModel.cancelAutoHideTimer()
+        }
         #if !os(tvOS)
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac
@@ -289,7 +293,7 @@ public struct PictureDetailView: View {
                     .keyboardShortcut("[", modifiers: [])
                 Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut("]", modifiers: [])
-                Button("") { withAnimation { viewModel.isPlayingSlideshow.toggle() } }
+                Button("") { withAnimation { viewModel.toggleSlideshow() } }
                     .keyboardShortcut(.space, modifiers: [])
                 Button("") { FavoritesManager.shared.toggleFavorite(viewModel.currentItem) }
                     .keyboardShortcut("f", modifiers: [])
@@ -367,20 +371,5 @@ public struct PictureDetailView: View {
     /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
         viewModel.goToPrevious()
-    }
-    
-    /// Dispatches an asynchronous prefetch task for the next upcoming photo into memory/disk cache.
-    ///
-    /// - Parameter item: Current media item.
-    private func prefetchNext(after item: MediaItem) {
-        guard let idx = viewModel.pictures.firstIndex(where: { $0.id == item.id }), viewModel.pictures.count > 1 else { return }
-        let nextIdx = (idx + 1) % viewModel.pictures.count
-        let nextItem = viewModel.pictures[nextIdx]
-        guard !nextItem.isVideo else { return }
-        Task {
-            if let img = await viewModel.manager.downloadImage(for: nextItem) {
-                viewModel.slideImageCache[nextItem.id] = img
-            }
-        }
     }
 }

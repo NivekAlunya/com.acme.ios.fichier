@@ -23,7 +23,7 @@ public struct TVPlaybackSpeedSheetView: View {
     public var body: some View {
         NavigationStack {
             List {
-                Section("Playback Speed") {
+                Section(.Strings.tvPlaybackSpeedTitle) {
                     ForEach(TVVideoPlaybackRate.allCases) { rate in
                         Button {
                             onSelectRate(rate)
@@ -40,10 +40,10 @@ public struct TVPlaybackSpeedSheetView: View {
                     }
                 }
             }
-            .navigationTitle("Playback Speed")
+            .navigationTitle(.Strings.tvPlaybackSpeedTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button(.Strings.commonDone) {
                         dismiss()
                     }
                 }

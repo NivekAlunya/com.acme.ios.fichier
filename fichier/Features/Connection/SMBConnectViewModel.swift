@@ -41,6 +41,10 @@ final class SMBConnectViewModel {
         smbManager.isConnected
     }
 
+    var connectionState: StorageLocationConnectionState {
+        smbManager.connectionState
+    }
+
     var errorMessage: String? {
         smbManager.errorMessage ?? discovery.errorMessage
     }

@@ -29,6 +29,8 @@ public struct TVVideoOverlayControlsView: View {
     public let onSwipeScrubEnded: @MainActor () -> Void
     public let onSwipeScrubCancelled: @MainActor () -> Void
     public let onScrubberSelect: () -> Void
+    public let canPrevious: Bool
+    public let canNext: Bool
     public let onPrevious: () -> Void
     public let onTogglePlayPause: () -> Void
     public let onNext: () -> Void
@@ -61,6 +63,8 @@ public struct TVVideoOverlayControlsView: View {
         onSwipeScrubEnded: @escaping @MainActor () -> Void = {},
         onSwipeScrubCancelled: @escaping @MainActor () -> Void = {},
         onScrubberSelect: @escaping () -> Void,
+        canPrevious: Bool = true,
+        canNext: Bool = true,
         onPrevious: @escaping () -> Void,
         onTogglePlayPause: @escaping () -> Void,
         onNext: @escaping () -> Void,
@@ -90,6 +94,8 @@ public struct TVVideoOverlayControlsView: View {
         self.onSwipeScrubEnded = onSwipeScrubEnded
         self.onSwipeScrubCancelled = onSwipeScrubCancelled
         self.onScrubberSelect = onScrubberSelect
+        self.canPrevious = canPrevious
+        self.canNext = canNext
         self.onPrevious = onPrevious
         self.onTogglePlayPause = onTogglePlayPause
         self.onNext = onNext
@@ -247,7 +253,7 @@ public struct TVVideoOverlayControlsView: View {
                 onFocusChanged(.progress)
             }
         }
-        .accessibilityLabel("Playback progress")
+        .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackProgress))
         .accessibilityIdentifier("video_scrubber_button")
     }
 
@@ -261,16 +267,17 @@ public struct TVVideoOverlayControlsView: View {
 
         HStack(spacing: 24) {
             Button(action: onPrevious) {
-                Label("Previous", systemImage: "backward.end.fill")
+                Label(.Strings.commonPrevious, systemImage: "backward.end.fill")
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .previous)
-            .accessibilityLabel("Previous video")
+            .disabled(!canPrevious)
+            .accessibilityLabel(Text(.Strings.tvVideoControlsPreviousVideoAccessibility))
             .accessibilityIdentifier("video_previous_button")
 
             Button(action: onTogglePlayPause) {
                 Label(
-                    isPlaying ? "Pause" : "Play",
+                    isPlaying ? .Strings.commonPause : .Strings.commonPlay,
                     systemImage: isPlaying ? "pause.fill" : "play.fill"
                 )
             }
@@ -280,30 +287,31 @@ public struct TVVideoOverlayControlsView: View {
             .accessibilityIdentifier("video_play_pause_button")
 
             Button(action: onNext) {
-                Label("Next", systemImage: "forward.end.fill")
+                Label(.Strings.commonNext, systemImage: "forward.end.fill")
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .next)
-            .accessibilityLabel("Next video")
+            .disabled(!canNext)
+            .accessibilityLabel(Text(.Strings.tvVideoControlsNextVideoAccessibility))
             .accessibilityIdentifier("video_next_button")
 
             Button(action: onOpenChapters) {
                 Label(
-                    chapters.isEmpty ? "Jump" : "Chapters",
+                    chapters.isEmpty ? .Strings.videoPlayerMenuQuickJump : .Strings.videoPlayerMenuChapters,
                     systemImage: chapters.isEmpty ? "forward.frame.fill" : "list.bullet.rectangle.fill"
                 )
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .chapters)
-            .accessibilityLabel("Chapters and quick jump")
+            .accessibilityLabel(Text(.Strings.tvVideoControlsChaptersAndQuickJump))
             .accessibilityIdentifier("video_chapters_button")
 
             Button(action: onOpenTracks) {
-                Label("Tracks", systemImage: "captions.bubble.fill")
+                Label(.Strings.tvVideoControlsTracksLabel, systemImage: "captions.bubble.fill")
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .tracks)
-            .accessibilityLabel("Audio and subtitle tracks")
+            .accessibilityLabel(Text(.Strings.tvVideoControlsTracksAccessibility))
             .accessibilityIdentifier("video_tracks_button")
 
             Button(action: onOpenSpeed) {
@@ -314,7 +322,7 @@ public struct TVVideoOverlayControlsView: View {
             }
             .buttonStyle(buttonStyle)
             .focused($focusedTarget, equals: .speed)
-            .accessibilityLabel("Playback speed \(playbackRate.displayName)")
+            .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackSpeedAccessibility(playbackRate.displayName)))
             .accessibilityIdentifier("video_speed_button")
 
             Button(action: onSwitchEngine) {

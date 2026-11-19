@@ -40,18 +40,21 @@ public final class TVSystemRemoteCommandBridge: TVRemoteCommandHandling {
         ]
         registerSkipCommand(center.skipBackwardCommand, isForward: false, callbacks: callbacks)
 
-        registerSimpleCommand(center.playCommand) {
+        registerSimpleCommand(center.playCommand) { [weak self] in
             Task { @MainActor in
+                guard self?.isActivated == true else { return }
                 callbacks.onPlay()
             }
         }
-        registerSimpleCommand(center.pauseCommand) {
+        registerSimpleCommand(center.pauseCommand) { [weak self] in
             Task { @MainActor in
+                guard self?.isActivated == true else { return }
                 callbacks.onPause()
             }
         }
-        registerTimestampedCommand(center.togglePlayPauseCommand) { uptime in
+        registerTimestampedCommand(center.togglePlayPauseCommand) { [weak self] uptime in
             Task { @MainActor in
+                guard self?.isActivated == true else { return }
                 callbacks.onTogglePlayPause(uptime)
             }
         }
@@ -107,10 +110,11 @@ public final class TVSystemRemoteCommandBridge: TVRemoteCommandHandling {
         callbacks: TVRemoteCommandCallbacks
     ) {
         command.isEnabled = true
-        let token = command.addTarget { event in
+        let token = command.addTarget { [weak self] event in
             let receivedUptime = ProcessInfo.processInfo.systemUptime
             let seekType = (event as? MPSeekCommandEvent)?.type
             Task { @MainActor in
+                guard self?.isActivated == true else { return }
                 switch seekType {
                 case .beginSeeking:
                     callbacks.onSeekBegan(isForward, receivedUptime)
@@ -133,9 +137,10 @@ public final class TVSystemRemoteCommandBridge: TVRemoteCommandHandling {
         callbacks: TVRemoteCommandCallbacks
     ) {
         command.isEnabled = true
-        let token = command.addTarget { _ in
+        let token = command.addTarget { [weak self] _ in
             let receivedUptime = ProcessInfo.processInfo.systemUptime
             Task { @MainActor in
+                guard self?.isActivated == true else { return }
                 callbacks.onTapSkip(isForward, receivedUptime)
             }
             return .success

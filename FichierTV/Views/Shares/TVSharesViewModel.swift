@@ -5,12 +5,14 @@
 
 import Foundation
 import Observation
+import os
 import FichierKit
 
 /// State coordinator managing the list of configured SMB server cards and live reachability probes.
 @Observable
 @MainActor
 public final class TVSharesViewModel {
+    private static let logger = Logger(subsystem: "com.acme.ios.fichiertv", category: "sharesViewModel")
     public private(set) var serverCards: [ServerCardItem] = []
     public private(set) var isLoading: Bool = false
     public var selectedServerForAction: ServerCardItem?
@@ -18,6 +20,7 @@ public final class TVSharesViewModel {
 
     private let store: any SMBServerStoreProtocol
     private let resolver: any MediaSourceResolverProtocol
+    private var loadTask: Task<Void, Never>?
 
     public init(
         store: any SMBServerStoreProtocol = DefaultSMBServerStore.shared,
@@ -29,15 +32,22 @@ public final class TVSharesViewModel {
 
     /// Loads saved servers from persistence and triggers parallel reachability scans.
     public func loadServers() async {
-        isLoading = true
-        let connections = await store.loadServers()
+        loadTask?.cancel()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            self.isLoading = true
+            let connections = await self.store.loadServers()
+            guard !Task.isCancelled else { return }
 
-        self.serverCards = connections.map { conn in
-            ServerCardItem(connection: conn, status: .connecting)
+            self.serverCards = connections.map { conn in
+                ServerCardItem(connection: conn, status: .connecting)
+            }
+            self.isLoading = false
+
+            await self.probeReachability(for: connections)
         }
-        isLoading = false
-
-        await probeReachability(for: connections)
+        loadTask = task
+        await task.value
     }
 
     /// Explicitly refreshes the server list and probes connection reachability.
@@ -47,7 +57,11 @@ public final class TVSharesViewModel {
 
     /// Removes a server from persistent storage, invalidates its active resolver cache, and updates visible cards.
     public func removeServer(_ server: SavedSMBConnection) async {
-        try? await store.removeServer(server)
+        do {
+            try await store.removeServer(server)
+        } catch {
+            Self.logger.error("Failed to remove server \(server.id): \(error.localizedDescription)")
+        }
         await resolver.invalidateSource(id: server.id)
         serverCards.removeAll { $0.id == server.id }
         if selectedServerForAction?.id == server.id {

@@ -39,11 +39,11 @@ nonisolated public enum PDFReadingMode: String, CaseIterable, Identifiable, Send
     public var localizedTitle: String {
         switch self {
         case .continuous:
-            return String(localized: "Single Page", comment: "Single page continuous scroll reading mode")
+            return String(localized: .Strings.pdfReadingModeSinglePage)
         case .book:
-            return String(localized: "Book View (With Cover)", comment: "Two pages side-by-side with cover page")
+            return String(localized: .Strings.pdfReadingModeBookView)
         case .twoUp:
-            return String(localized: "Two Pages (No Cover)", comment: "Two pages side-by-side without cover page")
+            return String(localized: .Strings.pdfReadingModeTwoPages)
         }
     }
     

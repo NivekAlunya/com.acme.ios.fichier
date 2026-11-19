@@ -80,7 +80,7 @@ public struct TVImageViewerView: View {
                 }
                 .buttonStyle(TVTransparentFocusButtonStyle())
                 .focused($isViewerFocused)
-                .accessibilityLabel("Show image viewer controls")
+                .accessibilityLabel(Text(.Strings.tvImageViewerShowControlsAccessibility))
                 .onMoveCommand { direction in
                     switch direction {
                     case .left:

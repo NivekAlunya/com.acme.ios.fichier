@@ -104,7 +104,7 @@ public struct PictureViewerBottomBarView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Previous Photo", comment: "Accessibility label for previous photo"))
+                .accessibilityLabel(Text(.Strings.photoViewerActionPreviousPhoto))
                 
                 Divider()
                     .frame(height: 20)
@@ -123,7 +123,7 @@ public struct PictureViewerBottomBarView: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isPlayingSlideshow ? String(localized: "Pause Slideshow", comment: "Accessibility label to pause slideshow") : String(localized: "Start Slideshow", comment: "Accessibility label to start slideshow"))
+                .accessibilityLabel(isPlayingSlideshow ? Text(.Strings.photoViewerActionPauseSlideshow) : Text(.Strings.photoViewerActionStartSlideshow))
                 
                 // 2. Slideshow Duration & Transition Style Menu
                 Menu {
@@ -162,7 +162,7 @@ public struct PictureViewerBottomBarView: View {
                     .background(Color.white.opacity(0.18))
                     .clipShape(Capsule())
                 }
-                .accessibilityLabel(String(localized: "Slideshow Settings", comment: "Accessibility label for slideshow duration and transition menu"))
+                .accessibilityLabel(Text(.Strings.photoViewerActionSlideshowSettings))
                 
                 // 3. EXIF Info Sheet
                 Button {
@@ -174,7 +174,7 @@ public struct PictureViewerBottomBarView: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Photo Information", comment: "Accessibility label for photo EXIF info"))
+                .accessibilityLabel(Text(.Strings.photoViewerActionPhotoInformation))
                 
                 // 4. Favorite Button
                 Button {
@@ -186,7 +186,7 @@ public struct PictureViewerBottomBarView: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isFavorite ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite photo") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite photo"))
+                .accessibilityLabel(isFavorite ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
                 
                 if canSaveToCameraRoll {
                     // 5. Save to Camera Roll
@@ -205,7 +205,7 @@ public struct PictureViewerBottomBarView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(currentImage == nil || isSaving)
-                    .accessibilityLabel(String(localized: "Save to Photos", comment: "Accessibility label to save photo to Photos"))
+                    .accessibilityLabel(Text(.Strings.galleryActionSaveToPhotos))
                 }
                 
                 #if !os(tvOS)
@@ -221,7 +221,7 @@ public struct PictureViewerBottomBarView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(currentImage == nil)
-                .accessibilityLabel(String(localized: "Share Photo", comment: "Accessibility label to share photo"))
+                .accessibilityLabel(Text(.Strings.photoViewerActionSharePhoto))
                 #endif
             }
             .padding(.horizontal, 4)
@@ -242,7 +242,7 @@ public struct PictureViewerBottomBarView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Next Photo", comment: "Accessibility label for next photo"))
+                .accessibilityLabel(Text(.Strings.photoViewerActionNextPhoto))
             }
         }
         .padding(.horizontal, 8)

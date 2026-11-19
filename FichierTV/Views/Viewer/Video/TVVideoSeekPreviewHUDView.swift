@@ -84,7 +84,7 @@ public struct TVVideoSeekPreviewHUDView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(false)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Seek preview")
+        .accessibilityLabel(Text(.Strings.tvVideoSeekPreviewAccessibility))
         .accessibilityValue("\(formattedDelta), \(formattedTargetTime)")
     }
 }

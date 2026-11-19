@@ -71,7 +71,7 @@ extension StorageLocationManager {
             
             if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 if item.isImage || item.isVideo {
                     MediaCacheManager.shared.linkFolderIcon(
                         thumb,
@@ -119,7 +119,7 @@ extension StorageLocationManager {
                     maxDimension: MediaCacheManager.standardThumbnailDimension
                 ) {
                     worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                    MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                    await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                     MediaCacheManager.shared.linkFolderIcon(
                         thumb,
                         childPath: item.path,
@@ -138,7 +138,7 @@ extension StorageLocationManager {
             
             if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 MediaCacheManager.shared.linkFolderIcon(
                     thumb,
                     childPath: item.path,
@@ -302,7 +302,7 @@ extension StorageLocationManager {
             let localURL = MediaCacheManager.shared.localDocumentURL(for: item)
             if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
         }
@@ -317,7 +317,7 @@ extension StorageLocationManager {
         // 4. Fast-Path Prefix Read (Linearized / Web-Optimized PDFs)
         if let fastThumb = await worker.fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
             worker.cacheThumbnail(fastThumb, forKey: memoryCacheKey)
-            MediaCacheManager.shared.saveThumbnailAsync(fastThumb, for: diskKey)
+            await MediaCacheManager.shared.saveThumbnailAsync(fastThumb, for: diskKey)
             return fastThumb
         }
         guard !Task.isCancelled else { return nil }
@@ -358,7 +358,7 @@ extension StorageLocationManager {
             }
             if let thumb {
                 worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
                 return thumb
             }
         }
@@ -395,7 +395,7 @@ extension StorageLocationManager {
         }
         
         // Persist to disk and RAM
-        MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
+        await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
         worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
         
         // Trigger SwiftUI observation update for this item

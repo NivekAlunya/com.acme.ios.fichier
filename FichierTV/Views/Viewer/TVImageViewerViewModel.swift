@@ -242,6 +242,9 @@ public final class TVImageViewerViewModel {
             self.currentImage = cached
             self.isLoadingImage = false
             prefetchNeighbors()
+            if isSlideshowPlaying {
+                scheduleNextSlide()
+            }
             return
         }
 
@@ -259,6 +262,9 @@ public final class TVImageViewerViewModel {
             }
             self.isLoadingImage = false
             self.prefetchNeighbors()
+            if self.isSlideshowPlaying {
+                self.scheduleNextSlide()
+            }
         }
     }
 
@@ -320,7 +326,7 @@ public final class TVImageViewerViewModel {
         slideshowTask?.cancel()
         slideshowTask = Task { [weak self] in
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: UInt64(self.slideshowInterval * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(self.slideshowInterval))
             guard !Task.isCancelled, self.isSlideshowPlaying else { return }
 
             // Preload next image into cache before triggering transition to ensure zero-flicker cross-dissolve
@@ -337,9 +343,6 @@ public final class TVImageViewerViewModel {
 
             withAnimation(self.slideAnimation) {
                 self.showNext()
-            }
-            if self.isSlideshowPlaying {
-                self.scheduleNextSlide()
             }
         }
     }

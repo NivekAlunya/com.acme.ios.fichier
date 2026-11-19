@@ -44,23 +44,23 @@ public struct TVPhotosRootView: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 12) {
-                Text("Photos Access Required")
+                Text(.Strings.tvPhotosAccessRequiredTitle)
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Fichier requires access to display your photo and video library.")
+                Text(.Strings.tvPhotosAccessRequiredDescription)
                     .font(.headline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
-            Button("Grant Access") {
+            Button(.Strings.tvPhotosGrantAccessButton) {
                 Task {
                     authorizationStatus = await source.requestAuthorization()
                 }
             }
             .buttonStyle(.borderedProminent)
-            .accessibilityLabel("Grant access to Photos")
+            .accessibilityLabel(Text(.Strings.tvPhotosGrantAccessAccessibility))
         }
         .focusSection()
     }
@@ -75,11 +75,11 @@ public struct TVPhotosRootView: View {
                 .accessibilityHidden(true)
 
             VStack(spacing: 12) {
-                Text("Photos Access Denied")
+                Text(.Strings.tvPhotosAccessDeniedTitle)
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Access to Photos is disabled. Please enable it in Apple TV Settings > Apps > Fichier.")
+                Text(.Strings.tvPhotosAccessDeniedDescription)
                     .font(.headline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -97,7 +97,7 @@ public struct TVPhotosRootView: View {
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
 
-                Text("Limited Access: Showing only photos and albums selected in system permissions.")
+                Text(.Strings.tvPhotosLimitedAccessNotice)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -106,7 +106,7 @@ public struct TVPhotosRootView: View {
             .background(.ultraThinMaterial, in: Capsule())
             .padding(.top, 16)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Limited Access: Showing only photos and albums selected in system permissions.")
+            .accessibilityLabel(Text(.Strings.tvPhotosLimitedAccessNotice))
 
             TVMediaBrowserView(source: source, folder: nil)
         }

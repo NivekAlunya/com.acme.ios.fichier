@@ -83,7 +83,7 @@ public struct PDFViewerBottomBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(!hasMultipleDocuments)
-            .accessibilityLabel(String(localized: "Previous Document", comment: "Accessibility label for previous document"))
+            .accessibilityLabel(Text(.Strings.pdfActionPreviousDocument))
             
             Divider()
                 .frame(height: 20)
@@ -116,7 +116,7 @@ public struct PDFViewerBottomBarView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isBookMode ? String(localized: "Switch to Single Page View", comment: "Accessibility label") : String(localized: "Switch to Book View", comment: "Accessibility label"))
+                .accessibilityLabel(isBookMode ? Text(.Strings.pdfSwitchSinglePage) : Text(.Strings.pdfSwitchBookView))
                 
                 // 2. Page Counter Pill
                 Text(pageInfoText)
@@ -139,7 +139,7 @@ public struct PDFViewerBottomBarView: View {
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isFavorite ? String(localized: "Remove from Favorites", comment: "Accessibility label to unfavorite document") : String(localized: "Add to Favorites", comment: "Accessibility label to favorite document"))
+                .accessibilityLabel(isFavorite ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
                 
                 // 4. Share Document
                 if let localFileURL {
@@ -150,7 +150,7 @@ public struct PDFViewerBottomBarView: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Share Document", comment: "Accessibility label to share document"))
+                    .accessibilityLabel(Text(.Strings.pdfActionShareDocument))
                 } else {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .medium))
@@ -177,7 +177,7 @@ public struct PDFViewerBottomBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(!hasMultipleDocuments)
-            .accessibilityLabel(String(localized: "Next Document", comment: "Accessibility label for next document"))
+            .accessibilityLabel(Text(.Strings.pdfActionNextDocument))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

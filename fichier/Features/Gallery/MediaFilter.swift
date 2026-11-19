@@ -28,7 +28,7 @@ enum MediaFilter: String, CaseIterable, Identifiable {
         case .all: return .Strings.galleryFilterAll
         case .photos: return .Strings.galleryFilterPhotos
         case .videos: return .Strings.galleryFilterVideos
-        case .documents: return LocalizedStringResource("Documents", defaultValue: "Documents")
+        case .documents: return .Strings.galleryFilterDocuments
         }
     }
     

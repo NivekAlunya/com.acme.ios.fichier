@@ -33,6 +33,9 @@ actor SMBClientActor {
     /// Maximum number of share pages fetched in one pass to prevent infinite cursor loops.
     static let maxSharePages: Int = 20
 
+    /// Maximum byte limit when reading photo data for thumbnail generation (25 MB).
+    static let maxThumbnailDownloadBytes: Int64 = 25 * 1024 * 1024
+
     // MARK: - State Properties
 
     /// Factory constructing an `SMBClientProtocol` session (defaults to `FichierKit.AMSMB2Client`).
@@ -361,17 +364,10 @@ actor SMBClientActor {
             throw URLError(.notConnectedToInternet)
         }
 
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty,
-              trimmedName != ".",
-              trimmedName != "..",
-              !trimmedName.contains("/"),
-              !trimmedName.contains(":") else {
-            throw FileOperationError.invalidName(name)
-        }
-
+        let trimmedName = try FileOperationError.validateName(name)
         let cleanParent = parentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let newFolderPath = cleanParent.isEmpty ? trimmedName : "\(cleanParent)/\(trimmedName)"
+        let canonicalPath = "/\(newFolderPath)"
         let connID = self.currentConnectionID
 
         try await client.createDirectory(share: shareName, path: newFolderPath)
@@ -380,7 +376,7 @@ actor SMBClientActor {
             locationID: connID,
             name: trimmedName,
             rootName: shareName,
-            path: newFolderPath,
+            path: canonicalPath,
             isDirectory: true,
             size: 0,
             modifiedDate: Date(),
@@ -486,15 +482,7 @@ actor SMBClientActor {
             throw URLError(.notConnectedToInternet)
         }
 
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0").union(.controlCharacters)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              trimmed.rangeOfCharacter(from: invalidCharacters) == nil,
-              !trimmed.hasSuffix(".") else {
-            throw FileOperationError.invalidName(newName)
-        }
+        let trimmed = try FileOperationError.validateName(newName)
 
         if trimmed == item.name {
             return item
@@ -555,53 +543,6 @@ actor SMBClientActor {
         return subfolders
     }
 
-    /// Recursively lists subfolders within an SMB share for destination picking in `FolderPickerSheetView`.
-    func listSubfoldersRecursively(
-        inShare shareName: String,
-        atPath path: String,
-        rootName: String,
-        locationID: String
-    ) async throws -> [MediaItem] {
-        var visitedPaths = Set<String>()
-        return try await listSubfoldersRecursively(
-            atPath: path,
-            currentDepth: 0,
-            context: (share: shareName, root: rootName, locationID: locationID, maxDepth: 10),
-            visitedPaths: &visitedPaths
-        )
-    }
-
-    private func listSubfoldersRecursively(
-        atPath path: String,
-        currentDepth: Int,
-        context: (share: String, root: String, locationID: String, maxDepth: Int),
-        visitedPaths: inout Set<String>
-    ) async throws -> [MediaItem] {
-        guard currentDepth < context.maxDepth else { return [] }
-        try Task.checkCancellation()
-
-        let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !visitedPaths.contains(cleanPath) else { return [] }
-        visitedPaths.insert(cleanPath)
-
-        let (subfolders, _) = try await scanFolder(shareName: context.share, at: cleanPath)
-        var result: [MediaItem] = []
-
-        for var folder in subfolders {
-            if Task.isCancelled { throw CancellationError() }
-            folder.children = try await listSubfoldersRecursively(
-                atPath: folder.smbRelativePath,
-                currentDepth: currentDepth + 1,
-                context: context,
-                visitedPaths: &visitedPaths
-            )
-            result.append(folder)
-        }
-
-        result.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return result
-    }
-
     // MARK: - Thumbnail Retrieval & Downsampling
 
     /// Fetches and downsamples a media thumbnail using a 2-tier caching hierarchy (RAM + Disk).
@@ -640,16 +581,6 @@ actor SMBClientActor {
             return diskCached
         }
 
-        // 3. For PDF documents already cached on disk in SMBDocuments, generate thumbnail directly from disk file
-        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let docURL = MediaCacheManager.shared.localDocumentURL(for: item)
-            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: docURL, maxDimension: maxDimension) {
-                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                return thumb
-            }
-        }
-
         if Task.isCancelled { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
@@ -658,38 +589,12 @@ actor SMBClientActor {
         guard let client else { return nil }
 
         do {
-            // Remote PDF: Fast-path prefix thumbnailing with bounded fallback
-            if item.isPDF {
-                if let prefixThumb = await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
-                    return prefixThumb
-                }
-
-                // Fallback for non-linearized documents: fetch full document if within safe bounded size (<= 12 MB)
-                // to prevent socket starvation during gallery browsing
-                let fileSize = item.size > 0 ? item.size : await fetchFileSize(for: item)
-                let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
-                if fileSize > 0 && fileSize <= maxDirectDownloadBytes {
-                    do {
-                        let localURL = try await fetchDocumentURL(for: item)
-                        if let cachedThumb = thumbnailCache.object(forKey: memoryCacheKey) ?? MediaCacheManager.shared.getThumbnail(for: diskKey) {
-                            return cachedThumb
-                        }
-                        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
-                            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                            return thumb
-                        }
-                    } catch {
-                        if !Task.isCancelled {
-                            logw("Fallback PDF thumbnailing failed at \(item.shareName)/\(item.path): \(error.localizedDescription)")
-                        }
-                    }
-                }
-                return nil
-            }
-
             // Photo Thumbnail Handling via FichierKit SMBClientProtocol
-            let data = try await client.readFileData(share: item.shareName, path: item.smbRelativePath, maxBytes: nil)
+            let data = try await client.readFileData(
+                share: item.shareName,
+                path: item.smbRelativePath,
+                maxBytes: Self.maxThumbnailDownloadBytes
+            )
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil
@@ -708,7 +613,7 @@ actor SMBClientActor {
 
             // Offload CPU-bound image downsampling and disk caching off the actor lock
             let image = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-                guard let decoded = Self.downsample(data: data, maxDimension: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
+                guard let decoded = SMBImageLoader.decodeDownsampledImage(from: data, maxPixelSize: MediaCacheManager.standardThumbnailDimension) ?? AnimatedImageDecoder.decode(from: data) else {
                     return nil
                 }
                 MediaCacheManager.shared.saveThumbnail(decoded, for: diskKey)
@@ -779,13 +684,13 @@ actor SMBClientActor {
 
     // MARK: - Video & Document Local Caching
 
-    /// Streams a video file from SMB directly to disk cache via `.part` staging.
-    func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
-        let localURL = MediaCacheManager.shared.localVideoURL(for: item)
-        if MediaCacheManager.shared.hasCachedVideo(for: item) {
-            return localURL
-        }
-
+    /// Stages a remote SMB download into a temporary `.part` file, promoting it to `localURL` only upon completion.
+    private func downloadStaged(
+        share: String,
+        path: String,
+        to localURL: URL,
+        progress: (@Sendable (Int64, Int64) -> Void)? = nil
+    ) async throws {
         guard let client else {
             throw URLError(.notConnectedToInternet)
         }
@@ -793,7 +698,7 @@ actor SMBClientActor {
         try? FileManager.default.removeItem(at: partURL)
 
         do {
-            try await client.downloadFile(share: item.shareName, path: item.smbRelativePath, to: partURL) { bytes, total in
+            try await client.downloadFile(share: share, path: path, to: partURL) { bytes, total in
                 if Task.isCancelled { return false }
                 progress?(bytes, total)
                 return true
@@ -818,6 +723,16 @@ actor SMBClientActor {
             try? FileManager.default.removeItem(at: partURL)
             throw error
         }
+    }
+
+    /// Streams a video file from SMB directly to disk cache via `.part` staging.
+    func fetchVideoURL(for item: MediaItem, progress: (@Sendable (Int64, Int64) -> Void)? = nil) async throws -> URL {
+        let localURL = MediaCacheManager.shared.localVideoURL(for: item)
+        if MediaCacheManager.shared.hasCachedVideo(for: item) {
+            return localURL
+        }
+
+        try await downloadStaged(share: item.shareName, path: item.smbRelativePath, to: localURL, progress: progress)
 
         // Evict older videos if cache exceeds limit, protecting the newly downloaded one
         MediaCacheManager.shared.evictVideosIfNeeded(keeping: [localURL])
@@ -849,38 +764,7 @@ actor SMBClientActor {
             return localURL
         }
 
-        guard let client else {
-            throw URLError(.notConnectedToInternet)
-        }
-        let partURL = localURL.appendingPathExtension("part")
-        try? FileManager.default.removeItem(at: partURL)
-
-        do {
-            try await client.downloadFile(share: item.shareName, path: item.smbRelativePath, to: partURL) { bytes, total in
-                if Task.isCancelled { return false }
-                progress?(bytes, total)
-                return true
-            }
-
-            if Task.isCancelled {
-                try? FileManager.default.removeItem(at: partURL)
-                throw CancellationError()
-            }
-
-            if FileManager.default.fileExists(atPath: localURL.path) {
-                do {
-                    _ = try FileManager.default.replaceItemAt(localURL, withItemAt: partURL, backupItemName: nil, options: [])
-                } catch {
-                    try? FileManager.default.removeItem(at: localURL)
-                    try FileManager.default.moveItem(at: partURL, to: localURL)
-                }
-            } else {
-                try FileManager.default.moveItem(at: partURL, to: localURL)
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: partURL)
-            throw error
-        }
+        try await downloadStaged(share: item.shareName, path: item.smbRelativePath, to: localURL, progress: progress)
 
         // Evict older documents if cache exceeds limit, protecting the newly downloaded one
         MediaCacheManager.shared.evictDocumentsIfNeeded(keeping: [localURL])
@@ -914,30 +798,8 @@ actor SMBClientActor {
             progress?(item.size, item.size)
             return localURL
         }
-        guard let client else {
-            throw URLError(.notConnectedToInternet)
-        }
-        let partURL = localURL.appendingPathExtension("part")
-        try? FileManager.default.removeItem(at: partURL)
-        do {
-            try await client.downloadFile(share: item.shareName, path: item.smbRelativePath, to: partURL) { bytes, total in
-                if Task.isCancelled { return false }
-                progress?(bytes, total)
-                return true
-            }
-            if Task.isCancelled {
-                try? FileManager.default.removeItem(at: partURL)
-                throw CancellationError()
-            }
-            if FileManager.default.fileExists(atPath: localURL.path) {
-                try? FileManager.default.removeItem(at: localURL)
-            }
-            try FileManager.default.moveItem(at: partURL, to: localURL)
-            return localURL
-        } catch {
-            try? FileManager.default.removeItem(at: partURL)
-            throw error
-        }
+        try await downloadStaged(share: item.shareName, path: item.smbRelativePath, to: localURL, progress: progress)
+        return localURL
     }
 
     /// Flushes all in-memory caches to immediately release RAM upon system low-memory warnings.
@@ -1007,7 +869,10 @@ actor SMBClientActor {
                 metadataCache.setObject(PictureEXIFBox(meta), forKey: item.id as NSString)
             }
 
-            guard let image = AnimatedImageDecoder.decode(from: data) else { return nil }
+            let decodedImage = await Task.detached(priority: .userInitiated) { () -> UIImage? in
+                AnimatedImageDecoder.decode(from: data)
+            }.value
+            guard let image = decodedImage else { return nil }
 
             let widthInPixels = image.size.width * image.scale
             let heightInPixels = image.size.height * image.scale
@@ -1071,24 +936,5 @@ actor SMBClientActor {
         } catch {
             return nil
         }
-    }
-
-    // MARK: - CoreGraphics Image Downsampling
-
-    private static func downsample(data: Data, maxDimension: CGFloat) -> UIImage? {
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
-
-        let downsampleOptions: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxDimension
-        ]
-
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions as CFDictionary) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
     }
 }

@@ -132,11 +132,11 @@ public struct TVImageViewerOverlayView: View {
     private var topBar: some View {
         HStack(alignment: .center, spacing: 24) {
             Button(action: onClose) {
-                Label("Close", systemImage: "xmark")
+                Label(.Strings.commonClose, systemImage: "xmark")
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .close)
-            .accessibilityLabel("Close viewer")
+            .accessibilityLabel(Text(.Strings.tvImageViewerCloseViewer))
             .accessibilityIdentifier("image_close_button")
 
             VStack(alignment: .leading, spacing: 4) {
@@ -150,7 +150,7 @@ public struct TVImageViewerOverlayView: View {
 
                 // Line 2: rest of the information
                 HStack(spacing: 8) {
-                    Text("\(currentIndex + 1) of \(totalCount)")
+                    Text(.Strings.tvImageViewerCounter(currentIndex + 1, totalCount))
 
                     if fileSize > 0 {
                         Text("•")
@@ -176,7 +176,7 @@ public struct TVImageViewerOverlayView: View {
                         .fill(Color.green)
                         .frame(width: 8, height: 8)
 
-                    Text("Slideshow")
+                    Text(.Strings.tvImageViewerSlideshow)
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundStyle(.white)
@@ -187,11 +187,11 @@ public struct TVImageViewerOverlayView: View {
             }
 
             Button(action: onOpenSettings) {
-                Label("Settings", systemImage: "gearshape.fill")
+                Label(.Strings.commonSettings, systemImage: "gearshape.fill")
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .settings)
-            .accessibilityLabel("Slideshow settings")
+            .accessibilityLabel(Text(.Strings.tvImageViewerSlideshowSettingsAccessibility))
             .accessibilityIdentifier("image_settings_button")
         }
     }
@@ -200,32 +200,36 @@ public struct TVImageViewerOverlayView: View {
     private var bottomControls: some View {
         HStack(spacing: 32) {
             Button(action: onPrevious) {
-                Label("Previous", systemImage: "chevron.left")
+                Label(.Strings.commonPrevious, systemImage: "chevron.left")
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .previous)
             .disabled(!canNavigatePrevious)
-            .accessibilityLabel("Previous image")
+            .accessibilityLabel(Text(.Strings.tvImageViewerPreviousImageAccessibility))
             .accessibilityIdentifier("image_previous_button")
 
             Button(action: onToggleSlideshow) {
                 Label(
-                    isSlideshowPlaying ? "Pause" : "Slideshow",
+                    isSlideshowPlaying ? .Strings.commonPause : .Strings.tvImageViewerSlideshow,
                     systemImage: isSlideshowPlaying ? "pause.fill" : "play.fill"
                 )
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .toggleSlideshow)
-            .accessibilityLabel(isSlideshowPlaying ? "Pause slideshow" : "Start slideshow")
+            .accessibilityLabel(
+                isSlideshowPlaying
+                    ? Text(.Strings.tvSlideshowPauseAccessibility)
+                    : Text(.Strings.tvSlideshowStartAccessibility)
+            )
             .accessibilityIdentifier("image_slideshow_button")
 
             Button(action: onNext) {
-                Label("Next", systemImage: "chevron.right")
+                Label(.Strings.commonNext, systemImage: "chevron.right")
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .next)
             .disabled(!canNavigateNext && !isSlideshowPlaying)
-            .accessibilityLabel("Next image")
+            .accessibilityLabel(Text(.Strings.tvImageViewerNextImageAccessibility))
             .accessibilityIdentifier("image_next_button")
         }
     }
