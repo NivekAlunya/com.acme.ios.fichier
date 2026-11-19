@@ -128,7 +128,7 @@ public struct TVMediaBrowserView: View {
                 } label: {
                     Text(
                         viewModel.selectedSortKey == key
-                            ? "✓ \(key.displayTitle)"
+                            ? String(localized: .Strings.tvSortSelectedItemFormat(key.displayTitle))
                             : key.displayTitle
                     )
                 }
@@ -139,8 +139,8 @@ public struct TVMediaBrowserView: View {
             } label: {
                 Text(
                     viewModel.selectedSortOrder == .ascending
-                        ? "Order: Ascending ↑ (Switch to Descending ↓)"
-                        : "Order: Descending ↓ (Switch to Ascending ↑)"
+                        ? .Strings.tvSortOrderAscendingToggle
+                        : .Strings.tvSortOrderDescendingToggle
                 )
             }
 
@@ -273,14 +273,14 @@ public struct TVMediaBrowserView: View {
             showingSortDialog = true
         } label: {
             Label(
-                "Sort: \(viewModel.selectedSortKey.displayTitle)",
+                String(localized: .Strings.tvSortButtonLabel(viewModel.selectedSortKey.displayTitle)),
                 systemImage: viewModel.selectedSortOrder == .ascending ? "arrow.up" : "arrow.down"
             )
         }
         .buttonStyle(TVControlButtonStyle(isSelected: false))
         .accessibilityLabel(Text(.Strings.tvMediaSortOptionsAccessibility))
         .accessibilityValue(
-            "\(viewModel.selectedSortKey.displayTitle), \(viewModel.selectedSortOrder == .ascending ? "ascending" : "descending")"
+            "\(viewModel.selectedSortKey.displayTitle), \(String(localized: viewModel.selectedSortOrder == .ascending ? .Strings.tvSortOrderAscending : .Strings.tvSortOrderDescending))"
         )
         .accessibilityIdentifier("browser_sort_button")
     }

@@ -347,12 +347,10 @@ public final class StorageLocationManager {
     /// Removes a saved local folder location from `UserDefaults` and disconnects if it is active.
     ///
     /// - Parameter location: The folder location to remove.
-    public func removeSavedFolderLocation(_ location: SavedFolderLocation) {
+    public func removeSavedFolderLocation(_ location: SavedFolderLocation) async {
         savedFolderLocations = persistenceStore.removeSavedFolderLocation(location, from: savedFolderLocations)
         if currentLocation?.folderLocation?.id == location.id {
-            Task {
-                await disconnect()
-            }
+            await disconnect()
         }
     }
     
@@ -380,7 +378,7 @@ public final class StorageLocationManager {
             }
         case .localFolder, .iCloudFolder:
             if let folder = location.folderLocation {
-                removeSavedFolderLocation(folder)
+                await removeSavedFolderLocation(folder)
             }
         case .photos:
             break
@@ -948,7 +946,7 @@ public final class StorageLocationManager {
         if resetConnectionState {
             connectionState = .idle
         }
-        isLoading = false
+        isPerformingOperation = false
         operationErrorMessage = nil
         selectedShare = nil
         folderTree = []

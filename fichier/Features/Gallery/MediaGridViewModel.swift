@@ -251,25 +251,22 @@ final class MediaGridViewModel {
             isBatchProcessing = false
             batchProgressMessage = nil
 
+            let toastMessage: String
+            if failedCount > 0 && savedCount > 0 {
+                toastMessage = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
+            } else if failedCount > 0 && savedCount == 0 {
+                toastMessage = String(localized: .Strings.gallerySavedToPhotosFailed)
+            } else {
+                toastMessage = savedCount == 1
+                    ? String(localized: .Strings.gallerySavedToPhotosSingle)
+                    : String(localized: .Strings.gallerySavedToPhotosMultiple(savedCount))
+            }
+
             withAnimation {
-                if failedCount > 0 && savedCount > 0 {
-                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosPartial(savedCount, total))
-                } else if failedCount > 0 && savedCount == 0 {
-                    batchStatusToast = String(localized: .Strings.gallerySavedToPhotosFailed)
-                } else {
-                    batchStatusToast = savedCount == 1
-                        ? String(localized: .Strings.gallerySavedToPhotosSingle)
-                        : String(localized: .Strings.gallerySavedToPhotosMultiple(savedCount))
-                }
                 isSelectionMode = false
                 selectedItems.removeAll()
             }
-
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            withAnimation {
-                batchStatusToast = nil
-            }
+            showToastMessage(toastMessage)
         }
     }
 
@@ -378,20 +375,12 @@ final class MediaGridViewModel {
             batchProgressMessage = nil
 
             if downloadedURLs.isEmpty {
-                withAnimation {
-                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadFailed)
-                }
-                try? await Task.sleep(for: .seconds(2.5))
-                withAnimation {
-                    batchStatusToast = nil
-                }
+                showToastMessage(String(localized: .Strings.galleryBatchDownloadFailed))
             } else {
                 #if !os(tvOS)
                 itemsPendingFileExport = downloadedURLs
                 #else
-                withAnimation {
-                    batchStatusToast = String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count))
-                }
+                showToastMessage(String(localized: .Strings.galleryBatchDownloadedCount(downloadedURLs.count)))
                 #endif
             }
         }

@@ -297,16 +297,10 @@ struct MediaGridView: View {
                     viewModel.itemsPendingFileExport = nil
                     if success {
                         withAnimation {
-                            viewModel.batchStatusToast = String(localized: .Strings.galleryBatchSavedToFiles(urls.count))
                             viewModel.isSelectionMode = false
                             viewModel.selectedItems.removeAll()
                         }
-                        Task {
-                            try? await Task.sleep(for: .seconds(2.5))
-                            withAnimation {
-                                viewModel.batchStatusToast = nil
-                            }
-                        }
+                        viewModel.showToastMessage(String(localized: .Strings.galleryBatchSavedToFiles(urls.count)))
                     }
                 }
             }

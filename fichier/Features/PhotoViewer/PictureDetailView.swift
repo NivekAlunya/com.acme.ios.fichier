@@ -275,6 +275,10 @@ public struct PictureDetailView: View {
         .onAppear {
             AppKeyboardDismissal.dismiss()
         }
+        .onDisappear {
+            viewModel.cancelPrefetch()
+            viewModel.cancelAutoHideTimer()
+        }
         #if !os(tvOS)
         .background {
             // Hardware Keyboard Shortcuts for iPad and Mac

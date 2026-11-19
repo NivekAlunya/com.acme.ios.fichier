@@ -120,7 +120,7 @@ public struct TVVideoScrubberView: View {
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackProgress))
-        .accessibilityValue("\(formatTimestamp(displayTime)) of \(formatTimestamp(duration))")
+        .accessibilityValue(String(localized: .Strings.tvVideoProgressOfFormat(formatTimestamp(displayTime), formatTimestamp(duration))))
     }
 
     @ViewBuilder

@@ -33,6 +33,9 @@ actor SMBClientActor {
     /// Maximum number of share pages fetched in one pass to prevent infinite cursor loops.
     static let maxSharePages: Int = 20
 
+    /// Maximum byte limit when reading photo data for thumbnail generation (25 MB).
+    static let maxThumbnailDownloadBytes: Int64 = 25 * 1024 * 1024
+
     // MARK: - State Properties
 
     /// Factory constructing an `SMBClientProtocol` session (defaults to `FichierKit.AMSMB2Client`).
@@ -578,16 +581,6 @@ actor SMBClientActor {
             return diskCached
         }
 
-        // 3. For PDF documents already cached on disk in SMBDocuments, generate thumbnail directly from disk file
-        if item.isPDF && MediaCacheManager.shared.hasCachedDocument(for: item) {
-            let docURL = MediaCacheManager.shared.localDocumentURL(for: item)
-            if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: docURL, maxDimension: maxDimension) {
-                thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                return thumb
-            }
-        }
-
         if Task.isCancelled { return nil }
         if let expected = expectedFolderID, let active = activeFolderID, expected != active {
             return nil
@@ -596,38 +589,12 @@ actor SMBClientActor {
         guard let client else { return nil }
 
         do {
-            // Remote PDF: Fast-path prefix thumbnailing with bounded fallback
-            if item.isPDF {
-                if let prefixThumb = await fetchPDFPrefixThumbnail(for: item, maxDimension: maxDimension) {
-                    return prefixThumb
-                }
-
-                // Fallback for non-linearized documents: fetch full document if within safe bounded size (<= 12 MB)
-                // to prevent socket starvation during gallery browsing
-                let fileSize = item.size > 0 ? item.size : await fetchFileSize(for: item)
-                let maxDirectDownloadBytes: Int64 = 12 * 1024 * 1024
-                if fileSize > 0 && fileSize <= maxDirectDownloadBytes {
-                    do {
-                        let localURL = try await fetchDocumentURL(for: item)
-                        if let cachedThumb = thumbnailCache.object(forKey: memoryCacheKey) ?? MediaCacheManager.shared.getThumbnail(for: diskKey) {
-                            return cachedThumb
-                        }
-                        if let thumb = MediaCacheManager.shared.generatePDFThumbnail(from: localURL, maxDimension: maxDimension) {
-                            thumbnailCache.setObject(thumb, forKey: memoryCacheKey)
-                            MediaCacheManager.shared.saveThumbnail(thumb, for: diskKey)
-                            return thumb
-                        }
-                    } catch {
-                        if !Task.isCancelled {
-                            logw("Fallback PDF thumbnailing failed at \(item.shareName)/\(item.path): \(error.localizedDescription)")
-                        }
-                    }
-                }
-                return nil
-            }
-
             // Photo Thumbnail Handling via FichierKit SMBClientProtocol
-            let data = try await client.readFileData(share: item.shareName, path: item.smbRelativePath, maxBytes: nil)
+            let data = try await client.readFileData(
+                share: item.shareName,
+                path: item.smbRelativePath,
+                maxBytes: Self.maxThumbnailDownloadBytes
+            )
             if Task.isCancelled { return nil }
             if let expected = expectedFolderID, let active = activeFolderID, expected != active {
                 return nil

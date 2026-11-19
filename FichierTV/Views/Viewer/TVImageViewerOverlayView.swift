@@ -216,7 +216,11 @@ public struct TVImageViewerOverlayView: View {
             }
             .buttonStyle(TVOverlayButtonStyle())
             .focused($focusedTarget, equals: .toggleSlideshow)
-            .accessibilityLabel(isSlideshowPlaying ? "Pause slideshow" : "Start slideshow")
+            .accessibilityLabel(
+                isSlideshowPlaying
+                    ? Text(.Strings.tvSlideshowPauseAccessibility)
+                    : Text(.Strings.tvSlideshowStartAccessibility)
+            )
             .accessibilityIdentifier("image_slideshow_button")
 
             Button(action: onNext) {
