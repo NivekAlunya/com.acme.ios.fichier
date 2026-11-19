@@ -74,6 +74,10 @@ public final class TVBrowserViewModel {
         }
     }
 
+    isolated deinit {
+        prefetchTask?.cancel()
+    }
+
     /// Fetches the initial page of items, loading persisted sort and layout preferences first.
     public func loadInitial(force: Bool = false) async {
         guard force || !isLoading else { return }
@@ -192,7 +196,6 @@ public final class TVBrowserViewModel {
         guard key != selectedSortKey else { return }
         selectedSortKey = key
         applyCurrentSortToItems()
-        prefetchMetadataForSorting()
         let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
@@ -208,7 +211,6 @@ public final class TVBrowserViewModel {
         hasLoadedSavedPreference = true
         selectedSortOrder = (selectedSortOrder == .ascending) ? .descending : .ascending
         applyCurrentSortToItems()
-        prefetchMetadataForSorting()
         let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
@@ -239,11 +241,11 @@ public final class TVBrowserViewModel {
         let itemsToProbe = items.filter { $0.type != .folder }
         prefetchTask = Task { [weak self] in
             for item in itemsToProbe {
-                if Task.isCancelled { break }
+                if Task.isCancelled || self == nil { break }
                 _ = await MediaDetailStore.shared.resolveDetail(for: item)
             }
-            guard !Task.isCancelled else { return }
-            self?.applyCurrentSortToItems()
+            guard !Task.isCancelled, let self else { return }
+            self.applyCurrentSortToItems()
         }
     }
 
