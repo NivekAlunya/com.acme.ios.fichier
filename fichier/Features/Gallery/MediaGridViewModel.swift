@@ -122,6 +122,76 @@ final class MediaGridViewModel {
             return items.sorted { $0.size > $1.size }
         case .sizeAsc:
             return items.sorted { $0.size < $1.size }
+        case .kindAsc:
+            return items.sorted { lhs, rhs in
+                if lhs.kindRank != rhs.kindRank {
+                    return lhs.kindRank < rhs.kindRank
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .kindDesc:
+            return items.sorted { lhs, rhs in
+                if lhs.kindRank != rhs.kindRank {
+                    return lhs.kindRank > rhs.kindRank
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedDescending
+            }
+        case .resolutionDesc:
+            return items.sorted { lhs, rhs in
+                let lRes = lhs.pixelResolution
+                let rRes = rhs.pixelResolution
+                if lRes <= 0 && rRes <= 0 {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                if lRes <= 0 { return false }
+                if rRes <= 0 { return true }
+                if lRes != rRes {
+                    return lRes > rRes
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .resolutionAsc:
+            return items.sorted { lhs, rhs in
+                let lRes = lhs.pixelResolution
+                let rRes = rhs.pixelResolution
+                if lRes <= 0 && rRes <= 0 {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                if lRes <= 0 { return false }
+                if rRes <= 0 { return true }
+                if lRes != rRes {
+                    return lRes < rRes
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .durationDesc:
+            return items.sorted { lhs, rhs in
+                let lDur = lhs.durationSeconds
+                let rDur = rhs.durationSeconds
+                if lDur <= 0 && rDur <= 0 {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                if lDur <= 0 { return false }
+                if rDur <= 0 { return true }
+                if lDur != rDur {
+                    return lDur > rDur
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+        case .durationAsc:
+            return items.sorted { lhs, rhs in
+                let lDur = lhs.durationSeconds
+                let rDur = rhs.durationSeconds
+                if lDur <= 0 && rDur <= 0 {
+                    return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+                }
+                if lDur <= 0 { return false }
+                if rDur <= 0 { return true }
+                if lDur != rDur {
+                    return lDur < rDur
+                }
+                return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
         }
     }
 

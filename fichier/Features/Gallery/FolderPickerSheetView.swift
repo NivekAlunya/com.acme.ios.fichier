@@ -191,6 +191,8 @@ struct FolderPickerSheetView: View {
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Material.bar, for: .navigationBar)
+            .toolbar(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(.Strings.commonCancel) {

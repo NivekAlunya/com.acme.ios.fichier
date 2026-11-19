@@ -33,6 +33,7 @@ public final class TVBrowserViewModel {
     private var currentPage: Int = 0
     private var loadGeneration: Int = 0
     private let pageSize: Int = 40
+    private var prefetchTask: Task<Void, Never>?
 
     public var firstItemID: String? {
         items.first?.id
@@ -118,7 +119,9 @@ public final class TVBrowserViewModel {
             )
             guard activeGeneration == self.loadGeneration, !Task.isCancelled else { return }
             self.items = fetched
+            applyCurrentSortToItems()
             self.canLoadMore = fetched.count >= pageSize
+            prefetchMetadataForSorting()
         } catch is CancellationError {
             return
         } catch {
@@ -154,7 +157,9 @@ public final class TVBrowserViewModel {
             } else {
                 self.items.append(contentsOf: fetched)
                 self.currentPage = nextPage
+                applyCurrentSortToItems()
                 self.canLoadMore = fetched.count >= pageSize
+                prefetchMetadataForSorting()
             }
         } catch {
             // Leave existing items intact on stale, cancelled, or failed pagination;
@@ -186,6 +191,8 @@ public final class TVBrowserViewModel {
         hasLoadedSavedPreference = true
         guard key != selectedSortKey else { return }
         selectedSortKey = key
+        applyCurrentSortToItems()
+        prefetchMetadataForSorting()
         let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
@@ -200,12 +207,43 @@ public final class TVBrowserViewModel {
         hasUserChangedSort = true
         hasLoadedSavedPreference = true
         selectedSortOrder = (selectedSortOrder == .ascending) ? .descending : .ascending
+        applyCurrentSortToItems()
+        prefetchMetadataForSorting()
         let expectedGeneration = advanceGenerationForReload()
         let preference = MediaSortPreference(key: selectedSortKey, order: selectedSortOrder)
         Task {
             await preferenceStore.savePreference(preference, for: source.id)
             guard expectedGeneration == self.loadGeneration else { return }
             await loadInitial(force: true)
+        }
+    }
+
+    /// Re-evaluates sorting in memory using current sort key, order, and resolved metadata.
+    public func applyCurrentSortToItems() {
+        self.items = MediaSourceItemSortComparator.sortFoldersFirst(
+            self.items,
+            sortBy: selectedSortKey,
+            order: selectedSortOrder,
+            detailResolver: { id in
+                let res = MediaDetailStore.shared.resolution(for: id)
+                let dur = VideoPlaybackStore.shared.records[id]?.duration ?? MediaDetailStore.shared.duration(for: id)
+                return (res, dur)
+            }
+        )
+    }
+
+    /// Proactively probes duration and resolution metadata for sorting when key requires details.
+    public func prefetchMetadataForSorting() {
+        guard selectedSortKey == .duration || selectedSortKey == .resolution else { return }
+        prefetchTask?.cancel()
+        let itemsToProbe = items.filter { $0.type != .folder }
+        prefetchTask = Task { [weak self] in
+            for item in itemsToProbe {
+                if Task.isCancelled { break }
+                _ = await MediaDetailStore.shared.resolveDetail(for: item)
+            }
+            guard !Task.isCancelled else { return }
+            self?.applyCurrentSortToItems()
         }
     }
 
@@ -257,6 +295,7 @@ public final class TVBrowserViewModel {
 
     private func advanceGenerationForReload() -> Int {
         loadGeneration += 1
+        prefetchTask?.cancel()
         isLoading = true
         isPaginating = false
         return loadGeneration

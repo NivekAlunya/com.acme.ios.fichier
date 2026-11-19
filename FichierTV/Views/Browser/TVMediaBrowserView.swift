@@ -52,6 +52,11 @@ public struct TVMediaBrowserView: View {
                 }
             }
         }
+        .onChange(of: MediaDetailStore.shared.revision) { _, _ in
+            if viewModel?.selectedSortKey == .duration || viewModel?.selectedSortKey == .resolution {
+                viewModel?.applyCurrentSortToItems()
+            }
+        }
         .task(id: browserIdentity) {
             let activeViewModel = resolveViewModel()
             if activeViewModel.items.isEmpty {
@@ -75,11 +80,7 @@ public struct TVMediaBrowserView: View {
             if now.timeIntervalSince(lastPlayPauseTimestamp) < 0.4 {
                 viewModel?.toggleLayout()
             } else {
-                if focusedTarget == .sort {
-                    showingSortDialog = true
-                } else {
-                    focusedTarget = .sort
-                }
+                focusedTarget = .optionsMenu
             }
             lastPlayPauseTimestamp = now
         }
@@ -264,9 +265,7 @@ public struct TVMediaBrowserView: View {
     @ViewBuilder
     private func browserControlsBar(viewModel: TVBrowserViewModel) -> some View {
         HStack(spacing: 20) {
-            gridLayoutButton(viewModel: viewModel)
-            listLayoutButton(viewModel: viewModel)
-            sortOptionsButton(viewModel: viewModel)
+            browserOptionsMenu(viewModel: viewModel)
 
             Spacer()
 
@@ -286,54 +285,67 @@ public struct TVMediaBrowserView: View {
     }
 
     @ViewBuilder
-    private func gridLayoutButton(viewModel: TVBrowserViewModel) -> some View {
-        Button {
-            viewModel.setLayout(.grid)
-        } label: {
-            Label(.Strings.tvMediaViewGrid, systemImage: "square.grid.2x2")
-        }
-        .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .grid))
-        .focused($focusedTarget, equals: .grid)
-        .accessibilityLabel(Text(.Strings.tvMediaViewGridAccessibility))
-        .accessibilityAddTraits(viewModel.selectedLayout == .grid ? .isSelected : [])
-        .accessibilityIdentifier("browser_layout_grid_button")
-    }
+    private func browserOptionsMenu(viewModel: TVBrowserViewModel) -> some View {
+        Menu {
+            Section(.Strings.galleryMenuLayout) {
+                Button {
+                    viewModel.setLayout(.grid)
+                } label: {
+                    Label(
+                        String(localized: .Strings.tvMediaViewGrid),
+                        systemImage: viewModel.selectedLayout == .grid ? "checkmark" : "square.grid.2x2"
+                    )
+                }
 
-    @ViewBuilder
-    private func listLayoutButton(viewModel: TVBrowserViewModel) -> some View {
-        Button {
-            viewModel.setLayout(.list)
-        } label: {
-            Label(.Strings.tvMediaViewList, systemImage: "list.bullet")
-        }
-        .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .list))
-        .focused($focusedTarget, equals: .list)
-        .accessibilityLabel(Text(.Strings.tvMediaViewListAccessibility))
-        .accessibilityAddTraits(viewModel.selectedLayout == .list ? .isSelected : [])
-        .accessibilityIdentifier("browser_layout_list_button")
-    }
+                Button {
+                    viewModel.setLayout(.list)
+                } label: {
+                    Label(
+                        String(localized: .Strings.tvMediaViewList),
+                        systemImage: viewModel.selectedLayout == .list ? "checkmark" : "list.bullet"
+                    )
+                }
+            }
 
-    @ViewBuilder
-    private func sortOptionsButton(viewModel: TVBrowserViewModel) -> some View {
-        Button {
-            showingSortDialog = true
+            Section(.Strings.galleryMenuSortBy) {
+                ForEach(orderedSortKeys, id: \.self) { key in
+                    Button {
+                        viewModel.applySort(key: key)
+                    } label: {
+                        Label(
+                            key.displayTitle,
+                            systemImage: viewModel.selectedSortKey == key ? "checkmark" : "arrow.up.arrow.down"
+                        )
+                    }
+                }
+            }
+
+            Section {
+                Button {
+                    viewModel.toggleSortOrder()
+                } label: {
+                    Label(
+                        viewModel.selectedSortOrder == .ascending
+                            ? String(localized: .Strings.tvSortOrderAscendingToggle)
+                            : String(localized: .Strings.tvSortOrderDescendingToggle),
+                        systemImage: viewModel.selectedSortOrder == .ascending ? "arrow.up" : "arrow.down"
+                    )
+                }
+            }
         } label: {
             Label(
-                String(localized: .Strings.tvSortButtonLabel(viewModel.selectedSortKey.displayTitle)),
-                systemImage: viewModel.selectedSortOrder == .ascending ? "arrow.up" : "arrow.down"
+                String(localized: .Strings.tvBrowserMenuOptions),
+                systemImage: "ellipsis.circle"
             )
         }
         .buttonStyle(TVControlButtonStyle(isSelected: false))
-        .focused($focusedTarget, equals: .sort)
-        .accessibilityLabel(Text(.Strings.tvMediaSortOptionsAccessibility))
-        .accessibilityValue(
-            "\(viewModel.selectedSortKey.displayTitle), \(String(localized: viewModel.selectedSortOrder == .ascending ? .Strings.tvSortOrderAscending : .Strings.tvSortOrderDescending))"
-        )
-        .accessibilityIdentifier("browser_sort_button")
+        .focused($focusedTarget, equals: .optionsMenu)
+        .accessibilityLabel(Text(.Strings.tvBrowserMenuOptions))
+        .accessibilityIdentifier("browser_options_menu")
     }
 
     private var orderedSortKeys: [MediaSortKey] {
-        [MediaSortKey.name, .date, .size, .type].filter { source.supportedSortKeys.contains($0) }
+        [MediaSortKey.name, .date, .size, .type, .kind, .resolution, .duration].filter { source.supportedSortKeys.contains($0) }
     }
 
     // MARK: - Destination Routing
