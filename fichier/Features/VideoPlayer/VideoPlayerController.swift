@@ -103,11 +103,20 @@ public final class VideoPlayerController {
     /// Coordinator managing timeline scrubbing, live frame seeking, and debounce timers.
     public let seekCoordinator = VideoSeekCoordinator()
     
+    /// Coordinator managing downloading and saving video files to the system Photos library.
+    public let cameraRollExporter = VideoCameraRollExporter()
+
     /// Indicates whether export to Camera Roll is actively in flight.
-    public var isSaving: Bool = false
+    public var isSaving: Bool {
+        get { cameraRollExporter.isSaving }
+        set { cameraRollExporter.isSaving = newValue }
+    }
     
     /// Temporary toast message displayed after saving to Camera Roll.
-    public var saveStatusMessage: String?
+    public var saveStatusMessage: String? {
+        get { cameraRollExporter.saveStatusMessage }
+        set { cameraRollExporter.saveStatusMessage = newValue }
+    }
     
     /// Local file URL suitable for sharing via the system share sheet.
     public var shareableVideoURL: URL?
@@ -126,7 +135,6 @@ public final class VideoPlayerController {
     
     private var hideControlsTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
-    private var saveTask: Task<Void, Never>?
     private var resumeBannerTask: Task<Void, Never>?
     
     /// Designated public initializer.
@@ -199,15 +207,7 @@ public final class VideoPlayerController {
             }
         }
         
-        Task.detached(priority: .userInitiated) {
-            let session = AVAudioSession.sharedInstance()
-            do {
-                try session.setCategory(.playback, mode: .moviePlayback)
-                try session.setActive(true)
-            } catch {
-                loge("Failed to activate audio session: \(error.localizedDescription)")
-            }
-        }
+        VideoAudioSessionCoordinator.activatePlaybackSession()
         
         let ext = (item.name as NSString).pathExtension
         let isExtended = preferredKind.map { $0 == .extended } ?? SupportedMediaTypes.isExtendedVideo(extension: ext)
@@ -916,53 +916,11 @@ public final class VideoPlayerController {
     
     /// Downloads or copies the current video file into the system Photos library.
     public func saveToCameraRoll() {
-        isSaving = true
-        saveTask?.cancel()
-        withAnimation {
-            saveStatusMessage = String(localized: .Strings.videoPlayerDownloadingVideo)
-        }
-        saveTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { self.isSaving = false }
-            do {
-                let throttler = DownloadProgressThrottler()
-                let localURL = try await manager.fetchVideoURL(for: currentItem) { [weak self] bytes, total in
-                    Task {
-                        guard await throttler.shouldReport(bytes: bytes, total: total) else { return }
-                        await MainActor.run {
-                            guard let self, total > 0 else { return }
-                            let readStr = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-                            let totalStr = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
-                            let percent = (Double(bytes) / Double(total)).formatted(.percent.precision(.fractionLength(0)))
-                            self.saveStatusMessage = String(
-                                localized: .Strings.galleryDownloadProgressBytes(readStr, totalStr, percent)
-                            )
-                        }
-                    }
-                }
-                guard !Task.isCancelled else { return }
-                self.shareableVideoURL = localURL
-                withAnimation {
-                    self.saveStatusMessage = String(localized: .Strings.videoPlayerSavingToPhotos)
-                }
-                #if !os(tvOS)
-                try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
-                #endif
-                guard !Task.isCancelled else { return }
-                withAnimation {
-                    self.saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
-                }
-            } catch {
-                guard !Task.isCancelled else { return }
-                withAnimation {
-                    self.saveStatusMessage = String(localized: .Strings.commonErrorFailedToSave(error.localizedDescription))
-                }
-            }
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            withAnimation {
-                self.saveStatusMessage = nil
-            }
+        cameraRollExporter.saveToCameraRoll(
+            item: currentItem,
+            manager: manager
+        ) { [weak self] localURL in
+            self?.shareableVideoURL = localURL
         }
     }
     
@@ -1093,18 +1051,15 @@ public final class VideoPlayerController {
         seekCoordinator.reset()
         loadTask?.cancel()
         loadTask = nil
-        saveTask?.cancel()
-        saveTask = nil
+        cameraRollExporter.cancel()
         loaderDelegate?.cancelAll()
         loaderDelegate = nil
         currentAsset?.resourceLoader.setDelegate(nil, queue: nil)
         currentAsset = nil
         
-        clearCallbacks(for: extendedEngine)
+        clearCallbacks(for: engine)
         extendedEngine?.tearDown()
         extendedEngine = nil
-        
-        clearCallbacks(for: nativeEngine)
         nativeEngine?.tearDown()
         nativeEngine = nil
         engine = nil
@@ -1115,30 +1070,28 @@ public final class VideoPlayerController {
         errorMessage = nil
         
         if deactivateAudioSession {
-            Task.detached(priority: .utility) {
-                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            }
+            VideoAudioSessionCoordinator.deactivateSession()
         }
     }
     
-    private func clearCallbacks(for native: AVPlayerEngine?) {
-        native?.onPlaybackEnded = nil
-        native?.onError = nil
-        native?.onStateUpdate = nil
-        native?.onTimeUpdate = nil
-        native?.onDurationUpdate = nil
-        native?.onTracksChanged = nil
-        native?.onChaptersChanged = nil
-    }
-    
-    private func clearCallbacks(for extended: TVVLCPlayerEngine?) {
-        extended?.onPlaybackEnded = nil
-        extended?.onError = nil
-        extended?.onStateUpdate = nil
-        extended?.onTimeUpdate = nil
-        extended?.onDurationUpdate = nil
-        extended?.onTracksChanged = nil
-        extended?.onChaptersChanged = nil
+    private func clearCallbacks(for engine: (any PlayerEngine)?) {
+        if let native = engine as? AVPlayerEngine {
+            native.onPlaybackEnded = nil
+            native.onError = nil
+            native.onStateUpdate = nil
+            native.onTimeUpdate = nil
+            native.onDurationUpdate = nil
+            native.onTracksChanged = nil
+            native.onChaptersChanged = nil
+        } else if let extended = engine as? TVVLCPlayerEngine {
+            extended.onPlaybackEnded = nil
+            extended.onError = nil
+            extended.onStateUpdate = nil
+            extended.onTimeUpdate = nil
+            extended.onDurationUpdate = nil
+            extended.onTracksChanged = nil
+            extended.onChaptersChanged = nil
+        }
     }
     
     /// Centralized completion handler invoked when playback reaches the end timestamp.

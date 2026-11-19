@@ -58,18 +58,36 @@ public final class TVVideoPlayerViewModel {
     public var showOverlay: Bool = false
     public var activeFocusRow: TVVideoPlayerFocusRow = .buttons
     public var activeFocusedButton: TVVideoPlayerButtonKind = .playPause
-    public var isScrubbing: Bool = false
-    public var scrubbingTime: Double?
+    public let thumbnailCoordinator: TVVideoSeekThumbnailCoordinator
+    public let remoteSeekCoordinator: TVVideoRemoteSeekCoordinator
+
+    public var isScrubbing: Bool {
+        get { remoteSeekCoordinator.isScrubbing }
+        set { remoteSeekCoordinator.isScrubbing = newValue }
+    }
+    public var scrubbingTime: Double? {
+        get { remoteSeekCoordinator.scrubbingTime }
+        set { remoteSeekCoordinator.scrubbingTime = newValue }
+    }
 
     public private(set) var errorMessage: String?
     public var isShowingChaptersSheet: Bool = false
     public var isShowingTracksSheet: Bool = false
     public var isShowingSpeedSheet: Bool = false
-    public private(set) var remoteSeekPreview: TVRemoteSeekPreview?
-    public private(set) var seekThumbnailState: TVSeekThumbnailState?
+
+    public var remoteSeekPreview: TVRemoteSeekPreview? {
+        remoteSeekCoordinator.remoteSeekPreview
+    }
+    public var seekThumbnailState: TVSeekThumbnailState? {
+        get { thumbnailCoordinator.seekThumbnailState }
+        set { thumbnailCoordinator.seekThumbnailState = newValue }
+    }
 
     public var isRemoteSeekHolding: Bool {
-        activeRemoteSeekHold?.wasCancelledByMenu == false
+        remoteSeekCoordinator.isRemoteSeekHolding
+    }
+    var activeRemoteSeekHold: TVRemoteSeekHoldState? {
+        remoteSeekCoordinator.activeRemoteSeekHold
     }
 
     private let playbackStore: any VideoPlaybackStoreProtocol
@@ -80,27 +98,14 @@ public final class TVVideoPlayerViewModel {
     private var autoHideTask: Task<Void, Never>?
     private var progressPersistenceTask: Task<Void, Never>?
     private var mediaLoadTask: Task<Void, Never>?
-    private var remoteSeekHoldTask: Task<Void, Never>?
-    private var remoteSeekPreviewDismissTask: Task<Void, Never>?
-    private var thumbnailWorkerTask: Task<Void, Never>?
-    private var assetRegistrationTask: Task<Void, Never>?
     private var resolvedMediaURL: URL?
     private var directSMBURL: URL?
     private var vlcPlaybackOptions: VLCPlaybackOptions?
     private var smbResourceLoaderDelegate: SMBAVAssetResourceLoaderDelegate?
-    private var scrubHoldCounter: Int = 0
     private var hasAttemptedFallback: Bool = false
     private var isRemoteCommandBridgeActive: Bool = false
-    private var activeRemoteSeekHold: TVRemoteSeekHoldState?
-    private var lastRemoteSeekTap: TVRemoteSeekTapState?
-    private var recentCommittedSeekTarget: Double?
-    private var recentCommittedSeekUptime: TimeInterval?
     private var lastLocalPlayPauseUptime: TimeInterval?
     private var lastPublishedNowPlayingTime: Double = -10
-    private var latestThumbnailRequest: TVSeekThumbnailRequest?
-    private var latestThumbnailBucket: Double?
-    private var cachedBucketImages: [Int: UIImage] = [:]
-    private var cachedBucketOrder: [Int] = []
 
     public var currentItem: MediaSourceItem {
         guard !videos.isEmpty, currentIndex >= 0, currentIndex < videos.count else {
@@ -161,6 +166,27 @@ public final class TVVideoPlayerViewModel {
         self.thumbnailProvider = thumbnailProvider
         self.uptimeProvider = uptimeProvider
 
+        let thumbCoord = TVVideoSeekThumbnailCoordinator(thumbnailProvider: thumbnailProvider)
+        let seekCoord = TVVideoRemoteSeekCoordinator(uptimeProvider: uptimeProvider)
+        self.thumbnailCoordinator = thumbCoord
+        self.remoteSeekCoordinator = seekCoord
+
+        seekCoord.currentDurationProvider = { [weak self] in self?.duration ?? 0 }
+        seekCoord.currentTimeProvider = { [weak self] in self?.currentTime ?? 0 }
+        seekCoord.onCommitSeek = { [weak self] target, timestamp in
+            guard let self else { return }
+            self.commitRemoteSeek(to: target, at: timestamp)
+        }
+        seekCoord.onRequestThumbnail = { [weak self] target in
+            self?.requestSeekThumbnail(for: target)
+        }
+        seekCoord.onCancelThumbnails = { [weak self] clearState in
+            self?.thumbnailCoordinator.cancelSeekThumbnails(clearState: clearState)
+        }
+        seekCoord.onResetInactivityTimer = { [weak self] in
+            self?.resetInactivityTimer()
+        }
+
         setupEngineCallbacks()
     }
 
@@ -174,9 +200,6 @@ public final class TVVideoPlayerViewModel {
         directSMBURL = nil
         vlcPlaybackOptions = nil
         availableChapters = []
-        isScrubbing = false
-        scrubbingTime = nil
-        scrubHoldCounter = 0
         clearRemoteSeekState()
         resetCachedSeekThumbnails()
         lastPublishedNowPlayingTime = -10
@@ -188,8 +211,6 @@ public final class TVVideoPlayerViewModel {
         progressPersistenceTask = nil
         autoHideTask?.cancel()
         autoHideTask = nil
-        assetRegistrationTask?.cancel()
-        assetRegistrationTask = nil
 
         smbResourceLoaderDelegate?.cancelAll()
         smbResourceLoaderDelegate = nil
@@ -272,7 +293,7 @@ public final class TVVideoPlayerViewModel {
     /// Reveals the HUD overlay if hidden and resets auto-hide timing.
     public func revealOverlay() {
         resetInactivityTimer()
-        if let hold = activeRemoteSeekHold {
+        if let hold = remoteSeekCoordinator.activeRemoteSeekHold {
             cancelRemoteSeek(isForward: hold.isForward, source: hold.source)
         }
         guard !showOverlay else { return }
@@ -341,7 +362,6 @@ public final class TVVideoPlayerViewModel {
         let baseTime = scrubbingTime ?? currentTime
         let clampedTarget = max(0, min(duration, baseTime + delta))
         isScrubbing = true
-        scrubHoldCounter = 0
         scrubbingTime = clampedTarget
         requestSeekThumbnail(for: clampedTarget)
     }
@@ -374,14 +394,12 @@ public final class TVVideoPlayerViewModel {
         let clamped = max(0, min(upperBound, targetSeconds))
         let delta = clamped - currentTime
 
-        cancelScrub()
-        activeRemoteSeekHold = nil
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
+        clearRemoteSeekState()
         cancelSeekThumbnails(clearState: true)
 
-        commitRemoteSeek(to: clamped, at: uptimeProvider())
-        presentRemoteSeekPreview(
+        let timestamp = uptimeProvider()
+        commitRemoteSeek(to: clamped, at: timestamp)
+        remoteSeekCoordinator.presentRemoteSeekPreview(
             TVRemoteSeekPreview(targetTime: clamped, deltaSeconds: delta, isHolding: false)
         )
     }
@@ -467,13 +485,8 @@ public final class TVVideoPlayerViewModel {
     public func handleMenuPress() -> Bool {
         resetInactivityTimer()
 
-        if let hold = activeRemoteSeekHold, !hold.wasCancelledByMenu {
-            activeRemoteSeekHold = hold.cancellingByMenu()
-            remoteSeekHoldTask?.cancel()
-            remoteSeekHoldTask = nil
-            remoteSeekPreviewDismissTask?.cancel()
-            remoteSeekPreviewDismissTask = nil
-            remoteSeekPreview = nil
+        if let hold = remoteSeekCoordinator.activeRemoteSeekHold, !hold.wasCancelledByMenu {
+            remoteSeekCoordinator.cancelActiveRemoteSeekHoldByMenu()
             cancelSeekThumbnails(clearState: true)
             return true
         }
@@ -500,34 +513,8 @@ public final class TVVideoPlayerViewModel {
         timestamp: TimeInterval? = nil
     ) {
         guard errorMessage == nil, !videos.isEmpty else { return }
-
-        let eventTime = timestamp ?? uptimeProvider()
-        if let existing = activeRemoteSeekHold,
-           !existing.wasCancelledByMenu,
-           existing.source == source,
-           existing.isForward == isForward {
-            return
-        }
-
-        if isScrubbing {
-            cancelScrub()
-        }
-
         autoHideTask?.cancel()
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
-        remoteSeekPreviewDismissTask?.cancel()
-        remoteSeekPreviewDismissTask = nil
-
-        let anchorTime = effectiveSeekBaseTime(at: eventTime)
-        activeRemoteSeekHold = TVRemoteSeekHoldState(
-            isForward: isForward,
-            source: source,
-            anchorTime: anchorTime,
-            startTimestamp: eventTime,
-            wasCancelledByMenu: false
-        )
-        startRemoteSeekHoldPreviewLoop()
+        remoteSeekCoordinator.beginRemoteSeek(isForward: isForward, source: source, timestamp: timestamp)
     }
 
     /// Completes a `<<` / `>>` press gesture as a tap (`±15s`), double-tap within `0.50s` (`±60s`),
@@ -537,122 +524,23 @@ public final class TVVideoPlayerViewModel {
         source: TVRemoteSeekSource,
         timestamp: TimeInterval? = nil
     ) {
-        let releaseTime = timestamp ?? uptimeProvider()
-
-        guard let hold = activeRemoteSeekHold,
-              hold.source == source,
-              hold.isForward == isForward else {
-            if source == .hardwareMediaCommand {
-                triggerRemoteTapSkip(isForward: isForward, timestamp: releaseTime)
-            }
-            return
-        }
-
-        activeRemoteSeekHold = nil
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
-
-        guard !hold.wasCancelledByMenu else {
-            remoteSeekPreview = nil
-            resetInactivityTimer()
-            return
-        }
-
-        let heldDuration = max(0, releaseTime - hold.startTimestamp)
-        if heldDuration < TVRemoteSeekCalculator.shortTapMaxDuration {
-            performRemoteTapSkip(
-                isForward: isForward,
-                baseAnchorTime: hold.anchorTime,
-                timestamp: releaseTime
-            )
-            return
-        }
-
-        lastRemoteSeekTap = nil
-        let magnitude = TVRemoteSeekCalculator.progressiveHoldMagnitude(
-            for: heldDuration,
-            totalDuration: duration
-        )
-        let signedDelta = isForward ? magnitude : -magnitude
-        let targetTime = TVRemoteSeekCalculator.clampedTarget(
-            from: hold.anchorTime,
-            signedDelta: signedDelta,
-            duration: duration
-        )
-        let appliedDelta = targetTime - hold.anchorTime
-
-        cancelSeekThumbnails(clearState: false)
-        if seekThumbnailState?.image == nil {
-            seekThumbnailState = nil
-        }
-
-        commitRemoteSeek(to: targetTime, at: releaseTime)
-        presentRemoteSeekPreview(
-            TVRemoteSeekPreview(targetTime: targetTime, deltaSeconds: appliedDelta, isHolding: false)
-        )
+        remoteSeekCoordinator.endRemoteSeek(isForward: isForward, source: source, timestamp: timestamp)
     }
 
     /// Cancels an active press gesture without seeking playback (for example when UIKit cancels a press).
     public func cancelRemoteSeek(isForward: Bool, source: TVRemoteSeekSource) {
-        guard let hold = activeRemoteSeekHold,
-              hold.source == source,
-              hold.isForward == isForward else {
-            return
-        }
-        activeRemoteSeekHold = nil
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
-        remoteSeekPreviewDismissTask?.cancel()
-        remoteSeekPreviewDismissTask = nil
-        remoteSeekPreview = nil
-        cancelSeekThumbnails(clearState: true)
-        resetInactivityTimer()
+        remoteSeekCoordinator.cancelRemoteSeek(isForward: isForward, source: source)
     }
 
     /// Executes an immediate discrete `±15s` tap (upgrading to `±60s` total on a second tap within `0.50s`).
     public func triggerRemoteTapSkip(isForward: Bool, timestamp: TimeInterval? = nil) {
         guard errorMessage == nil, !videos.isEmpty else { return }
-
-        let eventTime = timestamp ?? uptimeProvider()
-        if isScrubbing {
-            cancelScrub()
-        }
-        activeRemoteSeekHold = nil
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
-
-        let baseAnchorTime = effectiveSeekBaseTime(at: eventTime)
-        performRemoteTapSkip(
-            isForward: isForward,
-            baseAnchorTime: baseAnchorTime,
-            timestamp: eventTime
-        )
+        remoteSeekCoordinator.triggerRemoteTapSkip(isForward: isForward, timestamp: timestamp)
     }
 
     /// Updates live preview state when an active hold has crossed the hold threshold (exposed for tests and 20 Hz loop).
     public func refreshActiveRemoteSeekPreview(at timestamp: TimeInterval? = nil) {
-        guard let hold = activeRemoteSeekHold, !hold.wasCancelledByMenu else { return }
-        let now = timestamp ?? uptimeProvider()
-        let elapsed = max(0, now - hold.startTimestamp)
-        guard elapsed >= TVRemoteSeekCalculator.shortTapMaxDuration else { return }
-
-        let magnitude = TVRemoteSeekCalculator.progressiveHoldMagnitude(
-            for: elapsed,
-            totalDuration: duration
-        )
-        let signedDelta = hold.isForward ? magnitude : -magnitude
-        let targetTime = TVRemoteSeekCalculator.clampedTarget(
-            from: hold.anchorTime,
-            signedDelta: signedDelta,
-            duration: duration
-        )
-        let appliedDelta = targetTime - hold.anchorTime
-        remoteSeekPreview = TVRemoteSeekPreview(
-            targetTime: targetTime,
-            deltaSeconds: appliedDelta,
-            isHolding: true
-        )
-        requestSeekThumbnail(for: targetTime)
+        remoteSeekCoordinator.refreshActiveRemoteSeekPreview(at: timestamp)
     }
 
     /// Starts or resumes playback cleanly.
@@ -708,358 +596,56 @@ public final class TVVideoPlayerViewModel {
 
     // MARK: - Scrubbing & Acceleration
 
-    private func adjustScrub(forward: Bool) {
-        isScrubbing = true
-        scrubHoldCounter += 1
-
-        let step = TVRemoteSeekCalculator.scrubStepMagnitude(
-            consecutiveSteps: scrubHoldCounter,
-            totalDuration: duration
-        )
-        let baseTime = scrubbingTime ?? currentTime
-        let target = forward ? baseTime + step : baseTime - step
-        let upperBound = duration > 0 ? duration : max(baseTime + step, target)
-        let clamped = max(0, min(upperBound, target))
-        scrubbingTime = clamped
-        requestSeekThumbnail(for: clamped)
+    public func adjustScrub(forward: Bool) {
+        remoteSeekCoordinator.adjustScrub(forward: forward)
     }
 
-    private func commitScrub() {
-        if let target = scrubbingTime {
-            activeEngine.seek(to: target, precision: .fast)
-            currentTime = target
-            recordCommittedSeek(target: target, at: uptimeProvider())
-            saveCurrentProgressSnapshot()
-            publishNowPlaying(force: true)
-        }
-        isScrubbing = false
-        scrubbingTime = nil
-        scrubHoldCounter = 0
-        cancelSeekThumbnails(clearState: true)
+    public func commitScrub() {
+        remoteSeekCoordinator.commitScrub()
     }
 
-    private func cancelScrub() {
-        isScrubbing = false
-        scrubbingTime = nil
-        scrubHoldCounter = 0
-        cancelSeekThumbnails(clearState: true)
+    public func cancelScrub() {
+        remoteSeekCoordinator.cancelScrub()
     }
 
     // MARK: - Remote Seek Mechanics
 
-    private func performRemoteTapSkip(
-        isForward: Bool,
-        baseAnchorTime: Double,
-        timestamp: TimeInterval
-    ) {
-        let sign: Double = isForward ? 1.0 : -1.0
-
-        if let previousTap = lastRemoteSeekTap,
-            previousTap.isForward == isForward,
-            previousTap.tapCountInPair == 1,
-            (timestamp - previousTap.releaseTimestamp) <= TVRemoteSeekCalculator.doubleTapWindow {
-            let totalTarget = TVRemoteSeekCalculator.clampedTarget(
-                from: previousTap.originTime,
-                signedDelta: sign * TVRemoteSeekCalculator.doubleTapTotalSkipSeconds,
-                duration: duration
-            )
-            let appliedDelta = totalTarget - previousTap.originTime
-            lastRemoteSeekTap = TVRemoteSeekTapState(
-                isForward: isForward,
-                releaseTimestamp: timestamp,
-                originTime: previousTap.originTime,
-                committedTargetTime: totalTarget,
-                tapCountInPair: 2
-            )
-            commitRemoteSeek(to: totalTarget, at: timestamp)
-            presentRemoteSeekPreview(
-                TVRemoteSeekPreview(targetTime: totalTarget, deltaSeconds: appliedDelta, isHolding: false)
-            )
-            requestSeekThumbnail(for: totalTarget)
-            return
-        }
-
-        let targetTime = TVRemoteSeekCalculator.clampedTarget(
-            from: baseAnchorTime,
-            signedDelta: sign * TVRemoteSeekCalculator.singleTapSkipSeconds,
-            duration: duration
-        )
-        let appliedDelta = targetTime - baseAnchorTime
-        lastRemoteSeekTap = TVRemoteSeekTapState(
-            isForward: isForward,
-            releaseTimestamp: timestamp,
-            originTime: baseAnchorTime,
-            committedTargetTime: targetTime,
-            tapCountInPair: 1
-        )
-        commitRemoteSeek(to: targetTime, at: timestamp)
-        presentRemoteSeekPreview(
-            TVRemoteSeekPreview(targetTime: targetTime, deltaSeconds: appliedDelta, isHolding: false)
-        )
-        requestSeekThumbnail(for: targetTime)
-    }
-
-    private func commitRemoteSeek(to targetTime: Double, at timestamp: TimeInterval) {
+    public func commitRemoteSeek(to targetTime: Double, at timestamp: TimeInterval) {
         activeEngine.seek(to: targetTime, precision: .fast)
         currentTime = targetTime
-        recordCommittedSeek(target: targetTime, at: timestamp)
+        remoteSeekCoordinator.recordCommittedSeek(target: targetTime, at: timestamp)
         saveCurrentProgressSnapshot()
         publishNowPlaying(force: true)
         resetInactivityTimer()
     }
 
-    private func effectiveSeekBaseTime(at timestamp: TimeInterval) -> Double {
-        if let recentTarget = recentCommittedSeekTarget,
-           let recentUptime = recentCommittedSeekUptime,
-           (timestamp - recentUptime) <= 1.25,
-           abs(currentTime - recentTarget) > 1.5 {
-            return recentTarget
-        }
-        return currentTime
-    }
-
-    private func recordCommittedSeek(target: Double, at timestamp: TimeInterval) {
-        recentCommittedSeekTarget = target
-        recentCommittedSeekUptime = timestamp
-    }
-
-    private func startRemoteSeekHoldPreviewLoop() {
-        remoteSeekHoldTask?.cancel()
-        // Remote hold-to-seek preview. The initial 300 ms delay distinguishes a deliberate hold from a
-        // short tap (taps are handled as a fixed jump). The loop then refreshes the preview target at
-        // a fixed tick, growing the step with hold duration, until the press ends or Menu cancels it.
-        // `self` is re-bound on each iteration so the task never keeps the view model alive.
-        remoteSeekHoldTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            while !Task.isCancelled {
-                guard let self, let hold = self.activeRemoteSeekHold, !hold.wasCancelledByMenu else {
-                    return
-                }
-                let elapsed = self.uptimeProvider() - hold.startTimestamp
-                let effectiveElapsed = max(TVRemoteSeekCalculator.shortTapMaxDuration, elapsed)
-                let magnitude = TVRemoteSeekCalculator.progressiveHoldMagnitude(
-                    for: effectiveElapsed,
-                    totalDuration: self.duration
-                )
-                let signedDelta = hold.isForward ? magnitude : -magnitude
-                let targetTime = TVRemoteSeekCalculator.clampedTarget(
-                    from: hold.anchorTime,
-                    signedDelta: signedDelta,
-                    duration: self.duration
-                )
-                let appliedDelta = targetTime - hold.anchorTime
-                self.remoteSeekPreview = TVRemoteSeekPreview(
-                    targetTime: targetTime,
-                    deltaSeconds: appliedDelta,
-                    isHolding: true
-                )
-                self.requestSeekThumbnail(for: targetTime)
-                try? await Task.sleep(for: .nanoseconds(Int(TVRemoteSeekCalculator.holdTickIntervalNanoseconds)))
-            }
-        }
-    }
-
-    private func presentRemoteSeekPreview(_ preview: TVRemoteSeekPreview) {
-        remoteSeekPreviewDismissTask?.cancel()
-        remoteSeekPreview = preview
-        remoteSeekPreviewDismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .nanoseconds(Int(TVRemoteSeekCalculator.previewVisibleDurationNanoseconds)))
-            guard !Task.isCancelled, let self else { return }
-            if self.activeRemoteSeekHold == nil {
-                self.remoteSeekPreview = nil
-                if !self.isScrubbing {
-                    self.seekThumbnailState = nil
-                }
-            }
-        }
-    }
-
     private func clearRemoteSeekState() {
-        remoteSeekHoldTask?.cancel()
-        remoteSeekHoldTask = nil
-        remoteSeekPreviewDismissTask?.cancel()
-        remoteSeekPreviewDismissTask = nil
-        activeRemoteSeekHold = nil
-        lastRemoteSeekTap = nil
-        recentCommittedSeekTarget = nil
-        recentCommittedSeekUptime = nil
-        remoteSeekPreview = nil
-        cancelSeekThumbnails(clearState: true)
+        remoteSeekCoordinator.reset()
     }
 
     // MARK: - Seek Frame Thumbnail Preview Worker
 
-    private func requestSeekThumbnail(for targetTime: Double) {
-        guard let mediaURL = resolvedMediaURL else { return }
-
-        let targetURL = directSMBURL ?? mediaURL
-        let safeDuration = duration
-        let bucket = TVSeekThumbnailService.bucketTimestamp(targetTime: targetTime, duration: safeDuration)
-        let bucketKey = Int(bucket.rounded())
-        let request = TVSeekThumbnailRequest(
-            url: targetURL,
+    public func requestSeekThumbnail(for targetTime: Double) {
+        let targetURL = directSMBURL ?? resolvedMediaURL
+        thumbnailCoordinator.requestSeekThumbnail(
+            for: targetTime,
+            duration: duration,
             assetKey: currentItem.id,
-            targetTime: targetTime,
-            duration: safeDuration,
+            targetURL: targetURL,
             engineKind: activeEngineKind,
-            vlcOptions: vlcPlaybackOptions
+            vlcOptions: vlcPlaybackOptions,
+            activeTargetProvider: { [weak self] in
+                self?.remoteSeekCoordinator.resolveActiveThumbnailTarget()
+            }
         )
-
-        latestThumbnailRequest = request
-        latestThumbnailBucket = bucket
-
-        if let cachedImage = cachedBucketImages[bucketKey] {
-            seekThumbnailState = TVSeekThumbnailState(
-                targetTime: targetTime,
-                bucketTime: bucket,
-                image: cachedImage,
-                isLoading: false
-            )
-            return
-        }
-
-        seekThumbnailState = TVSeekThumbnailState(
-            targetTime: targetTime,
-            bucketTime: bucket,
-            image: seekThumbnailState?.image,
-            isLoading: true
-        )
-
-        if thumbnailWorkerTask == nil {
-            thumbnailWorkerTask = Task { [weak self] in
-                await self?.runThumbnailWorkerLoop()
-            }
-        }
-    }
-
-    /// Single-flight worker generating seek-preview thumbnails.
-    ///
-    /// Scrubbing can request dozens of thumbnails per second, so requests are coalesced: only the
-    /// newest `latestThumbnailRequest` is processed and older ones are dropped. Times are bucketed
-    /// (`bucketTimestamp`) so nearby positions share one cached frame. Short settle and cooldown
-    /// delays throttle decoding, which is more expensive for extended (VLC) streams over SMB.
-    private func runThumbnailWorkerLoop() async {
-        let settleDuration: Duration = activeEngineKind == .extended ? .milliseconds(140) : .milliseconds(75)
-        try? await Task.sleep(for: settleDuration)
-
-        while !Task.isCancelled {
-            guard let request = latestThumbnailRequest else {
-                break
-            }
-            let targetBucket = TVSeekThumbnailService.bucketTimestamp(
-                targetTime: request.targetTime,
-                duration: request.duration
-            )
-            let bucketKey = Int(targetBucket.rounded())
-            latestThumbnailRequest = nil
-
-            if let cachedImage = cachedBucketImages[bucketKey] {
-                if !Task.isCancelled, resolveActiveThumbnailTarget() != nil,
-                   latestThumbnailBucket == targetBucket {
-                    seekThumbnailState = TVSeekThumbnailState(
-                        targetTime: resolveActiveThumbnailTarget() ?? request.targetTime,
-                        bucketTime: targetBucket,
-                        image: cachedImage,
-                        isLoading: false
-                    )
-                }
-                continue
-            }
-
-            let decoded = await thumbnailProvider.generateThumbnail(for: request)
-            // Discard the result if the task was cancelled or the player moved to another media item
-            // while decoding, so a stale frame from the previous video never shows up.
-            let activeTargetURL = directSMBURL ?? resolvedMediaURL
-            guard !Task.isCancelled, activeTargetURL == request.url else {
-                break
-            }
-
-            if let decoded {
-                storeCachedBucketImage(decoded, forBucketKey: bucketKey)
-            }
-
-            if let activeTarget = resolveActiveThumbnailTarget() {
-                let activeBucket = TVSeekThumbnailService.bucketTimestamp(targetTime: activeTarget, duration: duration)
-                if activeBucket == targetBucket {
-                    seekThumbnailState = TVSeekThumbnailState(
-                        targetTime: activeTarget,
-                        bucketTime: targetBucket,
-                        image: decoded,
-                        isLoading: false
-                    )
-                } else if let decoded {
-                    // The user moved on while this frame decoded: show it as a placeholder
-                    // (still `isLoading`) until the frame for the new bucket is ready.
-                    seekThumbnailState = TVSeekThumbnailState(
-                        targetTime: activeTarget,
-                        bucketTime: activeBucket,
-                        image: decoded,
-                        isLoading: true
-                    )
-                }
-            }
-
-            if latestThumbnailRequest != nil {
-                let cooldownDuration: Duration
-                if request.engineKind == .extended && !request.url.isFileURL {
-                    cooldownDuration = .milliseconds(300)
-                } else {
-                    cooldownDuration = .milliseconds(60)
-                }
-                try? await Task.sleep(for: cooldownDuration)
-            }
-        }
-
-        thumbnailWorkerTask = nil
-    }
-
-    private func resolveActiveThumbnailTarget() -> Double? {
-        if isScrubbing, let scrubbingTime {
-            return scrubbingTime
-        }
-        if let preview = remoteSeekPreview {
-            return preview.targetTime
-        }
-        return nil
-    }
-
-    private func storeCachedBucketImage(_ image: UIImage, forBucketKey key: Int) {
-        if cachedBucketImages[key] == nil {
-            cachedBucketOrder.append(key)
-            if cachedBucketOrder.count > 48, let evicted = cachedBucketOrder.first {
-                cachedBucketOrder.removeFirst()
-                cachedBucketImages.removeValue(forKey: evicted)
-            }
-        }
-        cachedBucketImages[key] = image
     }
 
     private func cancelSeekThumbnails(clearState: Bool) {
-        thumbnailWorkerTask?.cancel()
-        thumbnailWorkerTask = nil
-        latestThumbnailRequest = nil
-        latestThumbnailBucket = nil
-        if clearState {
-            seekThumbnailState = nil
-        } else if let currentState = seekThumbnailState {
-            seekThumbnailState = TVSeekThumbnailState(
-                targetTime: currentState.targetTime,
-                bucketTime: currentState.bucketTime,
-                image: currentState.image,
-                isLoading: false
-            )
-        }
+        thumbnailCoordinator.cancelSeekThumbnails(clearState: clearState)
     }
 
     private func resetCachedSeekThumbnails() {
-        cancelSeekThumbnails(clearState: true)
-        cachedBucketImages.removeAll()
-        cachedBucketOrder.removeAll()
-        let keyToInvalidate = currentItem.id
-        assetRegistrationTask?.cancel()
-        assetRegistrationTask = Task { [thumbnailProvider] in
-            await thumbnailProvider.invalidateAsset(forAssetKey: keyToInvalidate)
-        }
+        thumbnailCoordinator.reset(forAssetKey: currentItem.id)
     }
 
     private func activateRemoteCommandBridgeIfNeeded() {
@@ -1474,11 +1060,7 @@ public final class TVVideoPlayerViewModel {
 
                 let asset = AVURLAsset(url: streamURL)
                 asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
-                self.assetRegistrationTask?.cancel()
-                self.assetRegistrationTask = Task { [weak self, thumbnailProvider] in
-                    guard let self, !Task.isCancelled, self.currentItem.id == itemID else { return }
-                    await thumbnailProvider.registerAsset(asset, forAssetKey: itemID)
-                }
+                self.thumbnailCoordinator.registerAsset(asset, forAssetKey: itemID)
 
                 let playerItem = AVPlayerItem(asset: asset)
                 playerItem.preferredForwardBufferDuration = 2.0
@@ -1582,8 +1164,7 @@ public final class TVVideoPlayerViewModel {
         deactivateRemoteCommandBridge()
         mediaLoadTask?.cancel()
         mediaLoadTask = nil
-        assetRegistrationTask?.cancel()
-        assetRegistrationTask = nil
+        thumbnailCoordinator.cancelSeekThumbnails(clearState: true)
         autoHideTask?.cancel()
         autoHideTask = nil
         progressPersistenceTask?.cancel()
