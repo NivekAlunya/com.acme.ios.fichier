@@ -41,15 +41,13 @@ public struct TVThumbnailView: View {
         ZStack {
             Color.secondary.opacity(0.15)
 
-            Image(systemName: iconName)
-                .font(.system(size: min(targetSize.width, targetSize.height) * 0.35))
-                .foregroundStyle(.secondary)
-
             if isLoading {
                 ProgressView()
-                    .controlSize(.small)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                Image(systemName: iconName)
+                    .font(.system(size: min(targetSize.width, targetSize.height) * 0.35))
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -123,7 +121,8 @@ public struct TVThumbnailView: View {
                 return await SMBVideoThumbnailLoader.shared.loadThumbnail(
                     from: localURL,
                     fileName: item.name,
-                    targetSize: targetSize
+                    targetSize: targetSize,
+                    itemID: item.id
                 )
             } else if let sourceID = item.sourceID,
                       let share = item.smbShare,
@@ -134,7 +133,8 @@ public struct TVThumbnailView: View {
                     path: path,
                     fileName: item.name,
                     fileSize: item.size,
-                    targetSize: targetSize
+                    targetSize: targetSize,
+                    itemID: item.id
                 )
             } else {
                 return nil

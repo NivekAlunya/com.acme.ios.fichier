@@ -16,8 +16,9 @@ public struct TVMediaBrowserView: View {
 
     @State private var viewModel: TVBrowserViewModel?
     @State private var showingSortDialog: Bool = false
-    @FocusState private var focusedItemID: String?
+    @FocusState private var focusedTarget: TVBrowserFocusTarget?
     @State private var hasAppliedInitialFocus: Bool = false
+    @State private var lastPlayPauseTimestamp: Date = .distantPast
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -42,12 +43,12 @@ public struct TVMediaBrowserView: View {
             }
         }
         .navigationTitle(folder?.name ?? source.displayName)
-        .defaultFocus($focusedItemID, viewModel?.firstItemID)
+        .defaultFocus($focusedTarget, viewModel?.firstItemID.map { .item($0) })
         .onChange(of: viewModel?.firstItemID) { _, newFirstID in
             if !hasAppliedInitialFocus, let newFirstID {
                 hasAppliedInitialFocus = true
-                if focusedItemID == nil {
-                    focusedItemID = newFirstID
+                if focusedTarget == nil {
+                    focusedTarget = .item(newFirstID)
                 }
             }
         }
@@ -61,13 +62,26 @@ public struct TVMediaBrowserView: View {
             }
             if !hasAppliedInitialFocus, let firstID = activeViewModel.firstItemID {
                 hasAppliedInitialFocus = true
-                if focusedItemID == nil {
-                    focusedItemID = firstID
+                if focusedTarget == nil {
+                    focusedTarget = .item(firstID)
                 }
             }
         }
         .refreshable {
             await viewModel?.refreshCurrentFolder()
+        }
+        .onPlayPauseCommand {
+            let now = Date()
+            if now.timeIntervalSince(lastPlayPauseTimestamp) < 0.4 {
+                viewModel?.toggleLayout()
+            } else {
+                if focusedTarget == .sort {
+                    showingSortDialog = true
+                } else {
+                    focusedTarget = .sort
+                }
+            }
+            lastPlayPauseTimestamp = now
         }
     }
 
@@ -85,7 +99,7 @@ public struct TVMediaBrowserView: View {
             return existing
         }
         hasAppliedInitialFocus = false
-        focusedItemID = nil
+        focusedTarget = nil
         showingSortDialog = false
         let created = TVBrowserViewModel(source: source, folder: folder)
         viewModel = created
@@ -117,7 +131,6 @@ public struct TVMediaBrowserView: View {
                         .focusSection()
 
                     contentLayout(viewModel: viewModel)
-                        .focusSection()
                 }
             }
         }
@@ -175,7 +188,10 @@ public struct TVMediaBrowserView: View {
                         TVMediaGridItemView(item: item)
                     }
                     .buttonStyle(.card)
-                    .focused($focusedItemID, equals: item.id)
+                    .focused($focusedTarget, equals: .item(item.id))
+                    .contextMenu {
+                        layoutContextMenu(viewModel: viewModel)
+                    }
                     .onAppear {
                         viewModel.onItemAppear(item: item)
                     }
@@ -196,7 +212,10 @@ public struct TVMediaBrowserView: View {
                         TVMediaListRowView(item: item)
                     }
                     .buttonStyle(.card)
-                    .focused($focusedItemID, equals: item.id)
+                    .focused($focusedTarget, equals: .item(item.id))
+                    .contextMenu {
+                        layoutContextMenu(viewModel: viewModel)
+                    }
                     .onAppear {
                         viewModel.onItemAppear(item: item)
                     }
@@ -204,6 +223,31 @@ public struct TVMediaBrowserView: View {
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 20)
+        }
+    }
+
+    @ViewBuilder
+    private func layoutContextMenu(viewModel: TVBrowserViewModel) -> some View {
+        Button {
+            viewModel.toggleLayout()
+        } label: {
+            Label(
+                viewModel.selectedLayout == .grid
+                    ? String(localized: .Strings.tvMediaViewList)
+                    : String(localized: .Strings.tvMediaViewGrid),
+                systemImage: viewModel.selectedLayout == .grid
+                    ? "list.bullet"
+                    : "square.grid.2x2"
+            )
+        }
+
+        Button {
+            showingSortDialog = true
+        } label: {
+            Label(
+                String(localized: .Strings.galleryMenuSortBy),
+                systemImage: "arrow.up.arrow.down"
+            )
         }
     }
 
@@ -249,6 +293,7 @@ public struct TVMediaBrowserView: View {
             Label(.Strings.tvMediaViewGrid, systemImage: "square.grid.2x2")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .grid))
+        .focused($focusedTarget, equals: .grid)
         .accessibilityLabel(Text(.Strings.tvMediaViewGridAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .grid ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_grid_button")
@@ -262,6 +307,7 @@ public struct TVMediaBrowserView: View {
             Label(.Strings.tvMediaViewList, systemImage: "list.bullet")
         }
         .buttonStyle(TVControlButtonStyle(isSelected: viewModel.selectedLayout == .list))
+        .focused($focusedTarget, equals: .list)
         .accessibilityLabel(Text(.Strings.tvMediaViewListAccessibility))
         .accessibilityAddTraits(viewModel.selectedLayout == .list ? .isSelected : [])
         .accessibilityIdentifier("browser_layout_list_button")
@@ -278,6 +324,7 @@ public struct TVMediaBrowserView: View {
             )
         }
         .buttonStyle(TVControlButtonStyle(isSelected: false))
+        .focused($focusedTarget, equals: .sort)
         .accessibilityLabel(Text(.Strings.tvMediaSortOptionsAccessibility))
         .accessibilityValue(
             "\(viewModel.selectedSortKey.displayTitle), \(String(localized: viewModel.selectedSortOrder == .ascending ? .Strings.tvSortOrderAscending : .Strings.tvSortOrderDescending))"

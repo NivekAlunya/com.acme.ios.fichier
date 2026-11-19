@@ -21,6 +21,7 @@ public struct TVMediaGridItemView: View {
 
     /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
     private var displayedDetail: String? {
+        _ = MediaDetailStore.shared.revision
         if let cached = MediaDetailStore.shared.cachedDetail(for: item.id) {
             return cached
         }

@@ -159,12 +159,7 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
             return true
         case (.some(let lc), .some(let rc)):
             guard lc.count == rc.count else { return false }
-            return zip(lc, rc).allSatisfy {
-                $0.id == $1.id &&
-                $0.size == $1.size &&
-                $0.modifiedDate == $1.modifiedDate &&
-                $0.name == $1.name
-            }
+            return zip(lc, rc).allSatisfy { $0 == $1 }
         default:
             return false
         }

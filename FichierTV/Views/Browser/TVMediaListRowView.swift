@@ -13,7 +13,8 @@ public struct TVMediaListRowView: View {
     @State private var mediaDetail: String?
 
     private var displayedDetail: String? {
-        MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail
+        _ = MediaDetailStore.shared.revision
+        return MediaDetailStore.shared.cachedDetail(for: item.id) ?? mediaDetail
     }
 
     public init(item: MediaSourceItem) {

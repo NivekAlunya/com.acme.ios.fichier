@@ -112,10 +112,10 @@ struct FolderTreeNodeView: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.secondary)
-                    .frame(width: 22, height: 22)
+                    .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             
             // Folder selection button (loads media, expands tree & navigates to detail view)
             Button {
