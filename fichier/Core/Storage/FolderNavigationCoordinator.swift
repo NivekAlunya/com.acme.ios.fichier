@@ -71,16 +71,13 @@ public final class FolderNavigationCoordinator {
     ///   - nodes: The tree nodes to search.
     /// - Returns: The parent `MediaItem` if discovered in the tree, or `nil`.
     public func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
-        for node in nodes {
-            guard let children = node.children else { continue }
+        nodes.lazy.compactMap { node -> MediaItem? in
+            guard let children = node.children else { return nil }
             if children.contains(where: { $0.id == target.id }) {
                 return node
             }
-            if let found = findParentInTree(for: target, in: children) {
-                return found
-            }
-        }
-        return nil
+            return self.findParentInTree(for: target, in: children)
+        }.first
     }
     
     /// Synthesizes a parent `MediaItem` using path-based string surgery when tree metadata is unavailable.

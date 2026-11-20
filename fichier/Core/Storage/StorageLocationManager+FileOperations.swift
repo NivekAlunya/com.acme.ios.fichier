@@ -261,12 +261,11 @@ extension StorageLocationManager {
         var updated = nodes
         for idx in updated.indices {
             if updated[idx].id == targetID {
-                let oldItem = updated[idx]
                 var replacement = renamedItem
-                if let children = oldItem.children {
+                if let children = updated[idx].children {
                     replacement.children = updateDescendantPaths(
                         in: children,
-                        oldPathPrefix: oldItem.path,
+                        oldPathPrefix: updated[idx].path,
                         newPathPrefix: renamedItem.path,
                         newParentURL: renamedItem.localURL
                     )

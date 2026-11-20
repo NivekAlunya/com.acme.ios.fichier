@@ -322,14 +322,9 @@ public final class StorageLocationManager {
     
     /// Aggregated list of all available storage locations, ordered with Photos first, followed by folders and SMB servers.
     public var allLocations: [StorageLocation] {
-        var list: [StorageLocation] = [StorageLocation.photos]
-        for folder in savedFolderLocations {
-            list.append(StorageLocation(folder: folder))
-        }
-        for conn in savedConnections {
-            list.append(StorageLocation(smb: conn))
-        }
-        return list
+        [StorageLocation.photos]
+            + savedFolderLocations.map { StorageLocation(folder: $0) }
+            + savedConnections.map { StorageLocation(smb: $0) }
     }
     
     /// Loads and decodes local folder bookmarks from `UserDefaults`.
@@ -817,16 +812,10 @@ public final class StorageLocationManager {
     
     /// Recursively collects all folder nodes within the tree that currently maintain loaded child subfolders.
     private func collectNodesWithChildren(in nodes: [MediaItem]) -> [MediaItem] {
-        var result: [MediaItem] = []
-        for node in nodes {
-            if let children = node.children {
-                result.append(node)
-                if !children.isEmpty {
-                    result.append(contentsOf: collectNodesWithChildren(in: children))
-                }
-            }
+        nodes.flatMap { node -> [MediaItem] in
+            guard let children = node.children else { return [] }
+            return [node] + (children.isEmpty ? [] : collectNodesWithChildren(in: children))
         }
-        return result
     }
 
     /// Pure functional recursive tree traversal that injects loaded child nodes into the corresponding parent.
