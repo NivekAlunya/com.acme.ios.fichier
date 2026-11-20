@@ -70,6 +70,24 @@ final class FolderNavigationCoordinatorTests: XCTestCase {
         let resolved = coordinator.resolveParentFolder(for: child, in: [parent])
         XCTAssertEqual(resolved?.id, parent.id)
     }
+
+    func testFindParentInDeeplyNestedTreeAndMissingTarget() {
+        let leaf = MediaItem(locationID: "smb_1", name: "Leaf", rootName: "Share", path: "/A/B/C/Leaf", isDirectory: true)
+        var c = MediaItem(locationID: "smb_1", name: "C", rootName: "Share", path: "/A/B/C", isDirectory: true)
+        c.children = [leaf]
+        var b = MediaItem(locationID: "smb_1", name: "B", rootName: "Share", path: "/A/B", isDirectory: true)
+        b.children = [c]
+        var a = MediaItem(locationID: "smb_1", name: "A", rootName: "Share", path: "/A", isDirectory: true)
+        a.children = [b]
+
+        // Find parent in 3 levels deep
+        let foundParent = coordinator.findParentInTree(for: leaf, in: [a])
+        XCTAssertEqual(foundParent?.id, c.id)
+
+        // Missing target returns nil
+        let missing = MediaItem(locationID: "smb_1", name: "Missing", rootName: "Share", path: "/X/Y/Z", isDirectory: true)
+        XCTAssertNil(coordinator.findParentInTree(for: missing, in: [a]))
+    }
     
     func testDeriveParentFolderForSMBPaths() {
         let deep = MediaItem(locationID: "smb_1", name: "Deep", rootName: "Share", path: "/A/B/Deep", isDirectory: true)

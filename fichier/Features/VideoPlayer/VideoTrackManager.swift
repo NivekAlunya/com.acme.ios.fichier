@@ -87,12 +87,14 @@ public final class VideoTrackManager {
             let audioOptions = audioGroup.options.enumerated().map { idx, option in
                 let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerTrackFallback(idx + 1)) : option.displayName
                 let trackID = "audio_\(idx)_\(name)"
-                if option == currentSelection || (currentSelection == nil && idx == 0) {
-                    selectedAudioID = trackID
-                }
                 return VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
             }
             self.availableAudios = audioOptions
+            if let currentSelection, let match = audioOptions.first(where: { $0.mediaOption == currentSelection }) {
+                selectedAudioID = match.id
+            } else {
+                selectedAudioID = audioOptions.first?.id
+            }
         }
         
         // 2. Subtitles Tracks
@@ -102,19 +104,18 @@ public final class VideoTrackManager {
             let currentSelection = playerItem.currentMediaSelection.selectedMediaOption(in: subGroup)
             
             let offOption = VideoTrackOption(id: "sub_off", displayName: String(localized: .Strings.videoPlayerSubtitlesOff), mediaOption: nil)
-            if currentSelection == nil {
-                selectedSubtitleID = "sub_off"
-            }
-
             let parsedSubOptions = subGroup.options.enumerated().map { idx, option in
                 let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerSubtitleFallback(idx + 1)) : option.displayName
                 let trackID = "sub_\(idx)_\(name)"
-                if option == currentSelection {
-                    selectedSubtitleID = trackID
-                }
                 return VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
             }
             self.availableSubtitles = [offOption] + parsedSubOptions
+
+            if let currentSelection, let match = parsedSubOptions.first(where: { $0.mediaOption == currentSelection }) {
+                selectedSubtitleID = match.id
+            } else {
+                selectedSubtitleID = "sub_off"
+            }
             
             // Attach legible output to extract text directly
             if !subGroup.options.isEmpty {

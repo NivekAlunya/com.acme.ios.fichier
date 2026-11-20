@@ -331,17 +331,15 @@ actor SMBClientActor {
             throw CancellationError()
         }
 
-        let mappedItems = try sourceItems.map { sourceItem in
+        let (folders, pictures) = try sourceItems.reduce(into: ([MediaItem](), [MediaItem]())) { result, sourceItem in
             if Task.isCancelled { throw CancellationError() }
-            return MediaItem(
-                sourceItem: sourceItem,
-                locationID: connID,
-                rootName: shareName
-            )
+            let mapped = MediaItem(sourceItem: sourceItem, locationID: connID, rootName: shareName)
+            if mapped.isDirectory {
+                result.0.append(mapped)
+            } else {
+                result.1.append(mapped)
+            }
         }
-
-        let folders = mappedItems.filter(\.isDirectory)
-        let pictures = mappedItems.filter { !$0.isDirectory }
 
         return (folders, pictures)
     }
