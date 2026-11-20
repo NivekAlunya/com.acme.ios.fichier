@@ -20,18 +20,15 @@ final class LocationsSidebarViewModel {
     
     /// Flattened collection of storage locations and discovered SMB shares for sidebar rendering.
     var sidebarItems: [SidebarItem] {
-        var items: [SidebarItem] = []
-        for location in manager.allLocations {
-            items.append(.location(location))
+        manager.allLocations.flatMap { location -> [SidebarItem] in
+            var items: [SidebarItem] = [.location(location)]
             if location.kind == .smb,
                manager.isConnected,
                manager.currentLocation?.id == location.id {
-                for share in manager.serverShares {
-                    items.append(.share(share))
-                }
+                items.append(contentsOf: manager.serverShares.map(SidebarItem.share))
             }
+            return items
         }
-        return items
     }
 
     // MARK: - Presentation & Error State

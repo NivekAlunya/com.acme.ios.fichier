@@ -84,16 +84,13 @@ public final class VideoTrackManager {
             self.audibleGroup = audioGroup
             let currentSelection = playerItem.currentMediaSelection.selectedMediaOption(in: audioGroup)
             
-            var audioOptions: [VideoTrackOption] = []
-            for (idx, option) in audioGroup.options.enumerated() {
+            let audioOptions = audioGroup.options.enumerated().map { idx, option in
                 let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerTrackFallback(idx + 1)) : option.displayName
                 let trackID = "audio_\(idx)_\(name)"
-                let trackOption = VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
-                audioOptions.append(trackOption)
-                
                 if option == currentSelection || (currentSelection == nil && idx == 0) {
                     selectedAudioID = trackID
                 }
+                return VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
             }
             self.availableAudios = audioOptions
         }
@@ -104,27 +101,20 @@ public final class VideoTrackManager {
             self.legibleGroup = subGroup
             let currentSelection = playerItem.currentMediaSelection.selectedMediaOption(in: subGroup)
             
-            var subOptions: [VideoTrackOption] = []
-            
-            // "Off" option
             let offOption = VideoTrackOption(id: "sub_off", displayName: String(localized: .Strings.videoPlayerSubtitlesOff), mediaOption: nil)
-            subOptions.append(offOption)
-            
             if currentSelection == nil {
                 selectedSubtitleID = "sub_off"
             }
-            
-            for (idx, option) in subGroup.options.enumerated() {
+
+            let parsedSubOptions = subGroup.options.enumerated().map { idx, option in
                 let name = option.displayName.isEmpty ? String(localized: .Strings.videoPlayerSubtitleFallback(idx + 1)) : option.displayName
                 let trackID = "sub_\(idx)_\(name)"
-                let trackOption = VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
-                subOptions.append(trackOption)
-                
                 if option == currentSelection {
                     selectedSubtitleID = trackID
                 }
+                return VideoTrackOption(id: trackID, displayName: name, mediaOption: option)
             }
-            self.availableSubtitles = subOptions
+            self.availableSubtitles = [offOption] + parsedSubOptions
             
             // Attach legible output to extract text directly
             if !subGroup.options.isEmpty {
@@ -176,25 +166,22 @@ public final class VideoTrackManager {
         let engineSubtitles = playerEngine.availableSubtitleTracks
         var subOptions: [VideoTrackOption] = []
         if !engineSubtitles.isEmpty {
-            subOptions.append(
-                VideoTrackOption(
-                    id: "sub_off",
-                    displayName: String(localized: .Strings.videoPlayerSubtitlesOff),
-                    playerSubtitleTrack: nil
-                )
+            let offOption = VideoTrackOption(
+                id: "sub_off",
+                displayName: String(localized: .Strings.videoPlayerSubtitlesOff),
+                playerSubtitleTrack: nil
             )
-            for (idx, track) in engineSubtitles.enumerated() {
+            let parsedSubtitles = engineSubtitles.enumerated().map { idx, track in
                 let name = track.title.isEmpty
                     ? String(localized: .Strings.videoPlayerSubtitleFallback(idx + 1))
                     : track.title
-                subOptions.append(
-                    VideoTrackOption(
-                        id: track.id,
-                        displayName: name,
-                        playerSubtitleTrack: track
-                    )
+                return VideoTrackOption(
+                    id: track.id,
+                    displayName: name,
+                    playerSubtitleTrack: track
                 )
             }
+            subOptions = [offOption] + parsedSubtitles
         }
         self.availableSubtitles = subOptions
 

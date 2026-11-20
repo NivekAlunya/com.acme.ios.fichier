@@ -1138,10 +1138,7 @@ public final class TVVideoPlayerViewModel {
                     hasMoreSourcePages = false
                 }
 
-                let newVideos = fetched.filter { $0.type == .video && !seenItemIDs.contains($0.id) }
-                for video in newVideos {
-                    seenItemIDs.insert(video.id)
-                }
+                let newVideos = fetched.filter { $0.type == .video && seenItemIDs.insert($0.id).inserted }
 
                 if !newVideos.isEmpty {
                     videos.append(contentsOf: newVideos)

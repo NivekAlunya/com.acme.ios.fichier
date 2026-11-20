@@ -122,14 +122,13 @@ struct FolderPickerSheetView: View {
     
     /// Flattens the visible tree nodes based on current expansion state.
     private func visibleNodes(from items: [MediaItem], level: Int = 0) -> [(folder: MediaItem, level: Int)] {
-        var result: [(folder: MediaItem, level: Int)] = []
-        for item in items {
-            result.append((folder: item, level: level))
+        items.flatMap { item -> [(folder: MediaItem, level: Int)] in
+            var nodes = [(folder: item, level: level)]
             if expandedIDs.contains(item.id), let children = item.children {
-                result.append(contentsOf: visibleNodes(from: children, level: level + 1))
+                nodes.append(contentsOf: visibleNodes(from: children, level: level + 1))
             }
+            return nodes
         }
-        return result
     }
     
     var body: some View {

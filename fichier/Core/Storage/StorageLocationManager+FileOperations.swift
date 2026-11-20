@@ -258,27 +258,26 @@ extension StorageLocationManager {
     
     /// Recursively renames a directory node inside the hierarchical folder tree and updates descendant paths.
     private func renameNodeInTree(in nodes: [MediaItem], targetID: String, renamedItem: MediaItem) -> [MediaItem] {
-        var updated = nodes
-        for idx in updated.indices {
-            if updated[idx].id == targetID {
-                let oldItem = updated[idx]
+        nodes.map { node in
+            if node.id == targetID {
                 var replacement = renamedItem
-                if let children = oldItem.children {
+                if let children = node.children {
                     replacement.children = updateDescendantPaths(
                         in: children,
-                        oldPathPrefix: oldItem.path,
+                        oldPathPrefix: node.path,
                         newPathPrefix: renamedItem.path,
                         newParentURL: renamedItem.localURL
                     )
                 }
-                updated[idx] = replacement
-                return updated
+                return replacement
             }
-            if let children = updated[idx].children {
-                updated[idx].children = renameNodeInTree(in: children, targetID: targetID, renamedItem: renamedItem)
+            if let children = node.children {
+                var modified = node
+                modified.children = renameNodeInTree(in: children, targetID: targetID, renamedItem: renamedItem)
+                return modified
             }
+            return node
         }
-        return updated
     }
 
     /// Recursively updates relative paths and local file URLs for all descendants of a renamed directory node.

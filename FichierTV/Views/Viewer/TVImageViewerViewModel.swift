@@ -477,15 +477,9 @@ public final class TVImageViewerViewModel {
         _ candidates: [MediaSourceItem],
         existingIDs: inout Set<String>
     ) -> [MediaSourceItem] {
-        var result: [MediaSourceItem] = []
-        result.reserveCapacity(candidates.count)
-        for candidate in candidates {
-            guard isValidImageItem(candidate) else { continue }
-            if existingIDs.insert(candidate.id).inserted {
-                result.append(candidate)
-            }
+        candidates.filter { candidate in
+            isValidImageItem(candidate) && existingIDs.insert(candidate.id).inserted
         }
-        return result
     }
 
     private static func isValidImageItem(_ item: MediaSourceItem) -> Bool {
