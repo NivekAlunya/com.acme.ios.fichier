@@ -5,6 +5,7 @@
 
 import SwiftUI
 import FichierKit
+import FichierKit
 
 /// Large folder card: linked thumbnail as full-bleed background, frosted bottom bar with the folder name.
 ///
@@ -54,10 +55,10 @@ struct FolderCardView: View {
                 .clipped()
         } else {
             ZStack {
-                Color.blue.opacity(0.12)
+                FichierTheme.accent.opacity(0.14)
                 Image(systemName: folder.folderIconName ?? "folder.fill")
                     .font(.largeTitle)
-                    .foregroundStyle(.blue.gradient)
+                    .foregroundStyle(FichierTheme.accent.gradient)
             }
         }
     }

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent action toolbar docked at the bottom of the full-screen photo viewer.
 ///
@@ -119,7 +120,7 @@ public struct PictureViewerBottomBarView: View {
                 } label: {
                     Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(isPlayingSlideshow ? Color.orange : Color.white)
+                        .foregroundStyle(isPlayingSlideshow ? FichierTheme.attention : Color.white)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)

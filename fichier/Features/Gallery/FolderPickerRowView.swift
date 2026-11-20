@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Row view displaying a selectable folder node within `FolderPickerSheetView`.
 struct FolderPickerRowView: View {
@@ -65,7 +66,7 @@ struct FolderPickerRowView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: isSelected ? "folder.fill" : "folder")
-                        .foregroundColor(isEnabled ? (isSelected ? .blue : .accentColor) : .secondary)
+                        .foregroundColor(isEnabled ? (isSelected ? FichierTheme.accent : .accentColor) : .secondary)
                         .font(.system(size: 18))
                     
                     Text(folder.name.isEmpty ? folder.rootName : folder.name)
@@ -78,7 +79,7 @@ struct FolderPickerRowView: View {
                     if isSelected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.blue)
+                            .foregroundColor(FichierTheme.accent)
                     }
                 }
             }

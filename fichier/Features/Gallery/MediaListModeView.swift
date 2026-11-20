@@ -71,7 +71,7 @@ struct MediaListModeView: View {
                                 HStack(spacing: 12) {
                                     Image(systemName: "folder.fill")
                                         .font(.title3)
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(FichierTheme.accent)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(subfolder.name)
                                             .foregroundColor(.primary)
@@ -141,7 +141,7 @@ struct MediaListModeView: View {
             }
             #if !os(tvOS)
             .scrollDismissesKeyboard(.immediately)
-            .toolbarBackground(Material.bar, for: .navigationBar)
+            .scrollContentBackground(.hidden)
             #endif
             .id(currentDirectoryID)
             .onChange(of: currentDirectoryID) { _, _ in

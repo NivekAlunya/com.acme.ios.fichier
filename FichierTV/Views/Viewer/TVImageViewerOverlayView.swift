@@ -173,7 +173,7 @@ public struct TVImageViewerOverlayView: View {
             if isSlideshowPlaying {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(Color.green)
+                        .fill(FichierTheme.connected)
                         .frame(width: 8, height: 8)
 
                     Text(.Strings.tvImageViewerSlideshow)

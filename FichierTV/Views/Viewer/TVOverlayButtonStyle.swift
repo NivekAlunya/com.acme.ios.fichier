@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Custom tvOS button style for viewer overlay controls, providing scale and fill upon focus.
 public struct TVOverlayButtonStyle: ButtonStyle {
@@ -16,8 +17,8 @@ public struct TVOverlayButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(
-        focusedFillColor: Color = .white,
-        focusedForegroundColor: Color = .black,
+        focusedFillColor: Color = FichierTheme.accent,
+        focusedForegroundColor: Color = FichierTheme.onAccentDark,
         font: Font = .headline
     ) {
         self.focusedFillColor = focusedFillColor

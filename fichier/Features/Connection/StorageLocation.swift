@@ -117,7 +117,7 @@ nonisolated public struct StorageLocation: Identifiable, Hashable, Sendable {
     public var iconColor: Color {
         switch kind {
         case .smb:
-            return .blue
+            return FichierTheme.accent
         case .localFolder:
             return .orange
         case .iCloudFolder:

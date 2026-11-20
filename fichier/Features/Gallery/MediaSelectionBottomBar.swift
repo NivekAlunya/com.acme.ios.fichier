@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent action bar displayed when multi-selection mode is active in `MediaGridView`.
 ///
@@ -185,7 +186,7 @@ struct MediaSelectionBottomBar: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
+                        .foregroundStyle(selectedCount > 0 ? FichierTheme.accent : Color.secondary)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)

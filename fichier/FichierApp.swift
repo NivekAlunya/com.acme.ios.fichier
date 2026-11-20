@@ -28,6 +28,7 @@ struct FichierApp: App {
     var body: some Scene {
         WindowGroup {
             MediaBrowserSplitView()
+                .tint(FichierTheme.accent)
         }
     }
 }

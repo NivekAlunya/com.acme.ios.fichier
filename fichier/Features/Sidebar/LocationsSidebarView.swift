@@ -125,6 +125,8 @@ public struct LocationsSidebarView: View {
         .listStyle(.plain)
         #else
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .fichierAtmosphericBackground()
         #endif
         .navigationTitle(.Strings.sidebarTitleBrowse)
         .toolbar {
@@ -236,7 +238,7 @@ public struct LocationsSidebarView: View {
                 if location.kind == .smb {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(Color.green)
+                            .fill(FichierTheme.connected)
                             .frame(width: 8, height: 8)
                         
                         Button {
@@ -253,7 +255,7 @@ public struct LocationsSidebarView: View {
                     }
                 } else {
                     Circle()
-                        .fill(Color.green)
+                        .fill(FichierTheme.connected)
                         .frame(width: 8, height: 8)
                 }
             }

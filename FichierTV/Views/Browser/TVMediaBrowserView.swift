@@ -42,6 +42,7 @@ public struct TVMediaBrowserView: View {
                 loadingView
             }
         }
+        .fichierAtmosphericBackground()
         .navigationTitle(folder?.name ?? source.displayName)
         .defaultFocus($focusedTarget, viewModel?.firstItemID.map { .item($0) })
         .onChange(of: viewModel?.firstItemID) { _, newFirstID in

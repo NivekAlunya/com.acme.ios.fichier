@@ -112,7 +112,7 @@ public struct MediaThumbnailView: View {
                             ZStack(alignment: .leading) {
                                 Color.black.opacity(0.4)
                                 
-                                Color.blue
+                                FichierTheme.accent
                                     .scaleEffect(x: max(0, min(1, CGFloat(progress))), y: 1, anchor: .leading)
                             }
                             .frame(height: barHeight)

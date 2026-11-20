@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Recursive tree row view representing a single folder node in the hierarchical sidebar.
 ///
@@ -85,7 +86,7 @@ struct FolderTreeNodeView: View {
         if node.locationID == StorageLocation.photosLocationID {
             return isSelected ? .pink : .secondary
         }
-        return isSelected ? .blue : .accentColor
+        return isSelected ? FichierTheme.accent : .accentColor
     }
     
     /// Display name of the folder node, using "/" for the root container level.
@@ -145,7 +146,7 @@ struct FolderTreeNodeView: View {
             }
             .buttonStyle(.plain)
         }
-        .listRowBackground(isSelected ? Color.blue.opacity(0.14) : Color.clear)
+        .listRowBackground(isSelected ? FichierTheme.accent.opacity(0.16) : Color.clear)
         .task(id: isExpanded) {
             if isExpanded && node.children == nil {
                 await manager.loadSubfoldersForTree(at: node)

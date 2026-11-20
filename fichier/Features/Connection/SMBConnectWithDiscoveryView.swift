@@ -52,7 +52,7 @@ struct SMBConnectWithDiscoveryView: View {
                             } label: {
                                 HStack {
                                     Image(systemName: "macmini.fill")
-                                        .foregroundColor(.blue)
+                                        .foregroundColor(FichierTheme.accent)
                                         .font(.title3)
                                     
                                     VStack(alignment: .leading, spacing: 2) {
@@ -75,7 +75,7 @@ struct SMBConnectWithDiscoveryView: View {
                                     
                                     if let ipv4 = host.resolvedHost, viewModel.selectedHost == ipv4 {
                                         Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.blue)
+                                            .foregroundColor(FichierTheme.accent)
                                     }
                                 }
                             }

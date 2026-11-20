@@ -612,9 +612,9 @@ struct MediaGridView: View {
                         } label: {
                             Image(systemName: "arrow.up.folder")
                                 .fontWeight(.semibold)
-                                .foregroundColor(viewModel.manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
+                                .foregroundColor(viewModel.manager.parentFolder != nil ? FichierTheme.accent : .secondary.opacity(0.35))
                         }
-                        .tint(.blue)
+                        .tint(FichierTheme.accent)
                         .disabled(viewModel.manager.parentFolder == nil)
                         .accessibilityLabel(parentFolderAccessibilityLabel)
                         
@@ -625,9 +625,9 @@ struct MediaGridView: View {
                             } label: {
                                 Image(systemName: "folder.badge.plus")
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(FichierTheme.accent)
                             }
-                            .tint(.blue)
+                            .tint(FichierTheme.accent)
                             .accessibilityLabel(Text(.Strings.commonNewFolder))
                         }
                         
