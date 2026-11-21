@@ -56,33 +56,30 @@ public struct PictureDetailView: View {
     
     public var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .ignoresSafeArea()
             
             if viewModel.isPlayingSlideshow {
                 // Slideshow Mode: Simultaneous cross-dissolve with subtle scale
-                ZStack {
-                    ZoomablePicturePageView(
-                        manager: viewModel.manager,
-                        item: viewModel.currentItem,
-                        initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
-                        onImageLoaded: { loadedImg in
-                            self.viewModel.currentImage = loadedImg
-                            self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
-                        },
-                        onTap: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.toggleControls()
-                            }
+                ZoomablePicturePageView(
+                    manager: viewModel.manager,
+                    item: viewModel.currentItem,
+                    initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
+                    onImageLoaded: { loadedImg in
+                        self.viewModel.currentImage = loadedImg
+                        self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
+                    },
+                    onTap: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.toggleControls()
                         }
-                    )
-                    .transition(activeTransition)
-                    .id(viewModel.currentItem.id)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                    }
+                )
+                .ignoresSafeArea()
+                .transition(activeTransition)
+                .id(viewModel.currentItem.id)
                 .zIndex(1)
                 .contentShape(Rectangle())
-                #if !os(tvOS)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 25)
                         .onEnded { value in
@@ -99,7 +96,6 @@ public struct PictureDetailView: View {
                             }
                         }
                 )
-                #endif
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
                 TabView(selection: $viewModel.currentItem) {
@@ -122,65 +118,54 @@ public struct PictureDetailView: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .zIndex(1)
+                .ignoresSafeArea()
             }
-            
+        }
+        .overlay(alignment: .bottom) {
             // Floating HUD Overlays
             if viewModel.showControls {
-                VStack {
-                    PictureViewerTopBarView(
-                        item: viewModel.currentItem,
-                        currentIndex: viewModel.currentIndex,
-                        totalCount: viewModel.pictures.count,
-                        frameSize: viewModel.activeMetadata?.dimensions,
-                        onDismiss: { dismiss() }
-                    )
-                    
-                    Spacer()
-                    
-                    PictureViewerBottomBarView(
-                        hasMultiplePictures: viewModel.pictures.count > 1,
-                        isPlayingSlideshow: Binding(
-                            get: { viewModel.isPlayingSlideshow },
-                            set: { _ in viewModel.toggleSlideshow() }
-                        ),
-                        slideshowInterval: $slideshowInterval,
-                        transitionStyle: $transitionStyle,
-                        isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
-                        canSaveToCameraRoll: !viewModel.currentItem.isPhotoAsset,
-                        isSaving: viewModel.isSaving,
-                        currentImage: viewModel.currentImage,
-                        currentName: viewModel.currentItem.name,
-                        onPrevious: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
-                        onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
-                        onShowInfo: {
-                            Task {
-                                if viewModel.activeMetadata == nil {
-                                    self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
-                                }
-                                viewModel.showingInfoSheet = true
+                PictureViewerBottomBarView(
+                    hasMultiplePictures: viewModel.pictures.count > 1,
+                    isPlayingSlideshow: Binding(
+                        get: { viewModel.isPlayingSlideshow },
+                        set: { _ in viewModel.toggleSlideshow() }
+                    ),
+                    slideshowInterval: $slideshowInterval,
+                    transitionStyle: $transitionStyle,
+                    isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
+                    canSaveToCameraRoll: !viewModel.currentItem.isPhotoAsset,
+                    isSaving: viewModel.isSaving,
+                    currentImage: viewModel.currentImage,
+                    currentName: viewModel.currentItem.name,
+                    onPrevious: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
+                    onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
+                    onShowInfo: {
+                        Task {
+                            if viewModel.activeMetadata == nil {
+                                self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                             }
-                        },
-                        onToggleFavorite: {
-                            FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
-                        },
-                        onSaveToCameraRoll: {
-                            saveToCameraRoll()
+                            viewModel.showingInfoSheet = true
                         }
-                    )
-                    .padding(.bottom, 20)
-                }
+                    },
+                    onToggleFavorite: {
+                        FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
+                    },
+                    onSaveToCameraRoll: {
+                        saveToCameraRoll()
+                    }
+                )
+                .padding(.bottom, 20)
                 .transition(.opacity)
-                .zIndex(10)
             }
-            
+        }
+        .overlay(alignment: .top) {
             // Visual toast banner when saved to photos
             if let message = viewModel.saveStatusMessage {
                 VStack {
                     Spacer().frame(height: 70)
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(FichierTheme.connected)
                         Text(message)
                             .font(.subheadline.bold())
                             .foregroundColor(.white)
@@ -192,6 +177,18 @@ public struct PictureDetailView: View {
                     Spacer()
                 }
                 .zIndex(20)
+            }
+
+            // Floating HUD Overlays
+            if viewModel.showControls {
+                PictureViewerTopBarView(
+                    item: viewModel.currentItem,
+                    currentIndex: viewModel.currentIndex,
+                    totalCount: viewModel.pictures.count,
+                    frameSize: viewModel.activeMetadata?.dimensions,
+                    onDismiss: { dismiss() }
+                )
+                .transition(.opacity)
             }
         }
         .preferredColorScheme(.dark)

@@ -34,6 +34,7 @@ struct MediaGridEmptyStateView: View {
     var body: some View {
         if isLoading {
             ProgressView(.Strings.galleryLoadingFolderContents)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let error = errorMessage {
             ContentUnavailableView {
                 Label(.Strings.galleryErrorUnableToLoadFolder, systemImage: "exclamationmark.triangle")

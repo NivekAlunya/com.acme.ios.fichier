@@ -132,9 +132,8 @@ struct MediaGridView: View {
         let (displayFolders, displayPictures) = filterAndSortData()
         let hasImages = displayPictures.contains(where: \.isImage)
         
-        ZStack(alignment: .bottom) {
-            Group {
-                if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
+        Group {
+            if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
                     MediaGridEmptyStateView(
                         isLoading: viewModel.manager.isLoading,
                         errorMessage: viewModel.manager.errorMessage,
@@ -249,7 +248,7 @@ struct MediaGridView: View {
                 }
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
-            
+        .overlay(alignment: .bottom) {
             // Bottom Action Bar when in Selection Mode
             if viewModel.isSelectionMode {
                 MediaSelectionBottomBar(

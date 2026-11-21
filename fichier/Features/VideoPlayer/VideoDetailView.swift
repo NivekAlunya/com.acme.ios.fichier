@@ -79,13 +79,10 @@ public struct VideoDetailView: View {
     /// Composed video view containing canvas, subtitle overlay, HUD, and lifecycle observers.
     @ViewBuilder
     private func videoContent(controller: VideoPlayerController) -> some View {
-        ZStack {
-            VideoPlayerCanvasView(controller: controller)
-            
-            // Active Subtitle Text Overlay
-            if !controller.trackManager.currentSubtitleText.isEmpty && controller.trackManager.isSubtitlesEnabled {
-                VStack {
-                    Spacer()
+        VideoPlayerCanvasView(controller: controller)
+            .overlay(alignment: .bottom) {
+                // Active Subtitle Text Overlay
+                if !controller.trackManager.currentSubtitleText.isEmpty && controller.trackManager.isSubtitlesEnabled {
                     Text(controller.trackManager.currentSubtitleText)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
@@ -99,18 +96,18 @@ public struct VideoDetailView: View {
                         .padding(.bottom, controller.showControls ? 56 : 24)
                         .allowsHitTesting(false)
                         .animation(.easeInOut(duration: 0.2), value: controller.showControls)
+                        .transition(.opacity)
                 }
-                .transition(.opacity)
             }
-            
-            VideoPlayerHUDView(
-                controller: controller,
-                onDismiss: {
-                    controller.tearDownPlayer(deactivateAudioSession: true)
-                    dismiss()
-                }
-            )
-        }
+            .overlay {
+                VideoPlayerHUDView(
+                    controller: controller,
+                    onDismiss: {
+                        controller.tearDownPlayer(deactivateAudioSession: true)
+                        dismiss()
+                    }
+                )
+            }
         .task(id: controller.currentItem.id) {
             controller.setupPlayer(for: controller.currentItem)
         }

@@ -29,27 +29,26 @@ public struct VideoPlayerHUDView: View {
     }
     
     public var body: some View {
-        ZStack {
-            // Bars & Overlays (Top, Toast, Bottom) - explicitly tied to showControls
-            VStack(spacing: 12) {
-                VideoPlayerTopBarView(controller: controller, onDismiss: onDismiss)
-                
-                VideoPlayerToastBannerView(controller: controller)
-                
-                Spacer()
-                
-                VideoPlayerBottomBarView(controller: controller)
+        // Center Controls & Buffering / Error Overlay remain independent of showControls
+        VideoPlayerCenterControlsView(controller: controller)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) {
+                VStack(spacing: 12) {
+                    VideoPlayerTopBarView(controller: controller, onDismiss: onDismiss)
+                    VideoPlayerToastBannerView(controller: controller)
+                }
+                .opacity(controller.showControls ? 1 : 0)
+                .allowsHitTesting(controller.showControls)
+                .accessibilityHidden(!controller.showControls)
+                .transaction { $0.animation = nil }
             }
-            .opacity(controller.showControls ? 1 : 0)
-            .animation(.easeInOut(duration: 0.35), value: controller.showControls)
-            .allowsHitTesting(controller.showControls)
-            .accessibilityHidden(!controller.showControls)
-            
-            // Center Controls & Buffering / Error Overlay
-            // The buffering popup and error indicator remain independent of showControls
-            // so buffering stays visible until buffering is done!
-            VideoPlayerCenterControlsView(controller: controller)
-        }
-        .animation(.easeInOut(duration: 0.25), value: controller.playbackState.isBuffering)
+            .overlay(alignment: .bottom) {
+                VideoPlayerBottomBarView(controller: controller)
+                    .opacity(controller.showControls ? 1 : 0)
+                    .allowsHitTesting(controller.showControls)
+                    .accessibilityHidden(!controller.showControls)
+                    .transaction { $0.animation = nil }
+            }
+            .animation(.easeInOut(duration: 0.25), value: controller.playbackState.isBuffering)
     }
 }
