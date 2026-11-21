@@ -106,15 +106,23 @@ final class PictureDetailViewModel {
     }
 
     func toggleSlideshow() {
-        isPlayingSlideshow.toggle()
         if isPlayingSlideshow {
+            stopSlideshow()
+        } else {
+            slideDirection = .forward
+            isPlayingSlideshow = true
             if showControls {
                 scheduleAutoHideControls()
             }
-        } else {
-            cancelAutoHideTimer()
-            showControls = true
         }
+    }
+
+    /// Stops slideshow playback, cancels any pending control auto-hide timer, and restores HUD controls.
+    func stopSlideshow() {
+        guard isPlayingSlideshow else { return }
+        isPlayingSlideshow = false
+        cancelAutoHideTimer()
+        showControls = true
     }
 
     func toggleControls() {

@@ -71,7 +71,7 @@ struct MediaThumbnailCell: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(
-                    isSelected ? FichierTheme.accent : Color.primary.opacity(0.08),
+                    isSelected ? FichierTheme.connected : Color.primary.opacity(0.08),
                     lineWidth: isSelected ? 3 : 1
                 )
         )
@@ -106,7 +106,7 @@ struct MediaThumbnailCell: View {
                 let checkSize: CGFloat = gridSize == .large ? 24 : 20
                 ZStack {
                     Circle()
-                        .fill(isSelected ? FichierTheme.accent : Color.black.opacity(0.45))
+                        .fill(isSelected ? FichierTheme.connected : Color.black.opacity(0.45))
                         .frame(width: checkSize, height: checkSize)
                     if isSelected {
                         Image(systemName: "checkmark")

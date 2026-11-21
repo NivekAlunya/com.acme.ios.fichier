@@ -49,6 +49,5 @@ public struct VideoPlayerHUDView: View {
                     .accessibilityHidden(!controller.showControls)
                     .transaction { $0.animation = nil }
             }
-            .animation(.easeInOut(duration: 0.25), value: controller.playbackState.isBuffering)
     }
 }

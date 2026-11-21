@@ -89,9 +89,14 @@ public struct PictureDetailView: View {
                                     goToNext()
                                 }
                             } else if value.translation.width > 40 {
-                                // Swiped right -> Return to previous image
-                                withAnimation(.easeInOut(duration: 0.8)) {
+                                // Swiped right -> Slide previous in from leading, current out to trailing, then stop slideshow
+                                viewModel.slideDirection = .backward
+                                withAnimation(.easeInOut(duration: 0.35)) {
                                     goToPrevious()
+                                }
+                                Task { @MainActor in
+                                    try? await Task.sleep(for: .milliseconds(360))
+                                    viewModel.stopSlideshow()
                                 }
                             }
                         }
@@ -114,6 +119,7 @@ public struct PictureDetailView: View {
                                 }
                             }
                         )
+                        .ignoresSafeArea()
                         .tag(pic)
                     }
                 }
@@ -192,6 +198,7 @@ public struct PictureDetailView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .statusBarHidden(true)
         .sheet(isPresented: $viewModel.showingInfoSheet) {
             if let meta = viewModel.activeMetadata {
                 PictureInfoSheet(metadata: meta, item: viewModel.currentItem)

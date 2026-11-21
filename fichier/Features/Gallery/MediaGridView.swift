@@ -637,35 +637,11 @@ struct MediaGridView: View {
                                 }
                             } label: {
                                 Image(systemName: viewMode.selectionIconName)
+                                    .foregroundStyle(FichierTheme.connected)
                             }
+                            .tint(FichierTheme.connected)
                             .accessibilityLabel(.Strings.galleryButtonSelect)
                         }
-                        
-                        // Slideshow trigger & duration menu
-                        Menu {
-                            Button {
-                                onStartSlideshow?(displayPictures)
-                            } label: {
-                                Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
-                            }
-                            
-                            Section(.Strings.slideshowSectionTransitionStyle) {
-                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
-                                    ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.slideshowSectionSlideDuration) {
-                                SlideshowDurationPickerView(selection: $slideshowInterval)
-                            }
-                        } label: {
-                            Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
-                        } primaryAction: {
-                            onStartSlideshow?(displayPictures)
-                        }
-                        .disabled(!hasImages)
                         
                         // Unified View, Sort & Grid Size Menu
                         Menu {
@@ -728,7 +704,9 @@ struct MediaGridView: View {
                             #endif
                         } label: {
                             Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .foregroundStyle(FichierTheme.attention)
                         }
+                        .tint(FichierTheme.attention)
                         
                         Button {
                             if let folder = viewModel.manager.selectedFolder {

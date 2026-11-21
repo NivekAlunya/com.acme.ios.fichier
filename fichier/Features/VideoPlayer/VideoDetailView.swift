@@ -58,6 +58,7 @@ public struct VideoDetailView: View {
             
             if let controller {
                 videoContent(controller: controller)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .preferredColorScheme(.dark)
