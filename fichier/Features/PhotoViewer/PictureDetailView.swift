@@ -28,6 +28,9 @@ public struct PictureDetailView: View {
     /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
 
+    /// Cancellable task coordinating a one-frame direction update before backward slideshow navigation.
+    @State private var pendingPreviousTask: Task<Void, Never>?
+
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -90,14 +93,7 @@ public struct PictureDetailView: View {
                                 }
                             } else if value.translation.width > 40 {
                                 // Swiped right -> Slide previous in from leading, current out to trailing, then stop slideshow
-                                viewModel.slideDirection = .backward
-                                withAnimation(.easeInOut(duration: 0.35)) {
-                                    goToPrevious()
-                                }
-                                Task { @MainActor in
-                                    try? await Task.sleep(for: .milliseconds(360))
-                                    viewModel.stopSlideshow()
-                                }
+                                goToPreviousStoppingSlideshowIfNeeded()
                             }
                         }
                 )
@@ -143,7 +139,7 @@ public struct PictureDetailView: View {
                     isSaving: viewModel.isSaving,
                     currentImage: viewModel.currentImage,
                     currentName: viewModel.currentItem.name,
-                    onPrevious: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
+                    onPrevious: { goToPreviousStoppingSlideshowIfNeeded() },
                     onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
                     onShowInfo: {
                         Task {
@@ -280,6 +276,8 @@ public struct PictureDetailView: View {
             AppKeyboardDismissal.dismiss()
         }
         .onDisappear {
+            pendingPreviousTask?.cancel()
+            pendingPreviousTask = nil
             viewModel.cancelPrefetch()
             viewModel.cancelAutoHideTimer()
         }
@@ -289,11 +287,11 @@ public struct PictureDetailView: View {
             Group {
                 Button("") { dismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
-                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { goToPreviousStoppingSlideshowIfNeeded() }
                     .keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut(.rightArrow, modifiers: [])
-                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { goToPreviousStoppingSlideshowIfNeeded() }
                     .keyboardShortcut("[", modifiers: [])
                 Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut("]", modifiers: [])
@@ -369,11 +367,39 @@ public struct PictureDetailView: View {
     
     /// Navigates forward to the next image in the sequence, wrapping to index 0 at the end.
     private func goToNext() {
+        pendingPreviousTask?.cancel()
+        pendingPreviousTask = nil
         viewModel.advanceToNext()
     }
     
     /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
         viewModel.goToPrevious()
+    }
+
+    /// Slides to the previous image (arming `.backward` transition for one frame so the outgoing image exits trailing)
+    /// and stops the slideshow once the transition completes.
+    private func goToPreviousStoppingSlideshowIfNeeded() {
+        pendingPreviousTask?.cancel()
+        pendingPreviousTask = nil
+
+        guard viewModel.isPlayingSlideshow else {
+            withAnimation(.default) {
+                goToPrevious()
+            }
+            return
+        }
+
+        viewModel.slideDirection = .backward
+        pendingPreviousTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                goToPrevious()
+            } completion: {
+                viewModel.stopSlideshow()
+            }
+            pendingPreviousTask = nil
+        }
     }
 }
