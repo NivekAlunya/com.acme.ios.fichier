@@ -27,6 +27,7 @@ public struct TVRootMediaBrowserView: View {
                     TVSharesRootView()
                 }
             }
+            .fichierAtmosphericBackground()
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Picker("Source", selection: $selectedSection) {

@@ -28,6 +28,9 @@ public struct PictureDetailView: View {
     /// Visual transition animation style applied in slideshow mode.
     @AppStorage("slideshow_transition_style") private var transitionStyle: SlideshowTransitionStyle = .slide
 
+    /// Cancellable task coordinating a one-frame direction update before backward slideshow navigation.
+    @State private var pendingPreviousTask: Task<Void, Never>?
+
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -56,33 +59,30 @@ public struct PictureDetailView: View {
     
     public var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .ignoresSafeArea()
             
             if viewModel.isPlayingSlideshow {
                 // Slideshow Mode: Simultaneous cross-dissolve with subtle scale
-                ZStack {
-                    ZoomablePicturePageView(
-                        manager: viewModel.manager,
-                        item: viewModel.currentItem,
-                        initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
-                        onImageLoaded: { loadedImg in
-                            self.viewModel.currentImage = loadedImg
-                            self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
-                        },
-                        onTap: {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                viewModel.toggleControls()
-                            }
+                ZoomablePicturePageView(
+                    manager: viewModel.manager,
+                    item: viewModel.currentItem,
+                    initialImage: viewModel.slideImageCache[viewModel.currentItem.id] ?? (viewModel.currentItem.id == viewModel.initialItem.id ? viewModel.currentImage : nil),
+                    onImageLoaded: { loadedImg in
+                        self.viewModel.currentImage = loadedImg
+                        self.viewModel.slideImageCache[viewModel.currentItem.id] = loadedImg
+                    },
+                    onTap: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.toggleControls()
                         }
-                    )
-                    .transition(activeTransition)
-                    .id(viewModel.currentItem.id)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                    }
+                )
+                .ignoresSafeArea()
+                .transition(activeTransition)
+                .id(viewModel.currentItem.id)
                 .zIndex(1)
                 .contentShape(Rectangle())
-                #if !os(tvOS)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 25)
                         .onEnded { value in
@@ -92,14 +92,11 @@ public struct PictureDetailView: View {
                                     goToNext()
                                 }
                             } else if value.translation.width > 40 {
-                                // Swiped right -> Return to previous image
-                                withAnimation(.easeInOut(duration: 0.8)) {
-                                    goToPrevious()
-                                }
+                                // Swiped right -> Slide previous in from leading, current out to trailing, then stop slideshow
+                                goToPreviousStoppingSlideshowIfNeeded()
                             }
                         }
                 )
-                #endif
             } else {
                 // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
                 TabView(selection: $viewModel.currentItem) {
@@ -118,69 +115,59 @@ public struct PictureDetailView: View {
                                 }
                             }
                         )
+                        .ignoresSafeArea()
                         .tag(pic)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
-                .zIndex(1)
+                .ignoresSafeArea()
             }
-            
+        }
+        .overlay(alignment: .bottom) {
             // Floating HUD Overlays
             if viewModel.showControls {
-                VStack {
-                    PictureViewerTopBarView(
-                        item: viewModel.currentItem,
-                        currentIndex: viewModel.currentIndex,
-                        totalCount: viewModel.pictures.count,
-                        frameSize: viewModel.activeMetadata?.dimensions,
-                        onDismiss: { dismiss() }
-                    )
-                    
-                    Spacer()
-                    
-                    PictureViewerBottomBarView(
-                        hasMultiplePictures: viewModel.pictures.count > 1,
-                        isPlayingSlideshow: Binding(
-                            get: { viewModel.isPlayingSlideshow },
-                            set: { _ in viewModel.toggleSlideshow() }
-                        ),
-                        slideshowInterval: $slideshowInterval,
-                        transitionStyle: $transitionStyle,
-                        isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
-                        canSaveToCameraRoll: !viewModel.currentItem.isPhotoAsset,
-                        isSaving: viewModel.isSaving,
-                        currentImage: viewModel.currentImage,
-                        currentName: viewModel.currentItem.name,
-                        onPrevious: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } },
-                        onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
-                        onShowInfo: {
-                            Task {
-                                if viewModel.activeMetadata == nil {
-                                    self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
-                                }
-                                viewModel.showingInfoSheet = true
+                PictureViewerBottomBarView(
+                    hasMultiplePictures: viewModel.pictures.count > 1,
+                    isPlayingSlideshow: Binding(
+                        get: { viewModel.isPlayingSlideshow },
+                        set: { _ in viewModel.toggleSlideshow() }
+                    ),
+                    slideshowInterval: $slideshowInterval,
+                    transitionStyle: $transitionStyle,
+                    isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
+                    canSaveToCameraRoll: !viewModel.currentItem.isPhotoAsset,
+                    isSaving: viewModel.isSaving,
+                    currentImage: viewModel.currentImage,
+                    currentName: viewModel.currentItem.name,
+                    onPrevious: { goToPreviousStoppingSlideshowIfNeeded() },
+                    onNext: { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } },
+                    onShowInfo: {
+                        Task {
+                            if viewModel.activeMetadata == nil {
+                                self.viewModel.activeMetadata = await viewModel.manager.fetchMetadata(for: viewModel.currentItem)
                             }
-                        },
-                        onToggleFavorite: {
-                            FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
-                        },
-                        onSaveToCameraRoll: {
-                            saveToCameraRoll()
+                            viewModel.showingInfoSheet = true
                         }
-                    )
-                    .padding(.bottom, 20)
-                }
+                    },
+                    onToggleFavorite: {
+                        FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
+                    },
+                    onSaveToCameraRoll: {
+                        saveToCameraRoll()
+                    }
+                )
+                .padding(.bottom, 20)
                 .transition(.opacity)
-                .zIndex(10)
             }
-            
+        }
+        .overlay(alignment: .top) {
             // Visual toast banner when saved to photos
             if let message = viewModel.saveStatusMessage {
                 VStack {
                     Spacer().frame(height: 70)
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(FichierTheme.connected)
                         Text(message)
                             .font(.subheadline.bold())
                             .foregroundColor(.white)
@@ -193,8 +180,21 @@ public struct PictureDetailView: View {
                 }
                 .zIndex(20)
             }
+
+            // Floating HUD Overlays
+            if viewModel.showControls {
+                PictureViewerTopBarView(
+                    item: viewModel.currentItem,
+                    currentIndex: viewModel.currentIndex,
+                    totalCount: viewModel.pictures.count,
+                    frameSize: viewModel.activeMetadata?.dimensions,
+                    onDismiss: { dismiss() }
+                )
+                .transition(.opacity)
+            }
         }
         .preferredColorScheme(.dark)
+        .statusBarHidden(true)
         .sheet(isPresented: $viewModel.showingInfoSheet) {
             if let meta = viewModel.activeMetadata {
                 PictureInfoSheet(metadata: meta, item: viewModel.currentItem)
@@ -276,6 +276,8 @@ public struct PictureDetailView: View {
             AppKeyboardDismissal.dismiss()
         }
         .onDisappear {
+            pendingPreviousTask?.cancel()
+            pendingPreviousTask = nil
             viewModel.cancelPrefetch()
             viewModel.cancelAutoHideTimer()
         }
@@ -285,11 +287,11 @@ public struct PictureDetailView: View {
             Group {
                 Button("") { dismiss() }
                     .keyboardShortcut(.escape, modifiers: [])
-                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { goToPreviousStoppingSlideshowIfNeeded() }
                     .keyboardShortcut(.leftArrow, modifiers: [])
                 Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut(.rightArrow, modifiers: [])
-                Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToPrevious() } }
+                Button("") { goToPreviousStoppingSlideshowIfNeeded() }
                     .keyboardShortcut("[", modifiers: [])
                 Button("") { withAnimation(viewModel.isPlayingSlideshow ? .easeInOut(duration: 0.8) : .default) { goToNext() } }
                     .keyboardShortcut("]", modifiers: [])
@@ -365,11 +367,39 @@ public struct PictureDetailView: View {
     
     /// Navigates forward to the next image in the sequence, wrapping to index 0 at the end.
     private func goToNext() {
+        pendingPreviousTask?.cancel()
+        pendingPreviousTask = nil
         viewModel.advanceToNext()
     }
     
     /// Navigates backward to the previous image in the sequence, wrapping to the last item at the start.
     private func goToPrevious() {
         viewModel.goToPrevious()
+    }
+
+    /// Slides to the previous image (arming `.backward` transition for one frame so the outgoing image exits trailing)
+    /// and stops the slideshow once the transition completes.
+    private func goToPreviousStoppingSlideshowIfNeeded() {
+        pendingPreviousTask?.cancel()
+        pendingPreviousTask = nil
+
+        guard viewModel.isPlayingSlideshow else {
+            withAnimation(.default) {
+                goToPrevious()
+            }
+            return
+        }
+
+        viewModel.slideDirection = .backward
+        pendingPreviousTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                goToPrevious()
+            } completion: {
+                viewModel.stopSlideshow()
+            }
+            pendingPreviousTask = nil
+        }
     }
 }

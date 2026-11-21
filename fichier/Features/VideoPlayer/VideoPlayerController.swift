@@ -86,7 +86,7 @@ public final class VideoPlayerController {
     public var isMuted: Bool = false
     
     /// Controls visibility of floating top, center, and bottom HUD overlays.
-    public var showControls: Bool = true
+    public var showControls: Bool = false
     
     /// Indicates whether Picture-in-Picture presentation is actively running.
     public var isPiPActive: Bool = false

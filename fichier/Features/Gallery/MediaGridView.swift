@@ -132,9 +132,8 @@ struct MediaGridView: View {
         let (displayFolders, displayPictures) = filterAndSortData()
         let hasImages = displayPictures.contains(where: \.isImage)
         
-        ZStack(alignment: .bottom) {
-            Group {
-                if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
+        Group {
+            if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
                     MediaGridEmptyStateView(
                         isLoading: viewModel.manager.isLoading,
                         errorMessage: viewModel.manager.errorMessage,
@@ -249,7 +248,7 @@ struct MediaGridView: View {
                 }
             }
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
-            
+        .overlay(alignment: .bottom) {
             // Bottom Action Bar when in Selection Mode
             if viewModel.isSelectionMode {
                 MediaSelectionBottomBar(
@@ -612,9 +611,9 @@ struct MediaGridView: View {
                         } label: {
                             Image(systemName: "arrow.up.folder")
                                 .fontWeight(.semibold)
-                                .foregroundColor(viewModel.manager.parentFolder != nil ? .blue : .secondary.opacity(0.35))
+                                .foregroundColor(viewModel.manager.parentFolder != nil ? FichierTheme.accent : .secondary.opacity(0.35))
                         }
-                        .tint(.blue)
+                        .tint(FichierTheme.accent)
                         .disabled(viewModel.manager.parentFolder == nil)
                         .accessibilityLabel(parentFolderAccessibilityLabel)
                         
@@ -625,9 +624,9 @@ struct MediaGridView: View {
                             } label: {
                                 Image(systemName: "folder.badge.plus")
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(FichierTheme.accent)
                             }
-                            .tint(.blue)
+                            .tint(FichierTheme.accent)
                             .accessibilityLabel(Text(.Strings.commonNewFolder))
                         }
                         
@@ -638,35 +637,11 @@ struct MediaGridView: View {
                                 }
                             } label: {
                                 Image(systemName: viewMode.selectionIconName)
+                                    .foregroundStyle(FichierTheme.connected)
                             }
+                            .tint(FichierTheme.connected)
                             .accessibilityLabel(.Strings.galleryButtonSelect)
                         }
-                        
-                        // Slideshow trigger & duration menu
-                        Menu {
-                            Button {
-                                onStartSlideshow?(displayPictures)
-                            } label: {
-                                Label(.Strings.gallerySlideshowStart, systemImage: "play.fill")
-                            }
-                            
-                            Section(.Strings.slideshowSectionTransitionStyle) {
-                                Picker(.Strings.slideshowPickerTransition, selection: $transitionStyle) {
-                                    ForEach(SlideshowTransitionStyle.allCases) { style in
-                                        Label(style.localizedTitle, systemImage: style.iconName).tag(style)
-                                    }
-                                }
-                            }
-                            
-                            Section(.Strings.slideshowSectionSlideDuration) {
-                                SlideshowDurationPickerView(selection: $slideshowInterval)
-                            }
-                        } label: {
-                            Label(.Strings.galleryMenuSlideshow, systemImage: "play.circle.fill")
-                        } primaryAction: {
-                            onStartSlideshow?(displayPictures)
-                        }
-                        .disabled(!hasImages)
                         
                         // Unified View, Sort & Grid Size Menu
                         Menu {
@@ -729,7 +704,9 @@ struct MediaGridView: View {
                             #endif
                         } label: {
                             Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                                .foregroundStyle(FichierTheme.attention)
                         }
+                        .tint(FichierTheme.attention)
                         
                         Button {
                             if let folder = viewModel.manager.selectedFolder {

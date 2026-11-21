@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent action toolbar docked at the bottom of the full-screen photo viewer.
 ///
@@ -93,23 +94,22 @@ public struct PictureViewerBottomBarView: View {
     public var body: some View {
         HStack(spacing: 8) {
             // Leading: Previous Photo Button
-            if hasMultiplePictures {
-                Button {
-                    onPrevious()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 38)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(.Strings.photoViewerActionPreviousPhoto))
-                
-                Divider()
-                    .frame(height: 20)
-                    .background(Color.white.opacity(0.3))
+            Button {
+                onPrevious()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(hasMultiplePictures ? .white : .white.opacity(0.35))
+                    .frame(width: 32, height: 38)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(!hasMultiplePictures)
+            .accessibilityLabel(Text(.Strings.photoViewerActionPreviousPhoto))
+            
+            Divider()
+                .frame(height: 20)
+                .background(Color.white.opacity(0.3))
             
             // Middle: Action Tools
             HStack(spacing: 10) {
@@ -119,10 +119,11 @@ public struct PictureViewerBottomBarView: View {
                 } label: {
                     Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(isPlayingSlideshow ? Color.orange : Color.white)
+                        .foregroundStyle(isPlayingSlideshow ? FichierTheme.attention : (hasMultiplePictures ? Color.white : Color.white.opacity(0.35)))
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
+                .disabled(!hasMultiplePictures)
                 .accessibilityLabel(isPlayingSlideshow ? Text(.Strings.photoViewerActionPauseSlideshow) : Text(.Strings.photoViewerActionStartSlideshow))
                 
                 // 2. Slideshow Duration & Transition Style Menu
@@ -188,25 +189,23 @@ public struct PictureViewerBottomBarView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(isFavorite ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
                 
-                if canSaveToCameraRoll {
-                    // 5. Save to Camera Roll
-                    Button {
-                        onSaveToCameraRoll()
-                    } label: {
-                        if isSaving {
-                            ProgressView().scaleEffect(0.65)
-                                .frame(width: 28, height: 28)
-                        } else {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(.white)
-                                .frame(width: 28, height: 28)
-                        }
+                // 5. Save to Camera Roll
+                Button {
+                    onSaveToCameraRoll()
+                } label: {
+                    if isSaving {
+                        ProgressView().scaleEffect(0.65)
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(canSaveToCameraRoll && currentImage != nil ? .white : .white.opacity(0.35))
+                            .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(currentImage == nil || isSaving)
-                    .accessibilityLabel(Text(.Strings.galleryActionSaveToPhotos))
                 }
+                .buttonStyle(.plain)
+                .disabled(!canSaveToCameraRoll || currentImage == nil || isSaving)
+                .accessibilityLabel(Text(.Strings.galleryActionSaveToPhotos))
                 
                 #if !os(tvOS)
                 // 6. ShareLink (Directly disabled when image is not yet loaded)
@@ -227,23 +226,22 @@ public struct PictureViewerBottomBarView: View {
             .padding(.horizontal, 4)
             
             // Trailing: Next Photo Button
-            if hasMultiplePictures {
-                Divider()
-                    .frame(height: 20)
-                    .background(Color.white.opacity(0.3))
-                
-                Button {
-                    onNext()
-                } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 38)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text(.Strings.photoViewerActionNextPhoto))
+            Divider()
+                .frame(height: 20)
+                .background(Color.white.opacity(0.3))
+            
+            Button {
+                onNext()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(hasMultiplePictures ? .white : .white.opacity(0.35))
+                    .frame(width: 32, height: 38)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(!hasMultiplePictures)
+            .accessibilityLabel(Text(.Strings.photoViewerActionNextPhoto))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

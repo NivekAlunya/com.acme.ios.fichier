@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Root visual container for the application, organizing navigation into a three-column `NavigationSplitView`.
 ///
@@ -162,6 +163,7 @@ public struct MediaBrowserSplitView: View {
                     .navigationTitle(storageManager.selectedFolder?.name ?? String(localized: .Strings.connectionTitleFiles))
                 }
             }
+            .fichierAtmosphericBackground()
         }
         .fullScreenCover(item: $activePictureContext) { context in
             PictureDetailView(

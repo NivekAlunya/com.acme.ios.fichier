@@ -212,22 +212,20 @@ public struct VideoPlayerTopBarView: View {
         )
     }
     
-    /// Contextual quick-jump options computed from the current video duration and playback position.
+    /// Contextual quick-jump options computed from the current video duration.
     private var quickJumpOptions: [VideoQuickJumpOption] {
         VideoQuickJumpOption.buildOptions(
             duration: controller.totalDurationSeconds,
-            currentTime: controller.currentPlaybackSeconds
+            currentTime: 0
         )
     }
     
     /// Chapters and quick-jump navigation menu matching the tvOS `Chapters & Jump` experience.
     private var chaptersAndJumpMenu: some View {
-        let chapters = controller.availableChapters
-        let options = quickJumpOptions
-        let currentTime = controller.currentPlaybackSeconds
-        let duration = controller.totalDurationSeconds
-        
-        return Menu {
+        Menu {
+            let chapters = controller.availableChapters
+            let options = quickJumpOptions
+
             if !options.isEmpty {
                 Section(.Strings.videoPlayerMenuQuickJump) {
                     ForEach(options) { option in
@@ -242,18 +240,11 @@ public struct VideoPlayerTopBarView: View {
             
             if !chapters.isEmpty {
                 Section(.Strings.videoPlayerMenuChapters) {
-                    ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
-                        let nextStart = index + 1 < chapters.count ? chapters[index + 1].startTime : duration
-                        let isCurrent = currentTime >= chapter.startTime && (nextStart <= chapter.startTime || currentTime < nextStart)
+                    ForEach(chapters) { chapter in
                         Button {
                             controller.jumpToTime(chapter.startTime)
                         } label: {
-                            HStack {
-                                Text("\(chapter.title)  (\(VideoQuickJumpOption.formattedTimestamp(chapter.startTime)))")
-                                if isCurrent {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                            Text("\(chapter.title)  (\(VideoQuickJumpOption.formattedTimestamp(chapter.startTime)))")
                         }
                     }
                 }
@@ -417,9 +408,7 @@ public struct VideoPlayerTopBarView: View {
                 .frame(width: 30, height: 30)
                 .accessibilityLabel(Text(.Strings.videoPlayerActionAirplay))
             
-            if !controller.availableChapters.isEmpty || !quickJumpOptions.isEmpty {
-                chaptersAndJumpMenu
-            }
+            chaptersAndJumpMenu
             
             playbackOptionsMenu
             

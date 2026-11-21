@@ -165,59 +165,58 @@ struct PDFDetailView: View {
             } else if let error = viewModel.errorMessage {
                 errorOverlay(error: error)
             }
-            
+        }
+        .overlay(alignment: .leading) {
             // Leading-Edge Thumbnail Sidebar
             if viewModel.totalPages > 1, let document = viewModel.document {
-                HStack {
-                    PDFLeadingThumbnailSidebarView(
-                        document: document,
-                        currentPage: viewModel.currentPage,
-                        endVisiblePage: viewModel.endVisiblePage,
-                        onPageSelected: { targetPage in
-                            if isBookMode {
-                                if let match = spreads.firstIndex(where: { $0.pageIndices.contains(targetPage - 1) }) {
-                                    viewModel.currentSpreadIndex = match
-                                }
-                            } else {
-                                viewModel.coordinator?.goToPage(index: targetPage - 1)
+                PDFLeadingThumbnailSidebarView(
+                    document: document,
+                    currentPage: viewModel.currentPage,
+                    endVisiblePage: viewModel.endVisiblePage,
+                    onPageSelected: { targetPage in
+                        if isBookMode {
+                            if let match = spreads.firstIndex(where: { $0.pageIndices.contains(targetPage - 1) }) {
+                                viewModel.currentSpreadIndex = match
                             }
+                        } else {
+                            viewModel.coordinator?.goToPage(index: targetPage - 1)
                         }
-                    )
-                    .id(viewModel.currentItem.id)
-                    .padding(.leading, 12)
-                    .padding(.top, 70)
-                    .padding(.bottom, 80)
-                    
-                    Spacer()
-                }
+                    }
+                )
+                .id(viewModel.currentItem.id)
+                .padding(.leading, 12)
+                .padding(.top, 70)
+                .padding(.bottom, 80)
                 .opacity(viewModel.showControls ? 1.0 : 0.0)
                 .animation(.easeInOut(duration: 0.2), value: viewModel.showControls)
                 .transition(.identity)
             }
-            
-            // HUD Overlays
+        }
+        .overlay(alignment: .top) {
             if viewModel.showControls && viewModel.document != nil {
-                VStack {
-                    PDFViewerTopBarView(
-                        item: viewModel.currentItem,
-                        currentIndex: viewModel.currentIndex,
-                        totalCount: viewModel.documents.count,
-                        onDismiss: { dismiss() }
-                    )
-                    Spacer()
-                    PDFViewerBottomBarView(
-                        hasMultipleDocuments: viewModel.documents.count > 1,
-                        readingMode: $readingMode,
-                        pageInfoText: pageInfoText,
-                        isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
-                        localFileURL: viewModel.localFileURL,
-                        currentName: viewModel.currentItem.name,
-                        onPreviousDocument: { goToPreviousDocument() },
-                        onNextDocument: { goToNextDocument() },
-                        onToggleFavorite: { FavoritesManager.shared.toggleFavorite(viewModel.currentItem) }
-                    )
-                    .padding(.bottom, 20)
-                }
+                PDFViewerTopBarView(
+                    item: viewModel.currentItem,
+                    currentIndex: viewModel.currentIndex,
+                    totalCount: viewModel.documents.count,
+                    onDismiss: { dismiss() }
+                )
+                .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if viewModel.showControls && viewModel.document != nil {
+                PDFViewerBottomBarView(
+                    hasMultipleDocuments: viewModel.documents.count > 1,
+                    readingMode: $readingMode,
+                    pageInfoText: pageInfoText,
+                    isFavorite: FavoritesManager.shared.isFavorite(viewModel.currentItem),
+                    localFileURL: viewModel.localFileURL,
+                    currentName: viewModel.currentItem.name,
+                    onPreviousDocument: { goToPreviousDocument() },
+                    onNextDocument: { goToNextDocument() },
+                    onToggleFavorite: { FavoritesManager.shared.toggleFavorite(viewModel.currentItem) }
+                )
+                .padding(.bottom, 20)
                 .transition(.opacity)
             }
         }

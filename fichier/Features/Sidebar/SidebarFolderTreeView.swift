@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Sidebar view that renders the root-level collection of shares and folders for the current storage location.
 ///
@@ -68,6 +69,8 @@ struct SidebarFolderTreeView: View {
                 .listStyle(.plain)
                 #else
                 .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .fichierAtmosphericBackground()
                 #endif
                 .refreshable {
                     await manager.refreshSharesAndFolders()

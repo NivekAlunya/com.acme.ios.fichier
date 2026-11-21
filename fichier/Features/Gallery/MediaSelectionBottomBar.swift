@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Floating translucent action bar displayed when multi-selection mode is active in `MediaGridView`.
 ///
@@ -134,21 +135,19 @@ struct MediaSelectionBottomBar: View {
                 .accessibilityLabel(.Strings.galleryActionDownloadOptionsAccessibility)
                 
                 if showFileManagement {
-                    // 3. Rename Button (for single selected item)
-                    if selectedCount == 1, let onRename {
-                        Button {
-                            onRename()
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(Color.accentColor)
-                                .frame(width: 28, height: 28)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isProcessing)
-                        .accessibilityLabel(.Strings.galleryActionRenameAccessibility)
-                        .accessibilityHint(.Strings.galleryActionRenameHint)
+                    // 3. Rename Button (enabled only for single selected item)
+                    Button {
+                        onRename?()
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(selectedCount == 1 && onRename != nil ? Color.accentColor : Color.secondary)
+                            .frame(width: 28, height: 28)
                     }
+                    .buttonStyle(.plain)
+                    .disabled(selectedCount != 1 || onRename == nil || isProcessing)
+                    .accessibilityLabel(.Strings.galleryActionRenameAccessibility)
+                    .accessibilityHint(.Strings.galleryActionRenameHint)
                     
                     // 4. Move Button
                     Button {
@@ -185,7 +184,7 @@ struct MediaSelectionBottomBar: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(selectedCount > 0 ? Color.blue : Color.secondary)
+                        .foregroundStyle(selectedCount > 0 ? FichierTheme.accent : Color.secondary)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
