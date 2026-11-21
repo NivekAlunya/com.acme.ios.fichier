@@ -39,7 +39,7 @@ public struct TVVideoSeekPreviewHUDView: View {
     }
 
     private var engineTintColor: Color {
-        engineKind == .extended ? .orange : .blue
+        engineKind == .extended ? FichierTheme.attention : FichierTheme.connected
     }
 
     public var body: some View {
