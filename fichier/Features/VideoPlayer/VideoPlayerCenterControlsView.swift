@@ -68,7 +68,7 @@ public struct VideoPlayerCenterControlsView: View {
                         controller.setupPlayer(for: controller.currentItem)
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                    .tint(FichierTheme.secondaryAccent)
                     .accessibilityLabel(Text(.Strings.videoPlayerControlRetryLoading))
                 }
                 .transition(.opacity)

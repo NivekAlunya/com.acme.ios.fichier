@@ -238,7 +238,7 @@ public struct LocationsSidebarView: View {
                 if location.kind == .smb {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(FichierTheme.connected)
+                            .fill(FichierTheme.secondaryAccent)
                             .frame(width: 8, height: 8)
                         
                         Button {
@@ -255,7 +255,7 @@ public struct LocationsSidebarView: View {
                     }
                 } else {
                     Circle()
-                        .fill(FichierTheme.connected)
+                        .fill(FichierTheme.secondaryAccent)
                         .frame(width: 8, height: 8)
                 }
             }

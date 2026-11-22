@@ -13,7 +13,9 @@ struct MediaGridEmptyStateView: View {
     let searchText: String
     let selectedFolderName: String?
     let hasSelectedFolder: Bool
+    let parentFolderName: String?
     let onRetry: () -> Void
+    let onNavigateToParent: (() -> Void)?
     
     init(
         isLoading: Bool,
@@ -21,14 +23,18 @@ struct MediaGridEmptyStateView: View {
         searchText: String,
         selectedFolderName: String?,
         hasSelectedFolder: Bool,
-        onRetry: @escaping () -> Void
+        parentFolderName: String? = nil,
+        onRetry: @escaping () -> Void,
+        onNavigateToParent: (() -> Void)? = nil
     ) {
         self.isLoading = isLoading
         self.errorMessage = errorMessage
         self.searchText = searchText
         self.selectedFolderName = selectedFolderName
         self.hasSelectedFolder = hasSelectedFolder
+        self.parentFolderName = parentFolderName
         self.onRetry = onRetry
+        self.onNavigateToParent = onNavigateToParent
     }
     
     var body: some View {
@@ -51,11 +57,26 @@ struct MediaGridEmptyStateView: View {
         } else if !searchText.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else {
-            ContentUnavailableView(
-                String(localized: .Strings.galleryEmptyFolderTitle),
-                systemImage: "photo.on.rectangle.angled",
-                description: Text(.Strings.galleryEmptyFolderDescription(selectedFolderName ?? String(localized: .Strings.galleryEmptyFolderDefaultName)))
-            )
+            ContentUnavailableView {
+                Label(
+                    String(localized: .Strings.galleryEmptyFolderTitle),
+                    systemImage: "photo.on.rectangle.angled"
+                )
+            } description: {
+                Text(.Strings.galleryEmptyFolderDescription(selectedFolderName ?? String(localized: .Strings.galleryEmptyFolderDefaultName)))
+            } actions: {
+                if let parentFolderName, let onNavigateToParent {
+                    Button {
+                        onNavigateToParent()
+                    } label: {
+                        Label(
+                            String(localized: .Strings.galleryNavigateParentFolder(parentFolderName)),
+                            systemImage: "arrow.up.folder"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
     }
 }

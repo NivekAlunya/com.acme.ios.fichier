@@ -48,7 +48,7 @@ public struct VideoPlayerBottomBarView: View {
                 currentTime: controller.currentPlaybackSeconds,
                 duration: controller.totalDurationSeconds,
                 chapters: controller.availableChapters,
-                tintColor: controller.engineKind == .extended ? .orange : .blue,
+                tintColor: controller.engineKind == .extended ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent,
                 onSeek: { targetSeconds in
                     controller.onTimelineSeek(targetSeconds: targetSeconds)
                 },

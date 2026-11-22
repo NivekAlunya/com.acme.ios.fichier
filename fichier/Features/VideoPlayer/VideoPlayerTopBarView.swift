@@ -123,7 +123,7 @@ public struct VideoPlayerTopBarView: View {
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill((isVLC ? Color.orange : Color.blue).opacity(0.85))
+                    .fill((isVLC ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent).opacity(0.85))
                     .overlay(
                         Capsule()
                             .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5)
@@ -424,7 +424,7 @@ public struct VideoPlayerTopBarView: View {
         } label: {
             Text(isVLC ? "VLC" : "AV")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(isVLC ? Color.orange : Color.blue)
+                .foregroundStyle(isVLC ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent)
                 .frame(width: 30, height: 30)
                 .background(
                     Circle()

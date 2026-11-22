@@ -81,11 +81,11 @@ public struct TVServerCardView: View {
     private var statusColor: Color {
         switch card.status {
         case .online:
-            return FichierTheme.connected
+            return FichierTheme.secondaryAccent
         case .offline:
             return .red
         case .connecting:
-            return FichierTheme.attention
+            return FichierTheme.tertiaryAccent
         case .unknown:
             return .gray
         }

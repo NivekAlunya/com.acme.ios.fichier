@@ -140,10 +140,14 @@ struct MediaGridView: View {
                         searchText: viewModel.searchText,
                         selectedFolderName: viewModel.manager.selectedFolder?.name,
                         hasSelectedFolder: viewModel.manager.selectedFolder != nil,
+                        parentFolderName: viewModel.manager.parentFolder?.name,
                         onRetry: {
                             if let folder = viewModel.manager.selectedFolder {
                                 Task { await viewModel.manager.selectAndLoadFolder(folder) }
                             }
+                        },
+                        onNavigateToParent: viewModel.manager.parentFolder.map { parent in
+                            { navigateToFolder(parent) }
                         }
                     )
                 } else if !viewModel.searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
@@ -637,9 +641,9 @@ struct MediaGridView: View {
                                 }
                             } label: {
                                 Image(systemName: viewMode.selectionIconName)
-                                    .foregroundStyle(FichierTheme.connected)
+                                    .foregroundStyle(FichierTheme.secondaryAccent)
                             }
-                            .tint(FichierTheme.connected)
+                            .tint(FichierTheme.secondaryAccent)
                             .accessibilityLabel(.Strings.galleryButtonSelect)
                         }
                         
@@ -704,9 +708,9 @@ struct MediaGridView: View {
                             #endif
                         } label: {
                             Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                .foregroundStyle(FichierTheme.attention)
+                                .foregroundStyle(FichierTheme.tertiaryAccent)
                         }
-                        .tint(FichierTheme.attention)
+                        .tint(FichierTheme.tertiaryAccent)
                         
                         Button {
                             if let folder = viewModel.manager.selectedFolder {

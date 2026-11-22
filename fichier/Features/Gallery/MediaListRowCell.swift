@@ -42,7 +42,7 @@ struct MediaListRowCell: View {
             if isSelectionMode {
                 ZStack {
                     Circle()
-                        .fill(isSelected ? FichierTheme.connected : Color.clear)
+                        .fill(isSelected ? FichierTheme.secondaryAccent : Color.clear)
                         .frame(width: 22, height: 22)
                     if isSelected {
                         Image(systemName: "checkmark")

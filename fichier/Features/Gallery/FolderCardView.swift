@@ -5,28 +5,45 @@
 
 import SwiftUI
 import FichierKit
-import FichierKit
 
-/// Large folder card: linked thumbnail as full-bleed background, frosted bottom bar with the folder name.
+/// Padded folder card matching `MediaThumbnailCell` and tvOS `TVMediaGridItemView`.
 ///
-/// Falls back to a tinted background with a large folder glyph when no thumbnail is linked yet.
+/// Renders a 4:3 inner thumbnail (linked folder icon or `FichierTheme.accent` placeholder)
+/// with a bottom-leading `FOLDER` badge and the folder name below the thumbnail.
 struct FolderCardView: View {
     /// Folder to render.
     let folder: MediaItem
 
+    /// Grid density sizing used for responsive typography, padding, and badge scaling.
+    var gridSize: GridSize = .medium
+
     /// Linked thumbnail, if one exists.
     @State private var thumbnail: UIImage?
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var cardBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color(white: 0.96)
+    }
+
+    private var cardPadding: CGFloat {
+        gridSize == .large ? 8 : 6
+    }
+
     var body: some View {
-        ZStack {
-            background
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                nameBar
-            }
+        VStack(alignment: .leading, spacing: gridSize == .large ? 6 : 5) {
+            thumbnailView
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            footerBar
         }
-        .aspectRatio(4.0 / 3.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(cardPadding)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .task(id: folder.id) {
             await loadThumbnail()
@@ -44,7 +61,7 @@ struct FolderCardView: View {
     }
 
     @ViewBuilder
-    private var background: some View {
+    private var thumbnailView: some View {
         if let thumbnail {
             Color.clear
                 .overlay {
@@ -63,26 +80,18 @@ struct FolderCardView: View {
         }
     }
 
-    private var nameBar: some View {
+    private var footerBar: some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder.fill")
-                .font(.caption)
             Text(folder.name)
-                .font(.subheadline.weight(.semibold))
+                .font(gridSize.titleFont)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .foregroundColor(thumbnail == nil ? .primary : .white)
-        .shadow(color: .black.opacity(thumbnail == nil ? 0 : 0.35), radius: 1, y: 1)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Color.black.opacity(thumbnail == nil ? 0 : 0.45)
-                .background(thumbnail == nil ? AnyShapeStyle(.clear) : AnyShapeStyle(.ultraThinMaterial))
-        )
+        .padding(.horizontal, 2)
     }
 }

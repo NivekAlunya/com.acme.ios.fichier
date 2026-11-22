@@ -6,18 +6,20 @@
 import SwiftUI
 import FichierKit
 
-/// Full-bleed card-styled grid cell for tvOS media browser matching the iOS design system.
+/// Translucent glass grid card for the tvOS media browser matching the Continue Watching card design.
 ///
 /// Features:
-/// - Full-bleed thumbnail rendering with 16pt corner radius.
-/// - Top-trailing format capsule badge with pictogram icon, extension label, and video playback indicator.
-/// - Bottom edge-to-edge frosted glass overlay bar displaying title and metadata.
+/// - Padded glass container with 16pt corner radius and focus-reactive border.
+/// - Inner thumbnail (12pt corner radius) with bottom-leading format badge and bottom-edge Peach progress bar.
+/// - Footer below the thumbnail displaying title and size/detail metadata.
 public struct TVMediaGridItemView: View {
     /// Target media source item displayed in this grid cell.
     public let item: MediaSourceItem
 
     /// Resolved lightweight media detail (video duration, image frame dimensions, or PDF page count).
     @State private var mediaDetail: String?
+
+    @Environment(\.isFocused) private var isFocused
 
     /// Synchronously resolved detail prioritizing in-memory cache and playback store before async tasks.
     private var displayedDetail: String? {
@@ -44,24 +46,34 @@ public struct TVMediaGridItemView: View {
     }
 
     public var body: some View {
-        ZStack {
-            TVThumbnailView(item: item, targetSize: CGSize(width: 440, height: 260))
-                .frame(height: 240)
+        VStack(alignment: .leading, spacing: 10) {
+            TVThumbnailView(item: item, targetSize: CGSize(width: 440, height: 330))
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .background(Color.secondary.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(alignment: .bottomLeading) {
+                    formatCapsule
+                        .padding(10)
+                }
+                .overlay(alignment: .bottom) {
+                    videoProgressBar
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
-            VStack(spacing: 0) {
-                topTrailingBadge
-                Spacer(minLength: 0)
-                bottomOverlayBar
-            }
+            footerMetadata
         }
-        .frame(height: 240)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(isFocused ? FichierTheme.surfaceMid.opacity(0.45) : Color.white.opacity(0.06))
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(
+                    isFocused ? FichierTheme.secondaryAccent : Color.white.opacity(0.12),
+                    lineWidth: isFocused ? 2 : 1
+                )
         )
         .contentShape(RoundedRectangle(cornerRadius: 16))
         .accessibilityElement(children: .combine)
@@ -72,19 +84,9 @@ public struct TVMediaGridItemView: View {
         }
     }
 
-    // MARK: - Top Trailing Badge
+    // MARK: - Thumbnail Overlays
 
-    /// Top-trailing overlay displaying the format capsule (pictogram + extension + playback indicator).
-    @ViewBuilder
-    private var topTrailingBadge: some View {
-        HStack {
-            Spacer(minLength: 4)
-            formatCapsule
-        }
-        .padding(10)
-    }
-
-    /// Capsule badge at top trailing edge with picto + extension tinted by formatColor.
+    /// Rounded format badge at bottom-leading of the thumbnail tinted by formatColor.
     @ViewBuilder
     private var formatCapsule: some View {
         let info = formatInfo
@@ -102,26 +104,32 @@ public struct TVMediaGridItemView: View {
         .foregroundColor(.white)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(info.color.opacity(0.85))
-        .clipShape(Capsule())
+        .background((item.type == .folder ? FichierTheme.carbon : info.color).opacity(0.88))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
     }
 
-    // MARK: - Bottom Overlay Bar
-
-    /// Edge-to-edge footer displaying merged title, file size/count, and media details over frosted dark glass.
     @ViewBuilder
-    private var bottomOverlayBar: some View {
+    private var videoProgressBar: some View {
+        if item.type == .video, case .inProgress(let progress) = VideoPlaybackStore.shared.status(for: item), progress > 0 {
+            ProgressView(value: min(max(progress, 0), 1))
+                .progressViewStyle(.linear)
+                .tint(FichierTheme.tertiaryAccent)
+                .background(Color.black.opacity(0.35))
+        }
+    }
+
+    // MARK: - Footer
+
+    @ViewBuilder
+    private var footerMetadata: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Merged item title
             Text(item.name)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.white)
-                .lineLimit(2)
+                .lineLimit(1)
                 .truncationMode(.middle)
-                .shadow(color: Color.black.opacity(0.4), radius: 1, x: 0, y: 1)
 
-            // Metadata line (info)
             HStack(spacing: 6) {
                 if item.type != .folder && item.size > 0 {
                     Text(MediaFormatHelper.formatByteCount(item.size))
@@ -134,39 +142,22 @@ public struct TVMediaGridItemView: View {
                 }
             }
             .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.95))
+            .foregroundColor(.white.opacity(0.7))
             .lineLimit(1)
-            .shadow(color: Color.black.opacity(0.35), radius: 1, x: 0, y: 1)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            Color.black.opacity(0.45)
-                .background(.ultraThinMaterial)
-        )
     }
 
     // MARK: - Playback Indicator
 
-    /// Playback state indicator icon or progress ring for video files.
+    /// Playback state indicator icon for completed video files.
     @ViewBuilder
     private var videoPlaybackIndicator: some View {
-        let playbackStatus = VideoPlaybackStore.shared.status(for: item)
-        switch playbackStatus {
-        case .finished:
+        if case .finished = VideoPlaybackStore.shared.status(for: item) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundColor(.green)
-        case .inProgress(let progress):
-            TVVideoProgressRing(
-                progress: progress,
-                size: 14,
-                lineWidth: 2.0,
-                ringColor: .white
-            )
-        case .unwatched:
-            EmptyView()
+                .foregroundColor(FichierTheme.secondaryAccent)
         }
     }
 

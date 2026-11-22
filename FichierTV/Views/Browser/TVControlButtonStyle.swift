@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import FichierKit
 
 /// Focusable pill button style for tvOS browser toolbar controls (`Grid`, `List`, `Sort`).
 ///
@@ -35,22 +36,22 @@ public struct TVControlButtonStyle: ButtonStyle {
             .foregroundStyle(foregroundColor)
             .scaleEffect(scaleAmount(isPressed: configuration.isPressed))
             .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: isFocused)
-            .shadow(color: isFocused ? Color.white.opacity(0.32) : Color.clear, radius: 12, y: 4)
+            .shadow(color: isFocused ? FichierTheme.accent.opacity(0.4) : Color.clear, radius: 12, y: 4)
     }
 
     private var backgroundColor: Color {
         if isFocused {
-            return .white
+            return FichierTheme.accent
         }
         if isSelected {
-            return Color(red: 0.06, green: 0.45, blue: 0.95)
+            return FichierTheme.secondaryAccent
         }
         return Color.white.opacity(0.14)
     }
 
     private var foregroundColor: Color {
-        if isFocused {
-            return .black
+        if isFocused || isSelected {
+            return FichierTheme.onAccentDark
         }
         return .white
     }

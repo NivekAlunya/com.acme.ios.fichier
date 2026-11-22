@@ -94,7 +94,7 @@ public struct TVPhotosRootView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(FichierTheme.tertiaryAccent)
                     .accessibilityHidden(true)
 
                 Text(.Strings.tvPhotosLimitedAccessNotice)
