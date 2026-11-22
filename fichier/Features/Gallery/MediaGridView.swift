@@ -637,9 +637,9 @@ struct MediaGridView: View {
                                 }
                             } label: {
                                 Image(systemName: viewMode.selectionIconName)
-                                    .foregroundStyle(FichierTheme.connected)
+                                    .foregroundStyle(FichierTheme.secondaryAccent)
                             }
-                            .tint(FichierTheme.connected)
+                            .tint(FichierTheme.secondaryAccent)
                             .accessibilityLabel(.Strings.galleryButtonSelect)
                         }
                         
@@ -704,9 +704,9 @@ struct MediaGridView: View {
                             #endif
                         } label: {
                             Image(systemName: (viewModel.mediaFilter != .all || viewModel.showFavoritesOnly) ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                                .foregroundStyle(FichierTheme.attention)
+                                .foregroundStyle(FichierTheme.tertiaryAccent)
                         }
-                        .tint(FichierTheme.attention)
+                        .tint(FichierTheme.tertiaryAccent)
                         
                         Button {
                             if let folder = viewModel.manager.selectedFolder {

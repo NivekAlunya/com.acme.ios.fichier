@@ -119,7 +119,7 @@ public struct PictureViewerBottomBarView: View {
                 } label: {
                     Image(systemName: isPlayingSlideshow ? "pause.fill" : "play.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(isPlayingSlideshow ? FichierTheme.attention : (hasMultiplePictures ? Color.white : Color.white.opacity(0.35)))
+                        .foregroundStyle(isPlayingSlideshow ? FichierTheme.tertiaryAccent : (hasMultiplePictures ? Color.white : Color.white.opacity(0.35)))
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)

@@ -23,7 +23,7 @@ public struct VideoPlayerToastBannerView: View {
     }
     
     private var engineTintColor: Color {
-        controller.engineKind == .extended ? .orange : .blue
+        controller.engineKind == .extended ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent
     }
     
     public var body: some View {

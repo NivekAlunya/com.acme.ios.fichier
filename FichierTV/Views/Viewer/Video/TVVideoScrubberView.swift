@@ -24,7 +24,7 @@ public struct TVVideoScrubberView: View {
         duration: Double,
         scrubbingTime: Double?,
         isFocused: Bool,
-        tintColor: Color = FichierTheme.connected,
+        tintColor: Color = FichierTheme.secondaryAccent,
         chapters: [PlayerChapter] = [],
         seekThumbnailState: TVSeekThumbnailState? = nil,
         previewBubbleLabel: String? = nil,

@@ -44,7 +44,7 @@ public struct TVControlButtonStyle: ButtonStyle {
             return FichierTheme.accent
         }
         if isSelected {
-            return FichierTheme.connected
+            return FichierTheme.secondaryAccent
         }
         return Color.white.opacity(0.14)
     }

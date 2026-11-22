@@ -157,7 +157,7 @@ public struct TVMediaGridItemView: View {
         case .finished:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundColor(FichierTheme.connected)
+                .foregroundColor(FichierTheme.secondaryAccent)
         case .inProgress(let progress):
             TVVideoProgressRing(
                 progress: progress,

@@ -167,7 +167,7 @@ public struct PictureDetailView: View {
                     Spacer().frame(height: 70)
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(FichierTheme.connected)
+                            .foregroundColor(FichierTheme.secondaryAccent)
                         Text(message)
                             .font(.subheadline.bold())
                             .foregroundColor(.white)

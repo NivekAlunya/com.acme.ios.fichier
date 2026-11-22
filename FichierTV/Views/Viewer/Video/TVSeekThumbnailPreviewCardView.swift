@@ -17,7 +17,7 @@ public struct TVSeekThumbnailPreviewCardView: View {
         thumbnailState: TVSeekThumbnailState,
         duration: Double,
         detailLabel: String? = nil,
-        tintColor: Color = FichierTheme.connected
+        tintColor: Color = FichierTheme.secondaryAccent
     ) {
         self.thumbnailState = thumbnailState
         self.duration = duration

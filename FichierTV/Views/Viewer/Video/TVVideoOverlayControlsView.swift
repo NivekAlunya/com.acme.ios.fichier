@@ -199,7 +199,7 @@ public struct TVVideoOverlayControlsView: View {
                 .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill((isVLC ? FichierTheme.attention : FichierTheme.connected).opacity(0.85))
+                        .fill((isVLC ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent).opacity(0.85))
                         .overlay(
                             Capsule()
                                 .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
@@ -213,7 +213,7 @@ public struct TVVideoOverlayControlsView: View {
     }
 
     private var engineTintColor: Color {
-        engineKind == .extended ? FichierTheme.attention : FichierTheme.connected
+        engineKind == .extended ? FichierTheme.tertiaryAccent : FichierTheme.secondaryAccent
     }
 
     @ViewBuilder
