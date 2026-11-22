@@ -140,10 +140,14 @@ struct MediaGridView: View {
                         searchText: viewModel.searchText,
                         selectedFolderName: viewModel.manager.selectedFolder?.name,
                         hasSelectedFolder: viewModel.manager.selectedFolder != nil,
+                        parentFolderName: viewModel.manager.parentFolder?.name,
                         onRetry: {
                             if let folder = viewModel.manager.selectedFolder {
                                 Task { await viewModel.manager.selectAndLoadFolder(folder) }
                             }
+                        },
+                        onNavigateToParent: viewModel.manager.parentFolder.map { parent in
+                            { navigateToFolder(parent) }
                         }
                     )
                 } else if !viewModel.searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {

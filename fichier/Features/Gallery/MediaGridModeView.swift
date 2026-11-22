@@ -111,17 +111,17 @@ struct MediaGridModeView: View {
     @ViewBuilder
     private var foldersSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(.Strings.gallerySectionSubfoldersCount(folders.count))
+            Label(.Strings.gallerySectionSubfoldersCount(folders.count), systemImage: "folder.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
             
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 8)], spacing: 8) {
+            LazyVGrid(columns: gridColumns, spacing: 10) {
                 ForEach(folders) { subfolder in
                     Button {
                         onNavigateToFolder(subfolder)
                     } label: {
-                        FolderCardView(folder: subfolder)
+                        FolderCardView(folder: subfolder, gridSize: gridSize)
                     }
                     .buttonStyle(.plain)
                     .contextMenu(isSelectionMode ? nil : ContextMenu {
