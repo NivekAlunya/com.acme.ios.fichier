@@ -22699,6 +22699,78 @@
         }
       }
     },
+    "video_player_confirm_download_to_files_message": {
+      "comment": "Confirmation message before downloading a video to the Files app",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%1$@“ in Dateien laden?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download \"%1$@\" to Files?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Descargar \"%1$@\" en Archivos?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger « %1$@ » dans Fichiers ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scaricare \"%1$@\" in File?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」を「ファイル」にダウンロードしますか？"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%1$@\" downloaden naar Bestanden?"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pobrać „%1$@” do Plików?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descarregar \"%1$@\" para Ficheiros?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将“%1$@”下载到“文件”？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將「%1$@」下載到「檔案」？"
+          }
+        }
+      }
+    },
     "video_player_downloading_video": {
       "comment": "Video downloading status",
       "extractionState": "manual",
@@ -26511,6 +26583,294 @@
           "stringUnit": {
             "state": "translated",
             "value": "移動 %lld 個項目"
+          }
+        }
+      }
+    },
+    "gallery_confirm_download_to_files_count_message": {
+      "comment": "Confirmation message before downloading selected items to Files",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld ausgewählte(s) Objekt(e) in Dateien laden?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download %1$lld selected item(s) to Files?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Descargar %1$lld elemento(s) seleccionado(s) en Archivos?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger %1$lld élément(s) sélectionné(s) dans Fichiers ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scaricare %1$lld elemento/i selezionato/i in File?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した%1$lld件の項目を「ファイル」にダウンロードしますか？"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld geselecteerde item(s) downloaden naar Bestanden?"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pobrać %1$lld wybranych elementów do Plików?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descarregar %1$lld item(ns) selecionado(s) para Ficheiros?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将所选的 %1$lld 个项目下载到“文件”？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將所選的 %1$lld 個項目下載到「檔案」？"
+          }
+        }
+      }
+    },
+    "gallery_confirm_save_photo_message": {
+      "comment": "Confirmation message before saving a photo to the Photos library",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%1$@“ in deiner Fotomediathek sichern?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save \"%1$@\" to your Photos library?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Guardar \"%1$@\" en tu fototeca?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer « %1$@ » dans votre photothèque ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvare \"%1$@\" nella tua libreria Foto?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」を写真ライブラリに保存しますか？"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%1$@\" bewaren in je fotobibliotheek?"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zapisać „%1$@” w bibliotece Zdjęć?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar \"%1$@\" na sua fototeca?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将“%1$@”存储到“照片”图库？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將「%1$@」儲存到「照片」圖庫？"
+          }
+        }
+      }
+    },
+    "gallery_confirm_save_to_photos_count_message": {
+      "comment": "Confirmation message before saving selected items to the Photos library",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld ausgewählte(s) Objekt(e) laden und in Fotos sichern?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download and save %1$lld selected item(s) to your Photos library?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Descargar y guardar %1$lld elemento(s) seleccionado(s) en Fotos?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger et enregistrer %1$lld élément(s) sélectionné(s) dans Photos ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scaricare e salvare %1$lld elemento/i selezionato/i in Foto?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択した%1$lld件の項目をダウンロードして「写真」に保存しますか？"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld geselecteerde item(s) downloaden en bewaren in Foto’s?"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pobrać i zapisać %1$lld wybranych elementów w Zdjęciach?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descarregar e guardar %1$lld item(ns) selecionado(s) em Fotografias?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并将所选的 %1$lld 个项目存储到“照片”？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並將所選的 %1$lld 個項目儲存到「照片」？"
+          }
+        }
+      }
+    },
+    "gallery_confirm_save_video_message": {
+      "comment": "Confirmation message before downloading and saving a video to the Photos library",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%1$@“ laden und in deiner Fotomediathek sichern?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Download and save \"%1$@\" to your Photos library?"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Descargar y guardar \"%1$@\" en tu fototeca?"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger et enregistrer « %1$@ » dans votre photothèque ?"
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scaricare e salvare \"%1$@\" nella tua libreria Foto?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」をダウンロードして写真ライブラリに保存しますか？"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "\"%1$@\" downloaden en bewaren in je fotobibliotheek?"
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pobrać i zapisać „%1$@” w bibliotece Zdjęć?"
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descarregar e guardar \"%1$@\" na sua fototeca?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并将“%1$@”存储到“照片”图库？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下載並將「%1$@」儲存到「照片」圖庫？"
           }
         }
       }

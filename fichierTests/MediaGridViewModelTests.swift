@@ -78,4 +78,37 @@ struct MediaGridViewModelTests {
         #expect(searched.folders.map(\.name) == ["Vacation"])
         #expect(searched.pictures.isEmpty)
     }
+
+    @Test("requestDownloadConfirmation ignores empty items and stores pending confirmation")
+    func requestDownloadConfirmationState() {
+        let viewModel = MediaGridViewModel(manager: StorageLocationManager())
+
+        viewModel.requestDownloadConfirmation(items: [], kind: .downloadToFiles)
+        #expect(viewModel.pendingDownloadConfirmation == nil)
+
+        let items = [makeItem(name: "photo.jpg"), makeItem(name: "clip.mp4")]
+        viewModel.requestDownloadConfirmation(items: items, kind: .saveToPhotos)
+        #expect(viewModel.pendingDownloadConfirmation == PendingDownloadConfirmation(items: items, kind: .saveToPhotos))
+
+        viewModel.requestDownloadConfirmation(items: [items[0]], kind: .downloadToFiles)
+        #expect(viewModel.pendingDownloadConfirmation == PendingDownloadConfirmation(items: [items[0]], kind: .downloadToFiles))
+    }
+
+    @Test("executePendingDownload clears pending confirmation and starts batch task")
+    func executePendingDownloadClearsAndStartsTask() {
+        let viewModel = MediaGridViewModel(manager: StorageLocationManager())
+        let items = [makeItem(name: "photo.jpg"), makeItem(name: "notes.pdf")]
+
+        viewModel.executePendingDownload()
+        #expect(viewModel.pendingDownloadConfirmation == nil)
+        #expect(!viewModel.isBatchProcessing)
+
+        viewModel.requestDownloadConfirmation(items: items, kind: .downloadToFiles)
+        viewModel.executePendingDownload()
+
+        #expect(viewModel.pendingDownloadConfirmation == nil)
+        #expect(viewModel.isBatchProcessing)
+        viewModel.cancelBatchTask()
+        #expect(!viewModel.isBatchProcessing)
+    }
 }

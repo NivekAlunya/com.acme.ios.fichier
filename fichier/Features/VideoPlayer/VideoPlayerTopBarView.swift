@@ -24,6 +24,7 @@ public struct VideoPlayerTopBarView: View {
     
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var pendingDownloadKind: DownloadActionKind?
     
     /// Designated public initializer.
     ///
@@ -366,26 +367,20 @@ public struct VideoPlayerTopBarView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(FavoritesManager.shared.isFavorite(controller.currentItem) ? Text(.Strings.galleryActionRemoveFromFavorites) : Text(.Strings.galleryActionAddToFavorites))
             
+            #if !os(tvOS)
+            downloadOptionsMenu
+            #else
             if !controller.currentItem.isPhotoAsset {
                 Button {
-                    controller.saveToCameraRoll()
+                    pendingDownloadKind = .saveToPhotos
                 } label: {
-                    if controller.isSaving {
-                        ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 30, height: 30)
-                    } else {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
-                    }
+                    downloadIconView
                 }
                 .buttonStyle(.plain)
                 .disabled(controller.isSaving)
                 .accessibilityLabel(Text(.Strings.galleryActionSaveToPhotos))
             }
+            #endif
             
             #if !os(tvOS)
             if let shareableVideoURL = controller.shareableVideoURL {
@@ -413,6 +408,82 @@ public struct VideoPlayerTopBarView: View {
             playbackOptionsMenu
             
             engineSwitchButton
+        }
+        .confirmationDialog(
+            pendingDownloadKind == .downloadToFiles
+                ? String(localized: .Strings.galleryActionDownloadToFiles)
+                : String(localized: .Strings.galleryActionSaveToPhotos),
+            isPresented: Binding(
+                get: { pendingDownloadKind != nil },
+                set: { if !$0 { pendingDownloadKind = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let kind = pendingDownloadKind {
+                Button(
+                    kind == .downloadToFiles
+                        ? .Strings.galleryActionDownloadToFiles
+                        : .Strings.galleryActionSaveToPhotos
+                ) {
+                    pendingDownloadKind = nil
+                    switch kind {
+                    case .saveToPhotos:
+                        controller.saveToCameraRoll()
+                    case .downloadToFiles:
+                        #if !os(tvOS)
+                        controller.downloadToFiles()
+                        #endif
+                    }
+                }
+            }
+            Button(.Strings.commonCancel, role: .cancel) {
+                pendingDownloadKind = nil
+            }
+        } message: {
+            if pendingDownloadKind == .downloadToFiles {
+                Text(.Strings.videoPlayerConfirmDownloadToFilesMessage(controller.currentItem.name))
+            } else {
+                Text(.Strings.galleryConfirmSaveVideoMessage(controller.currentItem.name))
+            }
+        }
+    }
+
+    #if !os(tvOS)
+    private var downloadOptionsMenu: some View {
+        Menu {
+            if !controller.currentItem.isPhotoAsset {
+                Button {
+                    pendingDownloadKind = .saveToPhotos
+                } label: {
+                    Label(.Strings.galleryActionSaveToPhotos, systemImage: "photo")
+                }
+            }
+            Button {
+                pendingDownloadKind = .downloadToFiles
+            } label: {
+                Label(.Strings.galleryActionDownloadToFiles, systemImage: "arrow.down.doc")
+            }
+        } label: {
+            downloadIconView
+        }
+        .buttonStyle(.plain)
+        .disabled(controller.isSaving)
+        .accessibilityLabel(Text(.Strings.galleryActionDownloadOptionsAccessibility))
+    }
+    #endif
+
+    @ViewBuilder
+    private var downloadIconView: some View {
+        if controller.isSaving {
+            ProgressView()
+                .scaleEffect(0.7)
+                .frame(width: 30, height: 30)
+        } else {
+            Image(systemName: "square.and.arrow.down")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
         }
     }
     

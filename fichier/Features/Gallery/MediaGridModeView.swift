@@ -27,6 +27,8 @@ struct MediaGridModeView: View {
     var onRequestRename: ((MediaItem) -> Void)?
     var onRequestMove: ((MediaItem) -> Void)?
     var onRequestDelete: ((MediaItem) -> Void)?
+    var onRequestSaveToPhotos: ((MediaItem) -> Void)?
+    var onRequestDownloadToFiles: ((MediaItem) -> Void)?
     
     init(
         manager: StorageLocationManager,
@@ -46,7 +48,9 @@ struct MediaGridModeView: View {
         onRefresh: @escaping () async -> Void,
         onRequestRename: ((MediaItem) -> Void)? = nil,
         onRequestMove: ((MediaItem) -> Void)? = nil,
-        onRequestDelete: ((MediaItem) -> Void)? = nil
+        onRequestDelete: ((MediaItem) -> Void)? = nil,
+        onRequestSaveToPhotos: ((MediaItem) -> Void)? = nil,
+        onRequestDownloadToFiles: ((MediaItem) -> Void)? = nil
     ) {
         self.manager = manager
         self.folders = folders
@@ -66,6 +70,8 @@ struct MediaGridModeView: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
+        self.onRequestSaveToPhotos = onRequestSaveToPhotos
+        self.onRequestDownloadToFiles = onRequestDownloadToFiles
     }
     
     var body: some View {
@@ -197,6 +203,8 @@ struct MediaGridModeView: View {
                 onRequestRename: onRequestRename,
                 onRequestMove: onRequestMove,
                 onRequestDelete: onRequestDelete,
+                onRequestSaveToPhotos: onRequestSaveToPhotos,
+                onRequestDownloadToFiles: onRequestDownloadToFiles,
                 onInvalidateThumbnail: { item in
                     await manager.invalidateThumbnail(for: item)
                 }

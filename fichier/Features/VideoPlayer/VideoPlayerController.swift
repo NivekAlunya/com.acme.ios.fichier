@@ -923,6 +923,18 @@ public final class VideoPlayerController {
             self?.shareableVideoURL = localURL
         }
     }
+
+    #if !os(tvOS)
+    /// Downloads the current video file and presents the system Files export picker.
+    public func downloadToFiles() {
+        cameraRollExporter.downloadToFiles(
+            item: currentItem,
+            manager: manager
+        ) { [weak self] localURL in
+            self?.shareableVideoURL = localURL
+        }
+    }
+    #endif
     
     /// Restarts the video from `0:00` and purges any saved resume progress from persistent store.
     public func restartVideo() {
