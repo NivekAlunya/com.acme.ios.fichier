@@ -25,7 +25,9 @@ final class DocumentPickerExportView: NSObject, UIDocumentPickerDelegate, UIAdap
     /// Presents the system Files export picker for the given local file URLs.
     static func present(urls: [URL], onCompletion: @escaping @MainActor (Bool) -> Void) {
         let existingURLs = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !existingURLs.isEmpty, let presenter = topMostViewController() else {
+        guard !existingURLs.isEmpty,
+              let presenter = topMostViewController(),
+              !presenter.isBeingDismissed else {
             onCompletion(false)
             return
         }

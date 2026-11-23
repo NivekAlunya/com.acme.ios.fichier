@@ -20,12 +20,17 @@ public final class VideoCameraRollExporter {
     /// Active background task downloading the video file and writing it to the Photos library.
     private var saveTask: Task<Void, Never>?
 
+    /// Cancellable timer task that clears transient save status banners.
+    private var statusResetTask: Task<Void, Never>?
+
     public init() {}
 
     /// Cancels any in-flight download or Photos export task and clears status banners.
     public func cancel() {
         saveTask?.cancel()
         saveTask = nil
+        statusResetTask?.cancel()
+        statusResetTask = nil
         isSaving = false
         saveStatusMessage = nil
     }
@@ -77,7 +82,8 @@ public final class VideoCameraRollExporter {
                 withAnimation {
                     self.saveStatusMessage = String(localized: .Strings.galleryBatchSavedToFiles(1))
                 }
-                Task { @MainActor [weak self] in
+                self.statusResetTask?.cancel()
+                self.statusResetTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .seconds(2.5))
                     guard let self, !Task.isCancelled else { return }
                     withAnimation {
@@ -97,6 +103,8 @@ public final class VideoCameraRollExporter {
     ) {
         isSaving = true
         saveTask?.cancel()
+        statusResetTask?.cancel()
+        statusResetTask = nil
         withAnimation {
             saveStatusMessage = String(localized: .Strings.videoPlayerDownloadingVideo)
         }

@@ -201,7 +201,7 @@ struct MediaGridView: View {
                                     #if !os(tvOS)
                                     if viewModel.manager.currentLocation?.kind != .photos {
                                         return { item in
-                                            viewModel.saveToPhotos(items: [item])
+                                            viewModel.requestDownloadConfirmation(items: [item], kind: .saveToPhotos)
                                         }
                                     }
                                     #endif
@@ -210,7 +210,7 @@ struct MediaGridView: View {
                                 onRequestDownloadToFiles: {
                                     #if !os(tvOS)
                                     return { item in
-                                        viewModel.downloadToFiles(items: [item])
+                                        viewModel.requestDownloadConfirmation(items: [item], kind: .downloadToFiles)
                                     }
                                     #else
                                     return nil
@@ -264,7 +264,7 @@ struct MediaGridView: View {
                                     #if !os(tvOS)
                                     if viewModel.manager.currentLocation?.kind != .photos {
                                         return { item in
-                                            viewModel.saveToPhotos(items: [item])
+                                            viewModel.requestDownloadConfirmation(items: [item], kind: .saveToPhotos)
                                         }
                                     }
                                     #endif
@@ -273,7 +273,7 @@ struct MediaGridView: View {
                                 onRequestDownloadToFiles: {
                                     #if !os(tvOS)
                                     return { item in
-                                        viewModel.downloadToFiles(items: [item])
+                                        viewModel.requestDownloadConfirmation(items: [item], kind: .downloadToFiles)
                                     }
                                     #else
                                     return nil
@@ -341,8 +341,8 @@ struct MediaGridView: View {
         #if !os(tvOS)
         .onChange(of: viewModel.itemsPendingFileExport) { _, urls in
             guard let urls, !urls.isEmpty else { return }
+            viewModel.itemsPendingFileExport = nil
             DocumentPickerExportView.present(urls: urls) { success in
-                viewModel.itemsPendingFileExport = nil
                 if success {
                     withAnimation {
                         viewModel.isSelectionMode = false
