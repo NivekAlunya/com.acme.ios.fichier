@@ -41,6 +41,60 @@ public final class VideoCameraRollExporter {
         manager: StorageLocationManager,
         onShareableURL: (@MainActor (URL) -> Void)? = nil
     ) {
+        runVideoDownload(item: item, manager: manager, onShareableURL: onShareableURL) { localURL in
+            withAnimation {
+                self.saveStatusMessage = String(localized: .Strings.videoPlayerSavingToPhotos)
+            }
+            #if !os(tvOS)
+            try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
+            #endif
+            guard !Task.isCancelled else { return }
+            withAnimation {
+                self.saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
+            }
+        }
+    }
+
+    #if !os(tvOS)
+    /// Downloads the specified video file to local cache and presents the system Files export picker.
+    ///
+    /// - Parameters:
+    ///   - item: Target video media item.
+    ///   - manager: Shared storage location manager handling network workers and credentials.
+    ///   - onShareableURL: Optional callback receiving the resolved local file URL on successful fetch.
+    public func downloadToFiles(
+        item: MediaItem,
+        manager: StorageLocationManager,
+        onShareableURL: (@MainActor (URL) -> Void)? = nil
+    ) {
+        runVideoDownload(item: item, manager: manager, onShareableURL: onShareableURL) { [weak self] localURL in
+            guard let self else { return }
+            withAnimation {
+                self.saveStatusMessage = nil
+            }
+            DocumentPickerExportView.present(urls: [localURL]) { [weak self] success in
+                guard let self, success else { return }
+                withAnimation {
+                    self.saveStatusMessage = String(localized: .Strings.galleryBatchSavedToFiles(1))
+                }
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(2.5))
+                    guard let self, !Task.isCancelled else { return }
+                    withAnimation {
+                        self.saveStatusMessage = nil
+                    }
+                }
+            }
+        }
+    }
+    #endif
+
+    private func runVideoDownload(
+        item: MediaItem,
+        manager: StorageLocationManager,
+        onShareableURL: (@MainActor (URL) -> Void)?,
+        onDownloaded: @escaping @MainActor (URL) async throws -> Void
+    ) {
         isSaving = true
         saveTask?.cancel()
         withAnimation {
@@ -67,16 +121,7 @@ public final class VideoCameraRollExporter {
                 }
                 guard !Task.isCancelled else { return }
                 onShareableURL?(localURL)
-                withAnimation {
-                    self.saveStatusMessage = String(localized: .Strings.videoPlayerSavingToPhotos)
-                }
-                #if !os(tvOS)
-                try await PhotoLibrarySaver.saveVideoToPhotos(at: localURL)
-                #endif
-                guard !Task.isCancelled else { return }
-                withAnimation {
-                    self.saveStatusMessage = String(localized: .Strings.gallerySavedToPhotosSingle)
-                }
+                try await onDownloaded(localURL)
             } catch {
                 guard !Task.isCancelled else { return }
                 withAnimation {

@@ -31,6 +31,9 @@ public struct PictureDetailView: View {
     /// Cancellable task coordinating a one-frame direction update before backward slideshow navigation.
     @State private var pendingPreviousTask: Task<Void, Never>?
 
+    /// Controls presentation of the Save to Photos confirmation dialog.
+    @State private var isConfirmingSaveToPhotos = false
+
     /// Designated public initializer.
     ///
     /// - Parameters:
@@ -153,7 +156,7 @@ public struct PictureDetailView: View {
                         FavoritesManager.shared.toggleFavorite(viewModel.currentItem)
                     },
                     onSaveToCameraRoll: {
-                        saveToCameraRoll()
+                        isConfirmingSaveToPhotos = true
                     }
                 )
                 .padding(.bottom, 20)
@@ -271,6 +274,18 @@ public struct PictureDetailView: View {
                     }
                 }
             }
+        }
+        .confirmationDialog(
+            .Strings.galleryActionSaveToPhotos,
+            isPresented: $isConfirmingSaveToPhotos,
+            titleVisibility: .visible
+        ) {
+            Button(.Strings.galleryActionSaveToPhotos) {
+                saveToCameraRoll()
+            }
+            Button(.Strings.commonCancel, role: .cancel) {}
+        } message: {
+            Text(.Strings.galleryConfirmSavePhotoMessage(viewModel.currentItem.name))
         }
         .onAppear {
             AppKeyboardDismissal.dismiss()

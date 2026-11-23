@@ -13,6 +13,8 @@ public struct MediaItemContextMenu: View {
     public let onRequestRename: ((MediaItem) -> Void)?
     public let onRequestMove: ((MediaItem) -> Void)?
     public let onRequestDelete: ((MediaItem) -> Void)?
+    public let onRequestSaveToPhotos: ((MediaItem) -> Void)?
+    public let onRequestDownloadToFiles: ((MediaItem) -> Void)?
     public let onInvalidateThumbnail: (MediaItem) async -> Void
 
     public init(
@@ -22,6 +24,8 @@ public struct MediaItemContextMenu: View {
         onRequestRename: ((MediaItem) -> Void)? = nil,
         onRequestMove: ((MediaItem) -> Void)? = nil,
         onRequestDelete: ((MediaItem) -> Void)? = nil,
+        onRequestSaveToPhotos: ((MediaItem) -> Void)? = nil,
+        onRequestDownloadToFiles: ((MediaItem) -> Void)? = nil,
         onInvalidateThumbnail: @escaping (MediaItem) async -> Void
     ) {
         self.item = item
@@ -30,6 +34,8 @@ public struct MediaItemContextMenu: View {
         self.onRequestRename = onRequestRename
         self.onRequestMove = onRequestMove
         self.onRequestDelete = onRequestDelete
+        self.onRequestSaveToPhotos = onRequestSaveToPhotos
+        self.onRequestDownloadToFiles = onRequestDownloadToFiles
         self.onInvalidateThumbnail = onInvalidateThumbnail
     }
 
@@ -69,6 +75,22 @@ public struct MediaItemContextMenu: View {
                     : .Strings.galleryActionAddToFavorites,
                 systemImage: FavoritesManager.shared.isFavorite(item) ? "heart.slash" : "heart"
             )
+        }
+
+        if let onRequestSaveToPhotos {
+            Button {
+                onRequestSaveToPhotos(item)
+            } label: {
+                Label(.Strings.galleryActionSaveToPhotos, systemImage: "photo")
+            }
+        }
+
+        if let onRequestDownloadToFiles {
+            Button {
+                onRequestDownloadToFiles(item)
+            } label: {
+                Label(.Strings.galleryActionDownloadToFiles, systemImage: "arrow.down.doc")
+            }
         }
 
         Button {

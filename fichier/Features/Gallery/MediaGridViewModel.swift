@@ -44,6 +44,7 @@ final class MediaGridViewModel {
     var itemsPendingMove: [MediaItem]?
     var itemsPendingDelete: [MediaItem]?
     var itemsPendingFileExport: [URL]?
+    var pendingDownloadConfirmation: PendingDownloadConfirmation?
     var fileOpErrorMessage: String?
     var thumbnailReloadToken = UUID()
 
@@ -242,9 +243,31 @@ final class MediaGridViewModel {
 
     // MARK: - Batch Export to Photos
 
+    /// Queues a confirmation dialog before downloading or saving items.
+    func requestDownloadConfirmation(items: [MediaItem], kind: DownloadActionKind) {
+        guard !items.isEmpty else { return }
+        pendingDownloadConfirmation = PendingDownloadConfirmation(items: items, kind: kind)
+    }
+
+    /// Executes the currently pending download confirmation and clears it.
+    func executePendingDownload() {
+        guard let pending = pendingDownloadConfirmation else { return }
+        pendingDownloadConfirmation = nil
+        switch pending.kind {
+        case .saveToPhotos:
+            saveToPhotos(items: pending.items)
+        case .downloadToFiles:
+            downloadToFiles(items: pending.items)
+        }
+    }
+
     /// Exports selected media files to the user's Photos library concurrently using a bounded worker pool.
     func batchSaveToPhotos() {
-        let items = Array(selectedItems)
+        saveToPhotos(items: Array(selectedItems))
+    }
+
+    /// Exports the specified media items to the user's Photos library concurrently using a bounded worker pool.
+    func saveToPhotos(items: [MediaItem]) {
         guard !items.isEmpty else { return }
         isBatchProcessing = true
         batchTask?.cancel()
@@ -377,7 +400,11 @@ final class MediaGridViewModel {
 
     /// Downloads selected media items directly to local files and prepares them for file export.
     func batchDownloadToFiles() {
-        let items = Array(selectedItems)
+        downloadToFiles(items: Array(selectedItems))
+    }
+
+    /// Downloads the specified media items directly to local files and prepares them for file export.
+    func downloadToFiles(items: [MediaItem]) {
         guard !items.isEmpty else { return }
         isBatchProcessing = true
         batchTask?.cancel()

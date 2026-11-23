@@ -8,6 +8,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>We need access to your local network to discover and connect to your Mac and Samba shares.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save photos and videos from your shares to your Photos library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Browse and view photos and videos from your Photos library.</string>
 	<key>UIBackgroundModes</key>

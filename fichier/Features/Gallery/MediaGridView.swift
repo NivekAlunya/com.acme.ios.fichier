@@ -196,7 +196,26 @@ struct MediaGridView: View {
                                 },
                                 onRequestDelete: { item in
                                     viewModel.itemsPendingDelete = [item]
-                                }
+                                },
+                                onRequestSaveToPhotos: {
+                                    #if !os(tvOS)
+                                    if viewModel.manager.currentLocation?.kind != .photos {
+                                        return { item in
+                                            viewModel.saveToPhotos(items: [item])
+                                        }
+                                    }
+                                    #endif
+                                    return nil
+                                }(),
+                                onRequestDownloadToFiles: {
+                                    #if !os(tvOS)
+                                    return { item in
+                                        viewModel.downloadToFiles(items: [item])
+                                    }
+                                    #else
+                                    return nil
+                                    #endif
+                                }()
                             )
                             #if !os(tvOS)
                             .simultaneousGesture(pinchGesture)
@@ -240,7 +259,26 @@ struct MediaGridView: View {
                                 },
                                 onRequestDelete: { item in
                                     viewModel.itemsPendingDelete = [item]
-                                }
+                                },
+                                onRequestSaveToPhotos: {
+                                    #if !os(tvOS)
+                                    if viewModel.manager.currentLocation?.kind != .photos {
+                                        return { item in
+                                            viewModel.saveToPhotos(items: [item])
+                                        }
+                                    }
+                                    #endif
+                                    return nil
+                                }(),
+                                onRequestDownloadToFiles: {
+                                    #if !os(tvOS)
+                                    return { item in
+                                        viewModel.downloadToFiles(items: [item])
+                                    }
+                                    #else
+                                    return nil
+                                    #endif
+                                }()
                             )
                             #if !os(tvOS)
                             .simultaneousGesture(pinchGesture)
@@ -264,8 +302,18 @@ struct MediaGridView: View {
                     showFileManagement: viewModel.manager.canManageCurrentFolder,
                     onCancel: { viewModel.cancelBatchTask() },
                     onToggleFavorite: { viewModel.batchToggleFavorites() },
-                    onSaveToPhotos: { viewModel.batchSaveToPhotos() },
-                    onDownloadToFiles: { viewModel.batchDownloadToFiles() },
+                    onSaveToPhotos: {
+                        viewModel.requestDownloadConfirmation(
+                            items: Array(viewModel.selectedItems),
+                            kind: .saveToPhotos
+                        )
+                    },
+                    onDownloadToFiles: {
+                        viewModel.requestDownloadConfirmation(
+                            items: Array(viewModel.selectedItems),
+                            kind: .downloadToFiles
+                        )
+                    },
                     onShare: { viewModel.batchShare() },
                     onMove: {
                         viewModel.itemsPendingMove = Array(viewModel.selectedItems)
@@ -291,20 +339,16 @@ struct MediaGridView: View {
             }
         }
         #if !os(tvOS)
-        .sheet(isPresented: Binding(
-            get: { viewModel.itemsPendingFileExport != nil },
-            set: { if !$0 { viewModel.itemsPendingFileExport = nil } }
-        )) {
-            if let urls = viewModel.itemsPendingFileExport {
-                DocumentPickerExportView(urls: urls) { success in
-                    viewModel.itemsPendingFileExport = nil
-                    if success {
-                        withAnimation {
-                            viewModel.isSelectionMode = false
-                            viewModel.selectedItems.removeAll()
-                        }
-                        viewModel.showToastMessage(String(localized: .Strings.galleryBatchSavedToFiles(urls.count)))
+        .onChange(of: viewModel.itemsPendingFileExport) { _, urls in
+            guard let urls, !urls.isEmpty else { return }
+            DocumentPickerExportView.present(urls: urls) { success in
+                viewModel.itemsPendingFileExport = nil
+                if success {
+                    withAnimation {
+                        viewModel.isSelectionMode = false
+                        viewModel.selectedItems.removeAll()
                     }
+                    viewModel.showToastMessage(String(localized: .Strings.galleryBatchSavedToFiles(urls.count)))
                 }
             }
         }
@@ -325,6 +369,38 @@ struct MediaGridView: View {
                         viewModel.itemsPendingMove = nil
                     }
                 )
+            }
+        }
+        .confirmationDialog(
+            viewModel.pendingDownloadConfirmation?.kind == .saveToPhotos
+                ? String(localized: .Strings.galleryActionSaveToPhotos)
+                : String(localized: .Strings.galleryActionDownloadToFiles),
+            isPresented: Binding(
+                get: { viewModel.pendingDownloadConfirmation != nil },
+                set: { if !$0 { viewModel.pendingDownloadConfirmation = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pending = viewModel.pendingDownloadConfirmation {
+                Button(
+                    pending.kind == .saveToPhotos
+                        ? .Strings.galleryActionSaveToPhotos
+                        : .Strings.galleryActionDownloadToFiles
+                ) {
+                    viewModel.executePendingDownload()
+                }
+            }
+            Button(.Strings.commonCancel, role: .cancel) {
+                viewModel.pendingDownloadConfirmation = nil
+            }
+        } message: {
+            if let pending = viewModel.pendingDownloadConfirmation {
+                switch pending.kind {
+                case .saveToPhotos:
+                    Text(.Strings.galleryConfirmSaveToPhotosCountMessage(pending.items.count))
+                case .downloadToFiles:
+                    Text(.Strings.galleryConfirmDownloadToFilesCountMessage(pending.items.count))
+                }
             }
         }
         .confirmationDialog(
