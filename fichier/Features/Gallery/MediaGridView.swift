@@ -22,6 +22,9 @@ struct MediaGridView: View {
     
     // MARK: - Injected Dependencies
     
+    /// Optional namespace coordinating zoom-from-thumbnail full-screen viewer transitions.
+    var viewerTransitionNamespace: Namespace.ID?
+
     /// Optional closure invoked when the user selects a subfolder to navigate into.
     /// If `nil`, the view defaults to driving folder navigation directly through `manager.selectAndLoadFolder(_:)`.
     var onSelectFolder: ((MediaItem) -> Void)?
@@ -37,10 +40,12 @@ struct MediaGridView: View {
 
     init(
         manager: StorageLocationManager,
+        viewerTransitionNamespace: Namespace.ID? = nil,
         onSelectFolder: ((MediaItem) -> Void)? = nil,
         onStartSlideshow: (([MediaItem]) -> Void)? = nil,
         onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void
     ) {
+        self.viewerTransitionNamespace = viewerTransitionNamespace
         self.onSelectFolder = onSelectFolder
         self.onStartSlideshow = onStartSlideshow
         self.onSelectPicture = onSelectPicture
@@ -133,29 +138,8 @@ struct MediaGridView: View {
         let hasImages = displayPictures.contains(where: \.isImage)
         
         Group {
-            if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
-                    MediaGridEmptyStateView(
-                        isLoading: viewModel.manager.isLoading,
-                        errorMessage: viewModel.manager.errorMessage,
-                        searchText: viewModel.searchText,
-                        selectedFolderName: viewModel.manager.selectedFolder?.name,
-                        hasSelectedFolder: viewModel.manager.selectedFolder != nil,
-                        parentFolderName: viewModel.manager.parentFolder?.name,
-                        onRetry: {
-                            if let folder = viewModel.manager.selectedFolder {
-                                Task { await viewModel.manager.selectAndLoadFolder(folder) }
-                            }
-                        },
-                        onNavigateToParent: viewModel.manager.parentFolder.map { parent in
-                            { navigateToFolder(parent) }
-                        }
-                    )
-                } else if !viewModel.searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
-                    ContentUnavailableView.search(text: viewModel.searchText)
-                } else {
-                    Group {
-                        switch viewMode {
-                        case .grid:
+            switch viewMode {
+            case .grid:
                             MediaGridModeView(
                                 manager: viewModel.manager,
                                 folders: displayFolders,
@@ -167,6 +151,7 @@ struct MediaGridView: View {
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
+                                viewerTransitionNamespace: viewerTransitionNamespace,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: {
                                     AppKeyboardDismissal.dismiss()
@@ -221,7 +206,7 @@ struct MediaGridView: View {
                             .simultaneousGesture(pinchGesture)
                             #endif
                             .transition(.opacity)
-                        case .list:
+            case .list:
                             MediaListModeView(
                                 manager: viewModel.manager,
                                 folders: displayFolders,
@@ -230,6 +215,7 @@ struct MediaGridView: View {
                                 isSelectionMode: viewModel.isSelectionMode,
                                 selectedItems: viewModel.selectedItems,
                                 currentDirectoryID: viewModel.currentDirectoryID,
+                                viewerTransitionNamespace: viewerTransitionNamespace,
                                 onNavigateToFolder: { navigateToFolder($0) },
                                 onSelectPicture: {
                                     AppKeyboardDismissal.dismiss()
@@ -284,12 +270,32 @@ struct MediaGridView: View {
                             .simultaneousGesture(pinchGesture)
                             #endif
                             .transition(.opacity)
-                        }
-                    }
-                    .id(viewModel.thumbnailReloadToken)
-                }
             }
-            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
+        }
+        .id(viewModel.thumbnailReloadToken)
+        .overlay {
+            if viewModel.manager.pictures.isEmpty && viewModel.manager.currentFolders.isEmpty {
+                MediaGridEmptyStateView(
+                    isLoading: viewModel.manager.isLoading,
+                    errorMessage: viewModel.manager.errorMessage,
+                    searchText: viewModel.searchText,
+                    selectedFolderName: viewModel.manager.selectedFolder?.name,
+                    hasSelectedFolder: viewModel.manager.selectedFolder != nil,
+                    parentFolderName: viewModel.manager.parentFolder?.name,
+                    onRetry: {
+                        if let folder = viewModel.manager.selectedFolder {
+                            Task { await viewModel.manager.selectAndLoadFolder(folder) }
+                        }
+                    },
+                    onNavigateToParent: viewModel.manager.parentFolder.map { parent in
+                        { navigateToFolder(parent) }
+                    }
+                )
+            } else if !viewModel.searchText.isEmpty && displayPictures.isEmpty && displayFolders.isEmpty {
+                ContentUnavailableView.search(text: viewModel.searchText)
+            }
+        }
+        .animation(.spring(response: 0.38, dampingFraction: 0.8), value: viewMode)
         .overlay(alignment: .bottom) {
             // Bottom Action Bar when in Selection Mode
             if viewModel.isSelectionMode {

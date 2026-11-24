@@ -32,6 +32,9 @@ public struct LocationsSidebarView: View {
     
     /// Callback triggered when the user taps a discovered SMB share row.
     let onSelectShare: (MediaItem) -> Void
+    
+    /// Callback triggered when the user taps a folder node in the active drive's folder tree.
+    let onSelectFolder: (MediaItem) -> Void
 
     @State private var viewModel: LocationsSidebarViewModel
     
@@ -44,19 +47,22 @@ public struct LocationsSidebarView: View {
     ///   - connectingLocationID: Active connecting location ID.
     ///   - onSelectLocation: Location selection handler.
     ///   - onSelectShare: Share selection handler.
+    ///   - onSelectFolder: Folder selection handler.
     public init(
         manager: StorageLocationManager,
         showingAddRemote: Binding<Bool>,
         showingSettings: Binding<Bool>,
         connectingLocationID: String?,
         onSelectLocation: @escaping (StorageLocation) -> Void,
-        onSelectShare: @escaping (MediaItem) -> Void
+        onSelectShare: @escaping (MediaItem) -> Void,
+        onSelectFolder: @escaping (MediaItem) -> Void
     ) {
         self._showingAddRemote = showingAddRemote
         self._showingSettings = showingSettings
         self.connectingLocationID = connectingLocationID
         self.onSelectLocation = onSelectLocation
         self.onSelectShare = onSelectShare
+        self.onSelectFolder = onSelectFolder
         // Note: SwiftUI view structs are transient and re-evaluated during parent updates.
         // While State(initialValue:) evaluates on every init, @State retains only the
         // original state object across renders and discards transient allocations.
@@ -119,6 +125,18 @@ public struct LocationsSidebarView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(.Strings.sidebarMenuAddLocation)
                 }
+            }
+            
+            if viewModel.manager.hasSelectedDrive {
+                SidebarFolderTreeView(
+                    manager: viewModel.manager,
+                    onSelectFolder: onSelectFolder
+                )
+            }
+        }
+        .refreshable {
+            if viewModel.manager.hasSelectedDrive {
+                await viewModel.manager.refreshSharesAndFolders()
             }
         }
         #if os(tvOS)

@@ -6,85 +6,82 @@
 import SwiftUI
 import FichierKit
 
-/// Sidebar view that renders the root-level collection of shares and folders for the current storage location.
+/// Sidebar section that renders the hierarchical folder tree for the currently selected storage drive or SMB share.
 ///
-/// Iterates over `manager.folderTree`, constructing hierarchical `FolderTreeNodeView` instances
-/// that support lazy folder expansion and automatic initial expansion matching the selected item.
+/// Designed to be embedded inside `LocationsSidebarView`'s `List`.
+/// Handles loading, empty-shares, and populated tree states using `FolderTreeNodeView`
+/// with lazy folder expansion and automatic initial expansion matching the selected item.
 struct SidebarFolderTreeView: View {
     /// Centralized storage location manager.
     var manager: StorageLocationManager
-    
-    /// Optional callback to reveal or navigate back to the sidebar programmatically.
-    var onOpenSidebar: (() -> Void)?
 
     /// Callback triggered when a folder node is selected by the user.
     let onSelectFolder: (MediaItem) -> Void
     
     var body: some View {
-        Group {
+        Section {
             if displayedTreeNodes.isEmpty {
                 if manager.isLoading {
-                    VStack(spacing: 12) {
+                    HStack(spacing: 12) {
                         ProgressView()
                         Text(.Strings.sidebarLoadingShares)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.clear)
                 } else {
-                    ContentUnavailableView {
-                        Label(
-                            String(localized: .Strings.folders),
-                            systemImage: "folder"
-                        )
-                    } description: {
-                        VStack(spacing: 8) {
-                            Text(.Strings.selectStorageDescription)
-                            HStack(spacing: 5) {
-                                Image(systemName: "sidebar.leading")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.tint)
-                                Text(.Strings.selectStorageSidebarInstruction)
-                            }
-                            .font(.subheadline)
+                    VStack(spacing: 8) {
+                        Image(systemName: "folder.badge.questionmark")
+                            .font(.title2)
                             .foregroundStyle(.secondary)
+                        Text(.Strings.networkingErrorNoSharedFolders)
+                            .font(.subheadline.weight(.semibold))
+                        Text(.Strings.sidebarNoSharesDescription)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        Button {
+                            Task {
+                                await manager.refreshSharesAndFolders()
+                            }
+                        } label: {
+                            Text(.Strings.connectionButtonRefresh)
                         }
+                        .buttonStyle(.bordered)
+                        .padding(.top, 4)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .listRowBackground(Color.clear)
                 }
             } else {
-                List {
-                    Section(sectionHeaderTitle) {
-                        ForEach(displayedTreeNodes) { childNode in
-                            FolderTreeNodeView(
-                                node: childNode,
-                                level: 0,
-                                isInitiallyExpanded: isRootInitiallyExpanded(childNode),
-                                manager: manager,
-                                onSelectFolder: onSelectFolder
-                            )
-                        }
-                    }
-                }
-                #if os(tvOS)
-                .listStyle(.plain)
-                #else
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                .fichierAtmosphericBackground()
-                #endif
-                .refreshable {
-                    await manager.refreshSharesAndFolders()
+                ForEach(displayedTreeNodes) { childNode in
+                    FolderTreeNodeView(
+                        node: childNode,
+                        level: 0,
+                        isInitiallyExpanded: isRootInitiallyExpanded(childNode),
+                        manager: manager,
+                        onSelectFolder: onSelectFolder
+                    )
                 }
             }
+        } header: {
+            Text(sectionHeaderTitle)
         }
         .onChange(of: manager.navigationCoordinator.mutationRevision) { _, _ in
             Task {
-                await manager.refreshExpandedTreeBranches()
+                if manager.folderTree.isEmpty {
+                    await manager.refreshSharesAndFolders()
+                } else {
+                    await manager.refreshExpandedTreeBranches()
+                }
             }
         }
     }
     
-    /// Root-level tree nodes displayed in the middle column, starting with the root folder/share.
+    /// Root-level tree nodes displayed in the sidebar, starting with the root folder/share.
     private var displayedTreeNodes: [MediaItem] {
         guard manager.currentLocation?.kind == .smb else {
             return manager.folderTree
@@ -110,10 +107,24 @@ struct SidebarFolderTreeView: View {
         return selected.shareName == root.shareName || selected.rootName == root.rootName
     }
     
-    /// Title for the folder tree section header displaying folder and file counts.
+    /// Section header reflecting the active drive or SMB share name.
     private var sectionHeaderTitle: String {
-        let folderCount = manager.selectedFolder != nil ? manager.currentFolders.count : displayedTreeNodes.count
-        let fileCount = manager.pictures.count
-        return "Folder \(folderCount) File \(fileCount)"
+        let driveName: String = {
+            if manager.currentLocation?.kind == .smb {
+                return manager.selectedShare?.name ?? manager.currentLocation?.name ?? ""
+            }
+            if let location = manager.currentLocation {
+                return location.name
+            }
+            if let remote = manager.savedConnections.first(where: { manager.currentConnectionID == $0.id }) {
+                return remote.displayName
+            }
+            return ""
+        }()
+        
+        guard !driveName.isEmpty else {
+            return String(localized: .Strings.folders)
+        }
+        return driveName
     }
 }

@@ -52,7 +52,7 @@ public struct PictureDetailView: View {
         // original state object across renders and discards transient allocations.
         self._viewModel = State(
             initialValue: PictureDetailViewModel(
-                manager: manager,
+                manager: manager,   
                 pictures: pictures,
                 initialItem: initialItem,
                 autoStartSlideshow: autoStartSlideshow
@@ -101,28 +101,41 @@ public struct PictureDetailView: View {
                         }
                 )
             } else {
-                // Manual Browsing Mode: Interactive 1:1 finger swipe TabView
-                TabView(selection: $viewModel.currentItem) {
-                    ForEach(viewModel.pictures) { pic in
-                        ZoomablePicturePageView(
-                            manager: viewModel.manager,
-                            item: pic,
-                            onImageLoaded: { loadedImg in
-                                if pic.id == viewModel.currentItem.id {
-                                    self.viewModel.currentImage = loadedImg
+                // Manual Browsing Mode: Interactive 1:1 finger swipe paging ScrollView
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(viewModel.pictures) { pic in
+                            ZoomablePicturePageView(
+                                manager: viewModel.manager,
+                                item: pic,
+                                onImageLoaded: { loadedImg in
+                                    if pic.id == viewModel.currentItem.id {
+                                        self.viewModel.currentImage = loadedImg
+                                    }
+                                },
+                                onTap: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        viewModel.toggleControls()
+                                    }
                                 }
-                            },
-                            onTap: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    viewModel.toggleControls()
-                                }
-                            }
-                        )
-                        .ignoresSafeArea()
-                        .tag(pic)
+                            )
+                            .containerRelativeFrame([.horizontal, .vertical])
+                            .clipped()
+                            .id(pic.id)
+                        }
                     }
+                    .scrollTargetLayout()
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+                .scrollTargetBehavior(.paging)
+                .scrollIndicators(.hidden)
+                .scrollPosition(id: Binding<MediaItem.ID?>(
+                    get: { viewModel.currentItem.id },
+                    set: { newID in
+                        if let newID, let match = viewModel.pictures.first(where: { $0.id == newID }) {
+                            viewModel.currentItem = match
+                        }
+                    }
+                ))
                 .ignoresSafeArea()
             }
         }
