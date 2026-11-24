@@ -116,7 +116,7 @@ struct PDFDetailView: View {
                     .scrollPosition(id: Binding<Int?>(
                         get: { viewModel.currentSpreadIndex },
                         set: { newIndex in
-                            if let newIndex {
+                            if let newIndex, newIndex >= 0, newIndex < spreads.count {
                                 viewModel.currentSpreadIndex = newIndex
                             }
                         }

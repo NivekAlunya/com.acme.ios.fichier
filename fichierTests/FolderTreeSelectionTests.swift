@@ -71,4 +71,27 @@ struct FolderTreeSelectionTests {
         #expect(String(localized: .Strings.openSidebar) == "Open Sidebar")
         #expect(String(localized: .Strings.selectStorageSidebarInstruction) == "Tap the sidebar icon to select a storage location.")
     }
+
+    @Test("selectShare sets selectedFolder for immediate detail navigation and disconnect clears drive state")
+    func selectShareAndDisconnectLifecycle() async {
+        let manager = StorageLocationManager()
+        let server = SavedSMBConnection(host: "nas.local", username: "alice", lastConnected: Date(), hostname: "nas")
+        let location = StorageLocation(smb: server)
+        manager.savedConnections = [server]
+        manager.currentLocation = location
+        manager.isConnected = true
+
+        let share = MediaItem(locationID: location.id, name: "Media", rootName: "Media", path: "", isDirectory: true)
+        manager.folderTree = [share]
+
+        await manager.selectShare(share)
+        #expect(manager.hasSelectedDrive)
+        #expect(manager.selectedShare?.name == "Media")
+        #expect(manager.selectedFolder?.name == "Media")
+
+        await manager.disconnect()
+        #expect(!manager.hasSelectedDrive)
+        #expect(manager.selectedShare == nil)
+        #expect(manager.selectedFolder == nil)
+    }
 }
