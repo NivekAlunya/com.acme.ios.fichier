@@ -28,6 +28,7 @@ struct ZoomableImageView: UIViewRepresentable {
         scrollView.bouncesZoom = true
         scrollView.showsHorizontalScrollIndicator = false
         scrollView.showsVerticalScrollIndicator = false
+        scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.backgroundColor = .clear
 
         let imageView = UIImageView(image: image)

@@ -19,6 +19,7 @@ struct MediaGridModeView: View {
     let isSelectionMode: Bool
     let selectedItems: Set<MediaItem>
     let currentDirectoryID: String
+    var viewerTransitionNamespace: Namespace.ID?
     let onNavigateToFolder: (MediaItem) -> Void
     let onSelectPicture: (MediaItem, [MediaItem]) -> Void
     let onToggleSelection: (MediaItem) -> Void
@@ -41,6 +42,7 @@ struct MediaGridModeView: View {
         isSelectionMode: Bool,
         selectedItems: Set<MediaItem>,
         currentDirectoryID: String,
+        viewerTransitionNamespace: Namespace.ID? = nil,
         onNavigateToFolder: @escaping (MediaItem) -> Void,
         onSelectPicture: @escaping (MediaItem, [MediaItem]) -> Void,
         onToggleSelection: @escaping (MediaItem) -> Void,
@@ -62,6 +64,7 @@ struct MediaGridModeView: View {
         self.isSelectionMode = isSelectionMode
         self.selectedItems = selectedItems
         self.currentDirectoryID = currentDirectoryID
+        self.viewerTransitionNamespace = viewerTransitionNamespace
         self.onNavigateToFolder = onNavigateToFolder
         self.onSelectPicture = onSelectPicture
         self.onToggleSelection = onToggleSelection
@@ -97,14 +100,8 @@ struct MediaGridModeView: View {
             #if !os(tvOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
-            .id(currentDirectoryID)
             .onChange(of: currentDirectoryID) { _, _ in
                 proxy.scrollTo("topOfGrid", anchor: .top)
-            }
-            .onChange(of: manager.isLoading) { wasLoading, isLoading in
-                if wasLoading && !isLoading {
-                    proxy.scrollTo("topOfGrid", anchor: .top)
-                }
             }
             .refreshable {
                 await onRefresh()
@@ -183,6 +180,7 @@ struct MediaGridModeView: View {
             isSelected: selectedItems.contains(pic),
             isSelectionMode: isSelectionMode
         )
+        .optionalMatchedTransitionSource(id: pic.id, in: viewerTransitionNamespace)
         .onTapGesture {
             if isSelectionMode {
                 onToggleSelection(pic)

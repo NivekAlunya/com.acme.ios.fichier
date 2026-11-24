@@ -65,77 +65,83 @@ public struct VideoPlayerCanvasView: View {
         }
         .contentShape(Rectangle())
         #if !os(tvOS)
-        .simultaneousGesture(videoSeekGesture)
-        #endif
+        .overlay {
+            HorizontalSeekGestureView(
+                onChanged: handleHorizontalSeekChanged,
+                onEnded: handleHorizontalSeekEnded,
+                onTap: {
+                    controller.toggleControls()
+                }
+            )
+            .ignoresSafeArea()
+        }
+        #else
         .onTapGesture {
             controller.toggleControls()
         }
+        #endif
     }
     
     #if !os(tvOS)
-    /// Full-screen horizontal drag gesture for gesture-driven timeline scrubbing.
-    private var videoSeekGesture: some Gesture {
-        DragGesture(minimumDistance: 15)
-            .onChanged { value in
-                guard !controller.seekCoordinator.isScrubbingTimeline else { return }
-                let hTranslation = value.translation.width
-                let vTranslation = value.translation.height
-                guard let engine = controller.engine else { return }
-                
-                if !controller.seekCoordinator.isScrubbingWithGesture {
-                    guard abs(hTranslation) > abs(vTranslation) else { return }
-                    if controller.engineKind == .extended {
-                        controller.seekCoordinator.startGestureScrubbing(
-                            currentPlaybackSeconds: controller.currentPlaybackSeconds,
-                            isPlaying: false,
-                            engine: nil
-                        )
-                    } else {
-                        controller.seekCoordinator.startGestureScrubbing(
-                            currentPlaybackSeconds: controller.currentPlaybackSeconds,
-                            isPlaying: controller.playbackState.isPlaying,
-                            engine: engine
-                        )
-                        if controller.seekCoordinator.wasPlayingBeforeScrub {
-                            controller.playbackState = .paused
-                        }
-                    }
-                    controller.cancelAutoHideTimer()
-                    withAnimation(.easeInOut(duration: 0.35)) {
-                        controller.showControls = true
-                    }
-                }
-                
-                let sensitivity: Double
-                if controller.totalDurationSeconds > 3600 {
-                    sensitivity = 2.0
-                } else if controller.totalDurationSeconds > 600 {
-                    sensitivity = 1.0
-                } else {
-                    sensitivity = 0.5
-                }
-                
-                let delta = Double(hTranslation) * sensitivity
-                let maxTarget = (controller.totalDurationSeconds.isFinite && !controller.totalDurationSeconds.isNaN && controller.totalDurationSeconds > 0) ? controller.totalDurationSeconds : Double.greatestFiniteMagnitude
-                let target = max(0, min(maxTarget, controller.seekCoordinator.initialScrubTime + delta))
-                controller.currentPlaybackSeconds = target
-                if controller.engineKind == .extended, let extended = controller.extendedEngine {
-                    extended.scrub(to: target)
-                } else {
-                    controller.seekCoordinator.requestLiveFrameSeek(to: target, engine: engine)
+    /// Handles horizontal pan updates for gesture-driven timeline scrubbing.
+    private func handleHorizontalSeekChanged(_ hTranslation: CGFloat) {
+        guard !controller.seekCoordinator.isScrubbingTimeline else { return }
+        guard let engine = controller.engine else { return }
+        
+        if !controller.seekCoordinator.isScrubbingWithGesture {
+            if controller.engineKind == .extended {
+                controller.seekCoordinator.startGestureScrubbing(
+                    currentPlaybackSeconds: controller.currentPlaybackSeconds,
+                    isPlaying: false,
+                    engine: nil
+                )
+            } else {
+                controller.seekCoordinator.startGestureScrubbing(
+                    currentPlaybackSeconds: controller.currentPlaybackSeconds,
+                    isPlaying: controller.playbackState.isPlaying,
+                    engine: engine
+                )
+                if controller.seekCoordinator.wasPlayingBeforeScrub {
+                    controller.playbackState = .paused
                 }
             }
-            .onEnded { _ in
-                guard controller.seekCoordinator.isScrubbingWithGesture else { return }
-                controller.seekCoordinator.endGestureScrubbing()
-                guard !controller.seekCoordinator.isScrubbingTimeline else { return }
-                if controller.engineKind == .extended, let extended = controller.extendedEngine {
-                    extended.endScrubbing(at: controller.currentPlaybackSeconds)
-                    controller.scheduleControlsAutoHide()
-                } else {
-                    controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
-                }
+            controller.cancelAutoHideTimer()
+            withAnimation(.easeInOut(duration: 0.35)) {
+                controller.showControls = true
             }
+        }
+        
+        let sensitivity: Double
+        if controller.totalDurationSeconds > 3600 {
+            sensitivity = 2.0
+        } else if controller.totalDurationSeconds > 600 {
+            sensitivity = 1.0
+        } else {
+            sensitivity = 0.5
+        }
+        
+        let delta = Double(hTranslation) * sensitivity
+        let maxTarget = (controller.totalDurationSeconds.isFinite && !controller.totalDurationSeconds.isNaN && controller.totalDurationSeconds > 0) ? controller.totalDurationSeconds : Double.greatestFiniteMagnitude
+        let target = max(0, min(maxTarget, controller.seekCoordinator.initialScrubTime + delta))
+        controller.currentPlaybackSeconds = target
+        if controller.engineKind == .extended, let extended = controller.extendedEngine {
+            extended.scrub(to: target)
+        } else {
+            controller.seekCoordinator.requestLiveFrameSeek(to: target, engine: engine)
+        }
+    }
+
+    /// Commits the target seek time when horizontal pan scrubbing finishes.
+    private func handleHorizontalSeekEnded() {
+        guard controller.seekCoordinator.isScrubbingWithGesture else { return }
+        controller.seekCoordinator.endGestureScrubbing()
+        guard !controller.seekCoordinator.isScrubbingTimeline else { return }
+        if controller.engineKind == .extended, let extended = controller.extendedEngine {
+            extended.endScrubbing(at: controller.currentPlaybackSeconds)
+            controller.scheduleControlsAutoHide()
+        } else {
+            controller.finishSeeking(at: controller.currentPlaybackSeconds, resumePlaying: controller.seekCoordinator.wasPlayingBeforeScrub)
+        }
     }
     #endif
 }

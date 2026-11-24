@@ -91,22 +91,36 @@ struct PDFDetailView: View {
             
             if let document = viewModel.document {
                 if isBookMode {
-                    // Book Mode: Interactive 1:1 finger swipe TabView (like PictureDetailView)
-                    TabView(selection: $viewModel.currentSpreadIndex) {
-                        ForEach(spreads) { spread in
-                            PDFSpreadPageView(
-                                document: document,
-                                spread: spread,
-                                onTap: {
-                                    withAnimation(.easeInOut(duration: 0.2)) {
-                                        viewModel.showControls.toggle()
+                    // Book Mode: Interactive 1:1 finger swipe paging ScrollView
+                    ScrollView(.horizontal) {
+                        LazyHStack(spacing: 0) {
+                            ForEach(spreads) { spread in
+                                PDFSpreadPageView(
+                                    document: document,
+                                    spread: spread,
+                                    onTap: {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            viewModel.showControls.toggle()
+                                        }
                                     }
-                                }
-                            )
-                            .tag(spread.id)
+                                )
+                                .containerRelativeFrame([.horizontal, .vertical])
+                                .clipped()
+                                .id(spread.id)
+                            }
                         }
+                        .scrollTargetLayout()
                     }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .scrollTargetBehavior(.paging)
+                    .scrollIndicators(.hidden)
+                    .scrollPosition(id: Binding<Int?>(
+                        get: { viewModel.currentSpreadIndex },
+                        set: { newIndex in
+                            if let newIndex, newIndex >= 0, newIndex < spreads.count {
+                                viewModel.currentSpreadIndex = newIndex
+                            }
+                        }
+                    ))
                     .ignoresSafeArea()
                     .onChange(of: viewModel.currentSpreadIndex) { _, newIndex in
                         guard newIndex >= 0 && newIndex < spreads.count else { return }

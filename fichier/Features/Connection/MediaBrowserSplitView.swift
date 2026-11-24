@@ -6,12 +6,12 @@
 import SwiftUI
 import FichierKit
 
-/// Root visual container for the application, organizing navigation into a three-column `NavigationSplitView`.
+/// Root visual container for the application, organizing navigation into a two-column `NavigationSplitView`.
 ///
 /// ### Architecture & Navigation Hierarchy
-/// - **Column 1 (Sidebar)**: `LocationsSidebarView` displays available storage roots (Photos, Local, iCloud, SMB).
-/// - **Column 2 (Content)**: `FolderTreeContentView` presents the hierarchical folder tree for the connected location.
-/// - **Column 3 (Detail)**: `MediaGridView` renders thumbnail collections, folder contents, and action toolbars.
+/// - **Column 1 (Sidebar)**: `LocationsSidebarView` displays available storage roots (Photos, Local, iCloud, SMB)
+///   alongside the hierarchical folder tree (`SidebarFolderTreeView`) for the active drive or share.
+/// - **Column 2 (Detail)**: `MediaGridView` renders thumbnail collections, folder contents, and action toolbars.
 ///
 /// Also acts as the coordinator presenting full-screen viewers:
 /// - `PictureDetailView` for full-resolution photo inspection and automated slideshows.
@@ -52,6 +52,9 @@ public struct MediaBrowserSplitView: View {
     
     /// Cancellable background task handling asynchronous location selection.
     @State private var connectionTask: Task<Void, Never>?
+
+    /// Shared namespace coordinating zoom-from-thumbnail full-screen viewer transitions.
+    @Namespace private var viewerTransitionNamespace
     
     /// Default public initializer.
     public init() {}
@@ -61,7 +64,7 @@ public struct MediaBrowserSplitView: View {
             columnVisibility: $columnVisibility,
             preferredCompactColumn: $preferredCompactColumn
         ) {
-            // 1. Sidebar: Unified Locations list (iCloud, Local, SMB)
+            // 1. Sidebar: Unified Locations list + active drive's folder tree
             LocationsSidebarView(
                 manager: storageManager,
                 showingAddRemote: $showingAddRemote,
@@ -72,18 +75,6 @@ public struct MediaBrowserSplitView: View {
                 },
                 onSelectShare: { share in
                     selectShare(share)
-                }
-            )
-        } content: {
-            // 2. Content: Folder Tree of the selected/connected remote
-            FolderTreeContentView(
-                manager: storageManager,
-                showingAddRemote: $showingAddRemote,
-                onOpenSidebar: {
-                    withAnimation {
-                        columnVisibility = .all
-                        preferredCompactColumn = .sidebar
-                    }
                 },
                 onSelectFolder: { folder in
                     Task {
@@ -98,6 +89,7 @@ public struct MediaBrowserSplitView: View {
                 if let selectedFolder = storageManager.selectedFolder {
                     MediaGridView(
                         manager: storageManager,
+                        viewerTransitionNamespace: viewerTransitionNamespace,
                         onSelectFolder: { subfolder in
                             Task {
                                 await storageManager.selectAndLoadFolder(subfolder)
@@ -172,6 +164,7 @@ public struct MediaBrowserSplitView: View {
                 initialItem: context.item,
                 autoStartSlideshow: shouldAutoStartSlideshow
             )
+            .navigationTransition(.zoom(sourceID: context.item.id, in: viewerTransitionNamespace))
         }
         .fullScreenCover(item: $activeVideoContext) { context in
             VideoDetailView(
@@ -179,6 +172,7 @@ public struct MediaBrowserSplitView: View {
                 videos: context.resolvedItems(matching: \.isVideo),
                 initialItem: context.item
             )
+            .navigationTransition(.zoom(sourceID: context.item.id, in: viewerTransitionNamespace))
         }
         #if !os(tvOS)
         .fullScreenCover(item: $activePDFContext) { context in
@@ -187,6 +181,7 @@ public struct MediaBrowserSplitView: View {
                 documents: context.resolvedItems(matching: \.isPDF),
                 initialItem: context.item
             )
+            .navigationTransition(.zoom(sourceID: context.item.id, in: viewerTransitionNamespace))
         }
         #endif
         .sheet(isPresented: $showingSettings) {
@@ -202,7 +197,11 @@ public struct MediaBrowserSplitView: View {
     /// - Parameter location: The target location selected by the user.
     private func selectLocation(_ location: StorageLocation) {
         if storageManager.isConnected && storageManager.currentLocation?.id == location.id {
-            preferredCompactColumn = location.kind == .smb ? .sidebar : .content
+            if location.kind == .smb {
+                preferredCompactColumn = .sidebar
+            } else {
+                preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .sidebar
+            }
             return
         }
         
@@ -219,7 +218,7 @@ public struct MediaBrowserSplitView: View {
                     // Keep sidebar focused so the expanded shares list is immediately visible
                     preferredCompactColumn = .sidebar
                 } else {
-                    preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .content
+                    preferredCompactColumn = storageManager.selectedFolder != nil ? .detail : .sidebar
                 }
             }
         }
@@ -232,7 +231,7 @@ public struct MediaBrowserSplitView: View {
         AppHapticFeedback.light()
         Task {
             await storageManager.selectShare(share)
-            preferredCompactColumn = .content
+            preferredCompactColumn = .detail
         }
     }
 }
