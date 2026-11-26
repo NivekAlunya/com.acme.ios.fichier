@@ -58,12 +58,6 @@ public final class VideoPlayerController {
     /// Current AVURLAsset reference configured for custom resource loading.
     private var currentAsset: AVURLAsset?
     
-    // swiftlint:disable:next no_legacy_dispatch_queue
-    private static let smbResourceLoaderQueue = DispatchQueue(
-        label: "com.acme.ios.fichier.videoloader",
-        qos: .userInitiated
-    )
-    
     /// Active resource loader delegate streaming chunks over SMB.
     private var loaderDelegate: SMBAVAssetResourceLoaderDelegate?
     
@@ -216,7 +210,9 @@ public final class VideoPlayerController {
             }
         }
         
-        VideoAudioSessionCoordinator.activatePlaybackSession()
+        Task {
+            await VideoAudioSessionCoordinator.shared.activatePlaybackSession()
+        }
         
         let ext = (item.name as NSString).pathExtension
         let isExtended = preferredKind.map { $0 == .extended } ?? SupportedMediaTypes.isExtendedVideo(extension: ext)
@@ -316,7 +312,7 @@ public final class VideoPlayerController {
             
             // AVAssetResourceLoader requires a GCD queue for delegate callbacks (no async API
             // exists). The delegate is retained in `loaderDelegate` because the asset only holds it weakly.
-            asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
+            asset.resourceLoader.setDelegate(delegate, queue: FichierResourceLoaderQueue.shared)
             
             let playerItem = AVPlayerItem(asset: asset)
             playerItem.preferredForwardBufferDuration = 2.0
@@ -1121,7 +1117,9 @@ public final class VideoPlayerController {
         errorMessage = nil
         
         if deactivateAudioSession {
-            VideoAudioSessionCoordinator.deactivateSession()
+            Task {
+                await VideoAudioSessionCoordinator.shared.deactivateSession()
+            }
         }
     }
     

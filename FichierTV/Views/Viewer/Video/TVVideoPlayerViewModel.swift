@@ -16,11 +16,6 @@ import FichierKit
 @MainActor
 public final class TVVideoPlayerViewModel {
     private static let logger = Logger(subsystem: "com.acme.ios.fichiertv", category: "videoPlayerViewModel")
-    // swiftlint:disable:next no_legacy_dispatch_queue
-    private static let smbResourceLoaderQueue = DispatchQueue(
-        label: "com.acme.ios.fichier.tv.videoloader",
-        qos: .userInitiated
-    )
 
     public private(set) var videos: [MediaSourceItem]
     public private(set) var currentIndex: Int
@@ -1104,7 +1099,7 @@ public final class TVVideoPlayerViewModel {
                 self.smbResourceLoaderDelegate = delegate
 
                 let asset = AVURLAsset(url: streamURL)
-                asset.resourceLoader.setDelegate(delegate, queue: Self.smbResourceLoaderQueue)
+                asset.resourceLoader.setDelegate(delegate, queue: FichierResourceLoaderQueue.shared)
                 self.thumbnailCoordinator.registerAsset(asset, forAssetKey: itemID)
 
                 let playerItem = AVPlayerItem(asset: asset)

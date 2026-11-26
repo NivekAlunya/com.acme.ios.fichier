@@ -7,6 +7,8 @@
 import UIKit
 
 /// Bounded in-memory image cache with cost-based eviction to prevent OOM crashes during photo browsing.
+///
+/// Marked `@unchecked Sendable` because `NSCache` is thread-safe and `storage` is an immutable `let` reference.
 public final class SlideImageCache: @unchecked Sendable {
     private let storage: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()

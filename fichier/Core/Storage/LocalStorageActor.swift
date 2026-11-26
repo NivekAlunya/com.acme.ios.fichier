@@ -8,6 +8,7 @@ import AVFoundation
 import ImageIO
 import OSLog
 import FichierKit
+import Wappn
 
 /// An isolated actor managing access to sandboxed local folders, external USB volumes, and iCloud Drive containers.
 ///
@@ -90,15 +91,23 @@ public actor LocalStorageActor {
         var updatedBookmark: Data?
         if isStale {
             // Attempt minimal bookmark refresh first, falling back to standard bookmark options
-            updatedBookmark = (try? resolvedURL.bookmarkData(
-                options: .minimalBookmark,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )) ?? (try? resolvedURL.bookmarkData(
-                options: [],
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            ))
+            do {
+                updatedBookmark = try resolvedURL.bookmarkData(
+                    options: .minimalBookmark,
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+            } catch {
+                do {
+                    updatedBookmark = try resolvedURL.bookmarkData(
+                        options: [],
+                        includingResourceValuesForKeys: nil,
+                        relativeTo: nil
+                    )
+                } catch {
+                    logw("Failed to refresh stale security-scoped bookmark: \(error.localizedDescription)")
+                }
+            }
         }
         
         let resourceValues = try? resolvedURL.resourceValues(forKeys: [.contentModificationDateKey])
@@ -508,7 +517,11 @@ public actor LocalStorageActor {
             do {
                 try fileManager.moveItem(at: tempURL, to: targetURL)
             } catch {
-                try? fileManager.moveItem(at: tempURL, to: sourceURL)
+                do {
+                    try fileManager.moveItem(at: tempURL, to: sourceURL)
+                } catch let rollbackError {
+                    loge("Failed to roll back case-only rename from temp file: \(rollbackError.localizedDescription)")
+                }
                 throw error
             }
         } else {
