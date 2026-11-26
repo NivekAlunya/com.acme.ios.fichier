@@ -263,8 +263,14 @@ public final class StorageLocationManager {
             object: nil,
             queue: .main
         ) { _ in
-            Task.detached(priority: .utility) {
-                MediaCacheManager.shared.performMaintenanceSweep()
+            Task { @MainActor in
+                let bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "MediaCacheMaintenanceSweep")
+                await Task.detached(priority: .utility) {
+                    MediaCacheManager.shared.performMaintenanceSweep()
+                }.value
+                if bgTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(bgTaskID)
+                }
             }
         }
     }

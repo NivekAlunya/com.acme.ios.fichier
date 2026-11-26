@@ -138,8 +138,18 @@ public final class VideoPlayerController {
     
     var hideControlsTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
+    private var folderIconTask: Task<Void, Never>?
     var resumeBannerTask: Task<Void, Never>?
     var lastControlsToggleTime: Date = .distantPast
+
+    isolated deinit {
+        loadTask?.cancel()
+        folderIconTask?.cancel()
+        hideControlsTask?.cancel()
+        resumeBannerTask?.cancel()
+        loaderDelegate?.cancelAll()
+        currentAsset?.resourceLoader.setDelegate(nil, queue: nil)
+    }
     
     /// Designated public initializer.
     ///
@@ -198,9 +208,11 @@ public final class VideoPlayerController {
         errorMessage = nil
         
         // Link video thumbnail as the folder's video icon when played
-        Task(priority: .utility) { [weak self] in
-            guard let self else { return }
+        folderIconTask?.cancel()
+        folderIconTask = Task(priority: .utility) { [weak self] in
+            guard let self, !Task.isCancelled else { return }
             if let thumb = await self.manager.downloadThumbnail(for: item) {
+                guard !Task.isCancelled else { return }
                 MediaCacheManager.shared.linkFolderIcon(
                     thumb,
                     childPath: item.path,
@@ -211,9 +223,7 @@ public final class VideoPlayerController {
             }
         }
         
-        Task {
-            await VideoAudioSessionCoordinator.shared.activatePlaybackSession()
-        }
+        VideoAudioSessionCoordinator.enqueuePlaybackSessionActivation()
         
         let ext = (item.name as NSString).pathExtension
         let isExtended = preferredKind.map { $0 == .extended } ?? SupportedMediaTypes.isExtendedVideo(extension: ext)
@@ -621,6 +631,8 @@ public final class VideoPlayerController {
         seekCoordinator.reset()
         loadTask?.cancel()
         loadTask = nil
+        folderIconTask?.cancel()
+        folderIconTask = nil
         cameraRollExporter.cancel()
         loaderDelegate?.cancelAll()
         loaderDelegate = nil
@@ -642,9 +654,7 @@ public final class VideoPlayerController {
         errorMessage = nil
         
         if deactivateAudioSession {
-            Task {
-                await VideoAudioSessionCoordinator.shared.deactivateSession()
-            }
+            VideoAudioSessionCoordinator.enqueueSessionDeactivation()
         }
     }
     

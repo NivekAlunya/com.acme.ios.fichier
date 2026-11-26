@@ -10,7 +10,30 @@ import Wappn
 public actor VideoAudioSessionCoordinator {
     public static let shared = VideoAudioSessionCoordinator()
 
+    @MainActor
+    private static var pendingTransitionTask: Task<Void, Never>?
+
     private init() {}
+
+    /// Enqueues playback audio session activation in strict FIFO order from the main actor.
+    @MainActor
+    public static func enqueuePlaybackSessionActivation() {
+        let previous = pendingTransitionTask
+        pendingTransitionTask = Task {
+            _ = await previous?.value
+            await shared.activatePlaybackSession()
+        }
+    }
+
+    /// Enqueues audio session deactivation in strict FIFO order from the main actor.
+    @MainActor
+    public static func enqueueSessionDeactivation() {
+        let previous = pendingTransitionTask
+        pendingTransitionTask = Task {
+            _ = await previous?.value
+            await shared.deactivateSession()
+        }
+    }
 
     /// Configures and activates the system audio session for video playback.
     public func activatePlaybackSession() {
