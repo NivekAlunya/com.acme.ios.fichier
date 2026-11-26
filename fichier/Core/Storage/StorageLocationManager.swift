@@ -146,13 +146,13 @@ public final class StorageLocationManager {
     }
     
     /// Cached parent folder of the currently selected folder, providing O(1) access for upward navigation.
-    public private(set) var parentFolder: MediaItem?
+    public internal(set) var parentFolder: MediaItem?
     
     /// Media items (photos, videos, PDFs) discovered in the currently selected folder.
     public var pictures: [MediaItem] = []
     
     /// The unique identifier of the currently active folder, used to discard stale async thumbnail requests.
-    public private(set) var activeFolderID: String?
+    public internal(set) var activeFolderID: String?
     
     /// Identifier representing the current connection session, used for cache partitioning.
     public private(set) var currentConnectionID: String = ""
@@ -161,13 +161,13 @@ public final class StorageLocationManager {
     public internal(set) var thumbnailVersions: [String: Int] = [:]
     
     /// In-flight asynchronous folder scanning task, cancelled when switching folders rapidly.
-    private var loadFolderTask: Task<Void, Never>?
+    var loadFolderTask: Task<Void, Never>?
 
     /// Monotonic generation counter rejecting stale folder load commits.
-    private var folderGeneration: UInt64 = 0
+    var folderGeneration: UInt64 = 0
     
     /// In-memory memory map preserving the last viewed folder per location ID for seamless split-view restoration.
-    private var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
+    var lastSelectedFolderPerLocation: [String: MediaItem] = [:]
     
     /// Background actor managing SMB connections, directory scanning, and streaming.
     let worker: SMBClientActor
@@ -190,7 +190,7 @@ public final class StorageLocationManager {
     #endif
     
     /// Persistence store handling SMB credentials and sandboxed folder bookmarks.
-    private let persistenceStore: StorageLocationPersistenceStore
+    let persistenceStore: StorageLocationPersistenceStore
     
     /// Navigation coordinator handling root boundary checks, mutation revisions, and tree hierarchy derivation.
     public let navigationCoordinator: FolderNavigationCoordinator
@@ -234,160 +234,6 @@ public final class StorageLocationManager {
         setupLifecycleObservers()
         Task {
             await refreshMediaCacheSize()
-        }
-    }
-    
-    // MARK: - Lifecycle & Memory Pressure Observers
-    
-    /// Registers system observers for memory warnings and background transitions.
-    ///
-    /// To ensure the app maintains a lean memory footprint and complies with iOS memory budgets:
-    /// - `didReceiveMemoryWarningNotification` flushes volatile RAM caches in `worker`.
-    /// - `didEnterBackgroundNotification` triggers a detached utility task to prune expired disk cache entries.
-    private func setupLifecycleObservers() {
-        // Clear in-memory image caches on low memory warnings to prevent OOM terminations
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            Task {
-                await self.worker.clearMemoryCache()
-            }
-        }
-        
-        // Execute disk cache hygiene sweep when app transitions to background
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            Task { @MainActor in
-                let bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "MediaCacheMaintenanceSweep")
-                await Task.detached(priority: .utility) {
-                    MediaCacheManager.shared.performMaintenanceSweep()
-                }.value
-                if bgTaskID != .invalid {
-                    UIApplication.shared.endBackgroundTask(bgTaskID)
-                }
-            }
-        }
-    }
-    
-    // MARK: - Cache Management
-    
-    /// Flushes in-memory folder and thumbnail caches from the underlying worker actor.
-    public func clearMemoryCache() async {
-        await worker.clearMemoryCache()
-    }
-    
-    // MARK: - Saved Connections Persistence
-    
-    /// Loads and decodes persisted SMB connections from `UserDefaults`.
-    private func loadSavedConnections() {
-        savedConnections = persistenceStore.loadSavedConnections()
-    }
-    
-    /// Retrieves the stored password from the secure Keychain for a given SMB connection.
-    ///
-    /// - Parameter connection: The saved connection metadata.
-    /// - Returns: The decrypted password, or an empty string if missing.
-    public func password(for connection: SavedSMBConnection) async -> String {
-        await persistenceStore.password(for: connection)
-    }
-    
-    /// Stores or updates a validated SMB connection record in `UserDefaults` and saves its password to the Keychain.
-    ///
-    /// - Parameters:
-    ///   - host: Network hostname or IP address.
-    ///   - user: Authentication username.
-    ///   - pass: Plaintext password to store in Keychain.
-    ///   - hostname: Optional Bonjour or NetBIOS display hostname.
-    private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) async {
-        do {
-            savedConnections = try await persistenceStore.saveValidatedConnection(
-                host: host,
-                user: user,
-                pass: pass,
-                hostname: hostname,
-                existingConnections: savedConnections
-            )
-        } catch {
-            loge("Failed to persist validated SMB connection credentials: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
-        }
-    }
-    
-    /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
-    ///
-    /// - Parameter connection: The connection to remove.
-    public func removeSavedConnection(_ connection: SavedSMBConnection) async {
-        savedConnections = await persistenceStore.removeSavedConnection(connection, from: savedConnections)
-        if currentLocation?.smbConnection?.id == connection.id {
-            await disconnect()
-        }
-    }
-    
-    // MARK: - Saved Folder Locations Persistence (Local & iCloud Drive)
-    
-    /// Aggregated list of all available storage locations, ordered with Photos first, followed by folders and SMB servers.
-    public var allLocations: [StorageLocation] {
-        [StorageLocation.photos]
-            + savedFolderLocations.map { StorageLocation(folder: $0) }
-            + savedConnections.map { StorageLocation(smb: $0) }
-    }
-    
-    /// Loads and decodes local folder bookmarks from `UserDefaults`.
-    private func loadSavedFolderLocations() {
-        savedFolderLocations = persistenceStore.loadSavedFolderLocations()
-    }
-    
-    /// Appends or updates a saved local folder location and persists it to `UserDefaults`.
-    ///
-    /// - Parameter location: The folder location record containing security-scoped bookmark data.
-    public func addSavedFolderLocation(_ location: SavedFolderLocation) {
-        savedFolderLocations = persistenceStore.addSavedFolderLocation(location, into: savedFolderLocations)
-    }
-    
-    /// Removes a saved local folder location from `UserDefaults` and disconnects if it is active.
-    ///
-    /// - Parameter location: The folder location to remove.
-    public func removeSavedFolderLocation(_ location: SavedFolderLocation) async {
-        savedFolderLocations = persistenceStore.removeSavedFolderLocation(location, from: savedFolderLocations)
-        if currentLocation?.folderLocation?.id == location.id {
-            await disconnect()
-        }
-    }
-    
-    /// Updates refreshed security-scoped bookmark data for an existing folder location.
-    ///
-    /// - Parameters:
-    ///   - bookmarkData: The updated binary bookmark data.
-    ///   - folderLocation: The target location record.
-    private func updateBookmarkData(_ bookmarkData: Data, for folderLocation: SavedFolderLocation) {
-        savedFolderLocations = persistenceStore.updateBookmarkData(
-            bookmarkData,
-            for: folderLocation,
-            in: savedFolderLocations
-        )
-    }
-    
-    /// Dispatches location deletion to the appropriate backend store.
-    ///
-    /// - Parameter location: The storage location to remove.
-    public func removeLocation(_ location: StorageLocation) async {
-        switch location.kind {
-        case .smb:
-            if let smb = location.smbConnection {
-                await removeSavedConnection(smb)
-            }
-        case .localFolder, .iCloudFolder:
-            if let folder = location.folderLocation {
-                await removeSavedFolderLocation(folder)
-            }
-        case .photos:
-            break
         }
     }
     
@@ -645,287 +491,7 @@ public final class StorageLocationManager {
         }
     }
     
-    // MARK: - Select Share
-    
-    /// Selects an SMB share as the active source and loads its contents.
-    ///
-    /// - Parameter share: The target SMB share to browse.
-    public func selectShare(_ share: MediaItem) async {
-        self.selectedShare = share
-        await selectAndLoadFolder(share)
-    }
 
-    // MARK: - Select Folder & Load Both Subfolders + Pictures
-    
-    /// Selects a folder item and asynchronously enumerates its child subfolders and media files.
-    ///
-    /// ### Concurrency and Invalidation Strategy
-    /// 1. Advances `folderGeneration` and cancels any ongoing `loadFolderTask` to prioritize the new user action.
-    /// 2. Clears the existing `pictures` and `currentFolders` collections to cause obsolete UI
-    ///    cells to unmount and drop their active thumbnail generation tasks.
-    /// 3. Signals the `worker` actor with the new `activeFolderID` to discard queued thumbnail requests.
-    /// 4. Checks cooperative task cancellation and `folderGeneration` before committing state.
-    ///
-    /// - Parameter folder: The folder item to browse.
-    public func selectAndLoadFolder(_ folder: MediaItem) async {
-        // Record this folder as the last active selection for the current location
-        if let locID = currentLocation?.id, !locID.isEmpty {
-            lastSelectedFolderPerLocation[locID] = folder
-        }
-
-        if currentLocation?.kind == .smb {
-            if selectedShare == nil || selectedShare?.shareName != folder.shareName {
-                let matchingShare = folderTree.first(where: { $0.shareName == folder.shareName })
-                if let matchingShare {
-                    selectedShare = matchingShare
-                } else if folder.path.isEmpty {
-                    selectedShare = folder
-                } else if !folder.shareName.isEmpty {
-                    selectedShare = MediaItem(
-                        locationID: folder.locationID,
-                        name: folder.shareName,
-                        rootName: folder.shareName,
-                        path: "",
-                        isDirectory: true
-                    )
-                }
-            }
-        }
-
-        // 1. Advance generation and cancel any ongoing folder scan task immediately
-        folderGeneration &+= 1
-        let expectedGeneration = folderGeneration
-        loadFolderTask?.cancel()
-        loadFolderTask = nil
-
-        // 2. Set newly selected folder and record active folder ID
-        selectedFolder = folder
-        activeFolderID = folder.id
-        isLoading = true
-        errorMessage = nil
-
-        // 3. Immediately clear out previous items so thumbnail views unmount
-        // and cancel their ongoing thumbnail tasks in SwiftUI
-        pictures = []
-        currentFolders = []
-
-        // 4. Notify worker actor of active folder change to immediately invalidate pending thumbnails
-        await worker.setActiveFolder(id: folder.id)
-
-        // 5. Spawn cancellable task and await its completion
-        let targetID = folder.id
-        guard !Task.isCancelled,
-              self.folderGeneration == expectedGeneration,
-              self.activeFolderID == targetID else {
-            if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
-                self.isLoading = false
-            }
-            return
-        }
-
-        let targetShare = folder.shareName
-        let targetPath = folder.path
-        let targetName = folder.name
-        let isLocal = folder.localURL != nil
-        let isPhotos = folder.locationID == StorageLocation.photosLocationID
-
-        let task = Task { [weak self, worker, localWorker, photosWorker] in
-            guard let self else { return }
-            do {
-                try Task.checkCancellation()
-                let subfolders: [MediaItem]
-                let foundPictures: [MediaItem]
-
-                if isLocal {
-                    let (subs, media) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
-                    subfolders = subs
-                    foundPictures = media
-                } else if isPhotos {
-                    let (subs, media) = try await photosWorker.listContents(at: folder)
-                    subfolders = subs
-                    foundPictures = media
-                } else {
-                    let (subs, media) = try await worker.scanFolder(shareName: targetShare, at: targetPath)
-                    subfolders = subs
-                    foundPictures = media
-                }
-
-                try Task.checkCancellation()
-
-                guard !Task.isCancelled,
-                      self.folderGeneration == expectedGeneration,
-                      self.activeFolderID == targetID else {
-                    return
-                }
-
-                self.currentFolders = subfolders
-                self.pictures = foundPictures
-                self.folderTree = self.updateTreeNodes(in: self.folderTree, targetID: targetID, children: subfolders)
-                self.isLoading = false
-                logi("Folder '\(targetShare)' path '\(targetPath)': \(subfolders.count) subfolders, \(foundPictures.count) items")
-            } catch is CancellationError {
-                // Clean up loading flag only if this folder was not superseded by a newer selection
-                if self.folderGeneration == expectedGeneration, self.activeFolderID == targetID {
-                    self.isLoading = false
-                }
-            } catch {
-                guard !Task.isCancelled,
-                      self.folderGeneration == expectedGeneration,
-                      self.activeFolderID == targetID else {
-                    return
-                }
-                self.errorMessage = String(localized: .Strings.networkingErrorLoadFolderFailed(targetName, error.localizedDescription))
-                self.isLoading = false
-                loge("Error scanning folder \(targetShare)/\(targetPath): \(error.localizedDescription)")
-            }
-        }
-
-        loadFolderTask = task
-        await withTaskCancellationHandler {
-            await task.value
-        } onCancel: {
-            task.cancel()
-        }
-        if self.folderGeneration == expectedGeneration {
-            self.loadFolderTask = nil
-        }
-    }
-    
-    /// Lazily populates child subfolders in the sidebar tree without altering the active grid selection.
-    ///
-    /// - Parameter folder: The folder node being expanded in the sidebar.
-    public func loadSubfoldersForTree(at folder: MediaItem) async {
-        do {
-            let subfolders: [MediaItem]
-            if folder.localURL != nil {
-                let (subs, _) = try await localWorker.listContents(at: folder, locationID: folder.connectionID)
-                subfolders = subs
-            } else if folder.locationID == StorageLocation.photosLocationID {
-                let (subs, _) = try await photosWorker.listContents(at: folder)
-                subfolders = subs
-            } else {
-                let (subs, _) = try await worker.scanFolder(shareName: folder.shareName, at: folder.path)
-                subfolders = subs
-            }
-            self.folderTree = updateTreeNodes(in: self.folderTree, targetID: folder.id, children: subfolders)
-        } catch {
-            loge("Failed to expand tree at \(folder.shareName)/\(folder.path): \(error.localizedDescription)")
-        }
-    }
-    
-    /// Refreshes all currently expanded branches in the folder tree hierarchy without collapsing nodes.
-    public func refreshExpandedTreeBranches() async {
-        let expandedNodes = collectNodesWithChildren(in: folderTree)
-        for node in expandedNodes {
-            await loadSubfoldersForTree(at: node)
-        }
-    }
-    
-    /// Recursively collects all folder nodes within the tree that currently maintain loaded child subfolders.
-    private func collectNodesWithChildren(in nodes: [MediaItem]) -> [MediaItem] {
-        nodes.flatMap { node -> [MediaItem] in
-            guard let children = node.children else { return [] }
-            return [node] + (children.isEmpty ? [] : collectNodesWithChildren(in: children))
-        }
-    }
-
-    /// Pure functional recursive tree traversal that injects loaded child nodes into the corresponding parent.
-    ///
-    /// Preserves existing loaded sub-children of descendants so deeper expanded branches are not discarded.
-    ///
-    /// - Parameters:
-    ///   - nodes: The current subtree list.
-    ///   - targetID: The identifier of the parent node to receive children.
-    ///   - children: The discovered child subfolders.
-    /// - Returns: A newly constructed tree reflecting the updated child hierarchy.
-    private func updateTreeNodes(in nodes: [MediaItem], targetID: String, children: [MediaItem]) -> [MediaItem] {
-        nodes.map { node in
-            var updated = node
-            if node.id == targetID {
-                let existingChildrenMap = Dictionary(
-                    (node.children ?? []).compactMap { child in
-                        child.children.map { (child.id, $0) }
-                    },
-                    uniquingKeysWith: { first, _ in first }
-                )
-                let mergedChildren = children.map { child -> MediaItem in
-                    var updatedChild = child
-                    if let existingDescendants = existingChildrenMap[child.id] {
-                        updatedChild.children = existingDescendants
-                    }
-                    return updatedChild
-                }
-                updated.children = mergedChildren
-            } else if let existingChildren = node.children {
-                updated.children = updateTreeNodes(in: existingChildren, targetID: targetID, children: children)
-            }
-            return updated
-        }
-    }
-    
-    /// Updates the child subfolders of a specific node within an in-memory tree hierarchy.
-    ///
-    /// - Parameters:
-    ///   - nodes: Current folder tree.
-    ///   - targetID: Identifier of the parent folder being populated.
-    ///   - children: The discovered subfolders.
-    /// - Returns: A new tree with updated children.
-    public func updateSubfoldersInTree(in nodes: [MediaItem], targetID: String, children: [MediaItem]) -> [MediaItem] {
-        updateTreeNodes(in: nodes, targetID: targetID, children: children)
-    }
-    
-    /// Pure functional recursive tree traversal that removes nodes matching the target identifiers.
-    ///
-    /// - Parameters:
-    ///   - nodes: Current folder subtree.
-    ///   - targetIDs: Set of identifiers for folder nodes to remove.
-    /// - Returns: Updated tree without the target nodes.
-    public func removeNodesFromTree(in nodes: [MediaItem], targetIDs: Set<String>) -> [MediaItem] {
-        nodes.compactMap { node in
-            if targetIDs.contains(node.id) {
-                return nil
-            }
-            var updated = node
-            if let children = node.children {
-                updated.children = removeNodesFromTree(in: children, targetIDs: targetIDs)
-            }
-            return updated
-        }
-    }
-    
-    // MARK: - Parent Folder Navigation
-    
-    /// Determines whether a folder represents the top-level root of its storage backend.
-    ///
-    /// - Parameter item: The media item folder to inspect.
-    /// - Returns: `true` if the folder cannot be navigated above; `false` otherwise.
-    public func isRootFolder(_ item: MediaItem) -> Bool {
-        navigationCoordinator.isRootFolder(item)
-    }
-    
-    /// Recomputes and caches the parent folder of the currently selected folder.
-    public func updateParentFolder() {
-        parentFolder = navigationCoordinator.resolveParentFolder(for: selectedFolder, in: folderTree)
-    }
-    
-    /// Recursively searches the expanded tree hierarchy to locate the immediate parent of a target node.
-    ///
-    /// - Parameters:
-    ///   - target: The child item whose parent is sought.
-    ///   - nodes: The tree nodes to search.
-    /// - Returns: The parent `MediaItem` if discovered in the tree, or `nil`.
-    public func findParentInTree(for target: MediaItem, in nodes: [MediaItem]) -> MediaItem? {
-        navigationCoordinator.findParentInTree(for: target, in: nodes)
-    }
-    
-    /// Synthesizes a parent `MediaItem` using path-based string surgery when tree metadata is unavailable.
-    ///
-    /// - Parameter item: The child folder item.
-    /// - Returns: The derived parent `MediaItem`, or `nil` if already at root.
-    public func deriveParentFolder(for item: MediaItem) -> MediaItem? {
-        navigationCoordinator.deriveParentFolder(for: item, in: folderTree)
-    }
-    
     /// Human-readable formatted string indicating total media cache disk usage.
     public var mediaCacheSize: String = "…"
     
