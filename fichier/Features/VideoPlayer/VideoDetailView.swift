@@ -122,9 +122,11 @@ public struct VideoDetailView: View {
                 controller.handleScenePhaseActive()
             }
         }
+        .onAppear {
+            controller.handleViewAppear()
+        }
         .onDisappear {
-            guard !controller.isPiPActive else { return }
-            controller.tearDownPlayer(deactivateAudioSession: true)
+            controller.handleViewDisappear()
         }
         #if !os(tvOS)
         .background {

@@ -41,6 +41,7 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureCon
         pip?.canStartPictureInPictureAutomaticallyFromInline = true
         #endif
         pip?.delegate = self
+        pipController?.delegate = nil
         self.pipController = pip
     }
     
@@ -59,8 +60,9 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureCon
         if let pip = pipController, pip.isPictureInPictureActive {
             pip.stopPictureInPicture()
         }
+        pipController?.delegate = nil
         pipController = nil
-        isPiPActive = false
+        setPiPActive(false)
     }
 
     // MARK: - AVPictureInPictureControllerDelegate

@@ -54,7 +54,14 @@ public final class TVVideoPlayerViewModel {
     public private(set) var selectedSubtitleTrack: PlayerSubtitleTrack?
     public private(set) var availableChapters: [PlayerChapter] = []
     public private(set) var playbackRate: TVVideoPlaybackRate = .normal
-    public var isPiPActive: Bool = false
+    public var isPiPActive: Bool = false {
+        didSet {
+            if !isPiPActive && hasDisappeared {
+                tearDown()
+            }
+        }
+    }
+    public private(set) var hasDisappeared: Bool = false
     public let pipCoordinator = TVVideoPictureInPictureCoordinator()
 
     public var showOverlay: Bool = false
@@ -1187,7 +1194,20 @@ public final class TVVideoPlayerViewModel {
         }
     }
 
+    /// Clears the disappearance flag when the player view appears or restores from PiP.
+    public func handleViewAppear() {
+        hasDisappeared = false
+    }
+
+    /// Defers teardown while PiP is active and tears down immediately otherwise.
+    public func handleViewDisappear() {
+        hasDisappeared = true
+        guard !isPiPActive else { return }
+        tearDown()
+    }
+
     public func tearDown() {
+        hasDisappeared = false
         saveCurrentProgressSnapshot()
         clearRemoteSeekState()
         resetCachedSeekThumbnails()

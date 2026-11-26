@@ -251,9 +251,11 @@ public struct TVVideoPlayerView: View {
             isPlayerFocused = true
             viewModel.loadCurrentVideo()
         }
+        .onAppear {
+            viewModel.handleViewAppear()
+        }
         .onDisappear {
-            guard !viewModel.isPiPActive else { return }
-            viewModel.tearDown()
+            viewModel.handleViewDisappear()
         }
     }
 }
