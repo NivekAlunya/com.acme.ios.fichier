@@ -172,7 +172,6 @@ public struct MediaBrowserSplitView: View {
                 videos: context.resolvedItems(matching: \.isVideo),
                 initialItem: context.item
             )
-            .navigationTransition(.zoom(sourceID: context.item.id, in: viewerTransitionNamespace))
         }
         #if !os(tvOS)
         .fullScreenCover(item: $activePDFContext) { context in

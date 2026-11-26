@@ -461,6 +461,19 @@ public final class VideoPlayerController {
         extended.onPlaybackEnded = { [weak self] in
             self?.handlePlaybackCompletion()
         }
+        extended.onPiPStatusChanged = { [weak self] isActive in
+            self?.isPiPActive = isActive
+        }
+    }
+
+    /// Toggles Picture-in-Picture presentation for the currently active playback engine.
+    public func togglePiP() {
+        switch engineKind {
+        case .native:
+            pipCoordinator.togglePiP()
+        case .extended:
+            extendedEngine?.togglePiP()
+        }
     }
     
     private func handleEngineTimeUpdate(_ time: Double, for item: MediaItem) {
@@ -1078,6 +1091,7 @@ public final class VideoPlayerController {
         
         player?.pause()
         player = nil
+        isPiPActive = false
         playbackState = .idle
         errorMessage = nil
         
@@ -1150,6 +1164,12 @@ public final class VideoPlayerController {
             }
         }
         VideoPlaybackStore.shared.flush()
+        if engineKind == .extended,
+           let extendedEngine,
+           !isPiPActive,
+           extendedEngine.isPlaying || playbackState.isPlaying {
+            extendedEngine.startPiP()
+        }
     }
     
     /// Checks player health and recovers active SMB streams when the application enters the foreground.

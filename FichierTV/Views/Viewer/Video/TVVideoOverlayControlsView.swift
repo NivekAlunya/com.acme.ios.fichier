@@ -19,6 +19,7 @@ public struct TVVideoOverlayControlsView: View {
     public let seekThumbnailState: TVSeekThumbnailState?
     public let remoteSeekPreview: TVRemoteSeekPreview?
     public let playbackRate: TVVideoPlaybackRate
+    public let isPiPActive: Bool
     public let isChaptersSheetPresented: Bool
     public let isTracksSheetPresented: Bool
     public let isSpeedSheetPresented: Bool
@@ -38,6 +39,7 @@ public struct TVVideoOverlayControlsView: View {
     public let onOpenChapters: () -> Void
     public let onOpenTracks: () -> Void
     public let onOpenSpeed: () -> Void
+    public let onTogglePiP: () -> Void
 
     @FocusState private var focusedTarget: TVVideoOverlayFocusTarget?
 
@@ -53,6 +55,7 @@ public struct TVVideoOverlayControlsView: View {
         seekThumbnailState: TVSeekThumbnailState? = nil,
         remoteSeekPreview: TVRemoteSeekPreview? = nil,
         playbackRate: TVVideoPlaybackRate = .normal,
+        isPiPActive: Bool = false,
         isChaptersSheetPresented: Bool = false,
         isTracksSheetPresented: Bool,
         isSpeedSheetPresented: Bool = false,
@@ -71,7 +74,8 @@ public struct TVVideoOverlayControlsView: View {
         onSwitchEngine: @escaping () -> Void = {},
         onOpenChapters: @escaping () -> Void = {},
         onOpenTracks: @escaping () -> Void,
-        onOpenSpeed: @escaping () -> Void = {}
+        onOpenSpeed: @escaping () -> Void = {},
+        onTogglePiP: @escaping () -> Void = {}
     ) {
         self.title = title
         self.engineKind = engineKind
@@ -84,6 +88,7 @@ public struct TVVideoOverlayControlsView: View {
         self.seekThumbnailState = seekThumbnailState
         self.remoteSeekPreview = remoteSeekPreview
         self.playbackRate = playbackRate
+        self.isPiPActive = isPiPActive
         self.isChaptersSheetPresented = isChaptersSheetPresented
         self.isTracksSheetPresented = isTracksSheetPresented
         self.isSpeedSheetPresented = isSpeedSheetPresented
@@ -103,6 +108,7 @@ public struct TVVideoOverlayControlsView: View {
         self.onOpenChapters = onOpenChapters
         self.onOpenTracks = onOpenTracks
         self.onOpenSpeed = onOpenSpeed
+        self.onTogglePiP = onTogglePiP
     }
 
     public var body: some View {
@@ -324,6 +330,16 @@ public struct TVVideoOverlayControlsView: View {
             .focused($focusedTarget, equals: .speed)
             .accessibilityLabel(Text(.Strings.tvVideoControlsPlaybackSpeedAccessibility(playbackRate.displayName)))
             .accessibilityIdentifier("video_speed_button")
+
+            if engineKind == .native {
+                Button(action: onTogglePiP) {
+                    Label(.Strings.tvVideoControlsPipLabel, systemImage: isPiPActive ? "pip.exit" : "pip.enter")
+                }
+                .buttonStyle(buttonStyle)
+                .focused($focusedTarget, equals: .pip)
+                .accessibilityLabel(Text(isPiPActive ? .Strings.videoPlayerMenuPipExit : .Strings.videoPlayerMenuPipEnter))
+                .accessibilityIdentifier("video_pip_button")
+            }
 
             Button(action: onSwitchEngine) {
                 Label(

@@ -71,6 +71,9 @@ public struct VideoPlayerCanvasView: View {
                 onEnded: handleHorizontalSeekEnded,
                 onTap: {
                     controller.toggleControls()
+                },
+                onTwoFingerTap: {
+                    controller.handleTwoFingerTap()
                 }
             )
             .ignoresSafeArea()

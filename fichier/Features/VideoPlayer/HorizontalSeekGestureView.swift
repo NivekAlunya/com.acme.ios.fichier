@@ -9,18 +9,20 @@
 import SwiftUI
 import UIKit
 
-/// Transparent UIKit overlay capturing horizontal pans for timeline scrubbing while
-/// letting vertical pans pass through to `.navigationTransition(.zoom)` dismissal.
+/// Transparent UIKit overlay capturing horizontal pans for timeline scrubbing,
+/// single taps for HUD toggling, and two-finger taps for play/pause.
 struct HorizontalSeekGestureView: UIViewRepresentable {
     let onChanged: (CGFloat) -> Void
     let onEnded: () -> Void
     let onTap: () -> Void
+    let onTwoFingerTap: () -> Void
 
     func makeCoordinator() -> HorizontalSeekGestureCoordinator {
         HorizontalSeekGestureCoordinator(
             onChanged: onChanged,
             onEnded: onEnded,
-            onTap: onTap
+            onTap: onTap,
+            onTwoFingerTap: onTwoFingerTap
         )
     }
 
@@ -36,11 +38,22 @@ struct HorizontalSeekGestureView: UIViewRepresentable {
         pan.maximumNumberOfTouches = 1
         view.addGestureRecognizer(pan)
 
+        let twoFingerTap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(HorizontalSeekGestureCoordinator.handleTwoFingerTap)
+        )
+        twoFingerTap.numberOfTouchesRequired = 2
+        twoFingerTap.numberOfTapsRequired = 1
+        view.addGestureRecognizer(twoFingerTap)
+
         let tap = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(HorizontalSeekGestureCoordinator.handleTap)
         )
+        tap.numberOfTouchesRequired = 1
+        tap.numberOfTapsRequired = 1
         tap.require(toFail: pan)
+        tap.require(toFail: twoFingerTap)
         view.addGestureRecognizer(tap)
 
         return view
@@ -50,6 +63,7 @@ struct HorizontalSeekGestureView: UIViewRepresentable {
         context.coordinator.onChanged = onChanged
         context.coordinator.onEnded = onEnded
         context.coordinator.onTap = onTap
+        context.coordinator.onTwoFingerTap = onTwoFingerTap
     }
 }
 #endif

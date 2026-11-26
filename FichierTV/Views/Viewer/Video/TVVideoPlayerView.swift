@@ -47,8 +47,14 @@ public struct TVVideoPlayerView: View {
             // Video Canvas (Native AVPlayer vs Extended VLCKit Drawable)
             switch viewModel.activeEngineKind {
             case .native:
-                TVPlayerCanvasView(player: viewModel.nativeEngine.avPlayer)
-                    .ignoresSafeArea()
+                TVPlayerCanvasView(
+                    player: viewModel.nativeEngine.avPlayer,
+                    coordinator: viewModel.pipCoordinator,
+                    onPiPStatusChanged: { isActive in
+                        viewModel.isPiPActive = isActive
+                    }
+                )
+                .ignoresSafeArea()
             case .extended:
                 TVVLCCanvasView(engine: viewModel.extendedEngine)
                     .ignoresSafeArea()
@@ -133,6 +139,7 @@ public struct TVVideoPlayerView: View {
                     seekThumbnailState: viewModel.seekThumbnailState,
                     remoteSeekPreview: viewModel.remoteSeekPreview,
                     playbackRate: viewModel.playbackRate,
+                    isPiPActive: viewModel.isPiPActive,
                     isChaptersSheetPresented: viewModel.isShowingChaptersSheet,
                     isTracksSheetPresented: viewModel.isShowingTracksSheet,
                     isSpeedSheetPresented: viewModel.isShowingSpeedSheet,
@@ -167,7 +174,8 @@ public struct TVVideoPlayerView: View {
                     onSwitchEngine: { viewModel.switchEngine() },
                     onOpenChapters: { viewModel.openChaptersMenu() },
                     onOpenTracks: { viewModel.openTracksMenu() },
-                    onOpenSpeed: { viewModel.openSpeedMenu() }
+                    onOpenSpeed: { viewModel.openSpeedMenu() },
+                    onTogglePiP: { viewModel.togglePiP() }
                 )
                 .transition(reduceMotion ? .identity : .opacity)
             }
@@ -244,6 +252,7 @@ public struct TVVideoPlayerView: View {
             viewModel.loadCurrentVideo()
         }
         .onDisappear {
+            guard !viewModel.isPiPActive else { return }
             viewModel.tearDown()
         }
     }
