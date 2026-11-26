@@ -777,14 +777,14 @@ struct MediaGridView: View {
                             }
                             
                             #if DEBUG
-                            Section("Debug") {
+                            Section(.Strings.galleryDebugSection) {
                                 Button(role: .destructive) {
                                     Task {
                                         await viewModel.manager.invalidateCurrentFolderThumbnails()
                                         viewModel.thumbnailReloadToken = UUID()
                                     }
                                 } label: {
-                                    Label("Invalidate Folder Thumbnails", systemImage: "arrow.triangle.2.circlepath.circle")
+                                    Label(.Strings.galleryDebugInvalidateThumbnails, systemImage: "arrow.triangle.2.circlepath.circle")
                                 }
                             }
                             #endif

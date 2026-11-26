@@ -339,7 +339,7 @@ struct PDFDetailView: View {
                     .progressViewStyle(.linear)
                     .frame(width: 200)
                     .tint(.white)
-                Text("\(Int(progress * 100))% • \(viewModel.currentItem.formattedSize)")
+                Text(.Strings.pdfLoadingProgressFormat(Int(progress * 100), viewModel.currentItem.formattedSize))
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.8))
             } else {

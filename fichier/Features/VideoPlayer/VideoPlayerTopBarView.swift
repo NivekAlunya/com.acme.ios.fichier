@@ -332,11 +332,11 @@ public struct VideoPlayerTopBarView: View {
             }
             
             #if DEBUG
-            Section("Debug Diagnostics") {
+            Section(.Strings.videoPlayerDebugSection) {
                 Button(role: .destructive) {
                     controller.simulateSMBDisconnectCrash()
                 } label: {
-                    Label("Simulate Crash (SIGABRT)", systemImage: "bolt.trianglebadge.exclamationmark")
+                    Label(.Strings.videoPlayerDebugSimulateCrash, systemImage: "bolt.trianglebadge.exclamationmark")
                 }
             }
             #endif
