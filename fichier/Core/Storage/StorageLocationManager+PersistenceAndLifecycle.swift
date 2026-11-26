@@ -37,12 +37,22 @@ extension StorageLocationManager {
             queue: .main
         ) { _ in
             Task { @MainActor in
-                let bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "MediaCacheMaintenanceSweep")
-                await Task.detached(priority: .utility) {
-                    MediaCacheManager.shared.performMaintenanceSweep()
-                }.value
+                // Awaits the async sweep so the background assertion covers the whole run
+                // (the synchronous `performMaintenanceSweep()` only spawns a task and returns).
+                let sweep = Task.detached(priority: .utility) {
+                    await MediaCacheManager.shared.performMaintenanceSweepAsync()
+                }
+                var bgTaskID = UIBackgroundTaskIdentifier.invalid
+                bgTaskID = UIApplication.shared.beginBackgroundTask(withName: "MediaCacheMaintenanceSweep") {
+                    // iOS is about to suspend the app: stop the sweep and release the assertion.
+                    sweep.cancel()
+                    UIApplication.shared.endBackgroundTask(bgTaskID)
+                    bgTaskID = .invalid
+                }
+                await sweep.value
                 if bgTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(bgTaskID)
+                    bgTaskID = .invalid
                 }
             }
         }
