@@ -5,6 +5,7 @@
 
 import SwiftUI
 import FichierKit
+import Wappn
 
 /// Modal sheet presenting an in-app folder hierarchy for selecting a destination folder.
 struct FolderPickerSheetView: View {
@@ -312,9 +313,12 @@ struct FolderPickerSheetView: View {
             
             // Ensure children are loaded for the current node
             if current.children == nil {
-                if let subs = try? await manager.fetchSubfoldersForPicker(at: current) {
+                do {
+                    let subs = try await manager.fetchSubfoldersForPicker(at: current)
                     folderTree = manager.updateSubfoldersInTree(in: folderTree, targetID: current.id, children: subs)
                     current.children = subs
+                } catch {
+                    logw("Failed to load subfolders for picker: \(error.localizedDescription)")
                 }
             }
             
