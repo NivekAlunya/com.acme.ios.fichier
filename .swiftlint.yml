@@ -26,9 +26,10 @@ disabled_rules:
   - trailing_whitespace     # Can be auto-handled by SwiftFormat
   - identifier_name         # Allows concise loop indices (i), coordinates (w, h, p, d), and speeds (speed1_5)
 
-# Length warnings only (generous thresholds; do not fail builds)
+# Length warnings only (generous thresholds; do not fail builds).
+# `file_length` warning is set to 1000 so cohesive views/engines like `MediaGridView` (~808) remain unsplit without noisy warnings.
 file_length:
-  warning: 800
+  warning: 1000
   error: 2000
   ignore_comment_only_lines: true
 
