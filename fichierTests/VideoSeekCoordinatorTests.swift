@@ -6,7 +6,7 @@
 #if DEBUG && canImport(XCTest)
 import XCTest
 import CoreMedia
-@testable import fichier
+@testable import Fichier
 
 @MainActor
 final class VideoSeekCoordinatorTests: XCTestCase {

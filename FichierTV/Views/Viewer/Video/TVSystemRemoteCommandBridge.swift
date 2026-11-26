@@ -96,7 +96,7 @@ public final class TVSystemRemoteCommandBridge: TVRemoteCommandHandling {
         Task.detached(priority: .userInitiated) {
             let session = AVAudioSession.sharedInstance()
             do {
-                try session.setCategory(.playback, mode: .moviePlayback)
+                try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormAudio, options: [])
                 try session.setActive(true)
             } catch {
                 // Keep remote command registration active even if audio session fails in test hosts.

@@ -38,28 +38,14 @@ public struct VideoPlayerCanvasView: View {
                         coordinator: controller.pipCoordinator,
                         onPiPStatusChanged: { isActive in
                             controller.isPiPActive = isActive
-                        },
-                        onSingleTap: {
-                            controller.toggleControls()
-                        },
-                        onTwoFingerTap: {
-                            controller.handleTwoFingerTap()
                         }
                     )
                     .ignoresSafeArea()
                 }
             case .extended:
                 if let extended = controller.extendedEngine {
-                    VLCPlayerCanvasRepresentable(
-                        engine: extended,
-                        onSingleTap: {
-                            controller.toggleControls()
-                        },
-                        onTwoFingerTap: {
-                            controller.handleTwoFingerTap()
-                        }
-                    )
-                    .ignoresSafeArea()
+                    VLCPlayerCanvasRepresentable(engine: extended)
+                        .ignoresSafeArea()
                 }
             }
         }
@@ -71,6 +57,9 @@ public struct VideoPlayerCanvasView: View {
                 onEnded: handleHorizontalSeekEnded,
                 onTap: {
                     controller.toggleControls()
+                },
+                onTwoFingerTap: {
+                    controller.handleTwoFingerTap()
                 }
             )
             .ignoresSafeArea()

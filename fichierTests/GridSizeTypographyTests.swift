@@ -6,7 +6,7 @@
 
 import Foundation
 import Testing
-@testable import fichier
+@testable import Fichier
 
 @Suite("GridSizeTypography")
 @MainActor

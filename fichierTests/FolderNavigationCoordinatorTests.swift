@@ -5,7 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
-@testable import fichier
+@testable import Fichier
 
 @MainActor
 final class FolderNavigationCoordinatorTests: XCTestCase {

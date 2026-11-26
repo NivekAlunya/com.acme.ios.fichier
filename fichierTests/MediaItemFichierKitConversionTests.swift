@@ -9,7 +9,7 @@
 import Foundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("MediaItem & FichierKit Conversion Tests")
 struct MediaItemFichierKitConversionTests {

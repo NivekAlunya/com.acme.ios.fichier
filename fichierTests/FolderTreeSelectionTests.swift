@@ -7,7 +7,7 @@
 import Foundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 /// Unit tests verifying folder tree selection state and drive selection gating.
 @Suite("FolderTreeSelectionTests")

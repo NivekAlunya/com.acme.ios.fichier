@@ -10,14 +10,28 @@
          <BuildActionEntry
             buildForTesting = "YES"
             buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "000000000000000100000000"
+               BuildableName = "Fichier.app"
+               BlueprintName = "Fichier"
+               ReferencedContainer = "container:fichier.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
             buildForProfiling = "NO"
             buildForArchiving = "NO"
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D10000000000000100000010"
-               BuildableName = "fichierTests.xctest"
-               BlueprintName = "fichierTests"
+               BuildableName = "FichierTests.xctest"
+               BlueprintName = "FichierTests"
                ReferencedContainer = "container:fichier.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -30,12 +44,13 @@
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
          <TestableReference
-            skipped = "NO">
+            skipped = "NO"
+            parallelizable = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D10000000000000100000010"
-               BuildableName = "fichierTests.xctest"
-               BlueprintName = "fichierTests"
+               BuildableName = "FichierTests.xctest"
+               BlueprintName = "FichierTests"
                ReferencedContainer = "container:fichier.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -50,14 +65,14 @@
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
-      allowLocationSimulation = "YES"
-      queueDebuggingEnabled = "No">
+      allowLocationSimulation = "YES">
       <BuildableProductRunnable
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "000000000000000100000000"
-            BuildableName = "fichier.app"
+            BuildableName = "Fichier.app"
+            BlueprintName = "Fichier"
             ReferencedContainer = "container:fichier.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -68,15 +83,16 @@
       savedToolIdentifier = ""
       useCustomWorkingDirectory = "NO"
       debugDocumentVersioning = "YES">
-      <MacroExpansion>
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "D10000000000000100000010"
-            BuildableName = "fichierTests.xctest"
-            BlueprintName = "fichierTests"
+            BlueprintIdentifier = "000000000000000100000000"
+            BuildableName = "Fichier.app"
+            BlueprintName = "Fichier"
             ReferencedContainer = "container:fichier.xcodeproj">
          </BuildableReference>
-      </MacroExpansion>
+      </BuildableProductRunnable>
    </ProfileAction>
    <AnalyzeAction
       buildConfiguration = "Debug">

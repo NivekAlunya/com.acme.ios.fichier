@@ -9,7 +9,7 @@
 import UIKit
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("Thumbnail Caching & Cancellation Tests")
 @MainActor

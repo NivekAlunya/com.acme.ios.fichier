@@ -54,6 +54,15 @@ public final class TVVideoPlayerViewModel {
     public private(set) var selectedSubtitleTrack: PlayerSubtitleTrack?
     public private(set) var availableChapters: [PlayerChapter] = []
     public private(set) var playbackRate: TVVideoPlaybackRate = .normal
+    public var isPiPActive: Bool = false {
+        didSet {
+            if !isPiPActive && hasDisappeared {
+                tearDown()
+            }
+        }
+    }
+    public private(set) var hasDisappeared: Bool = false
+    public let pipCoordinator = TVVideoPictureInPictureCoordinator()
 
     public var showOverlay: Bool = false
     public var activeFocusRow: TVVideoPlayerFocusRow = .buttons
@@ -134,6 +143,8 @@ public final class TVVideoPlayerViewModel {
             return .tracks
         case .speed:
             return .speed
+        case .pip:
+            return .pip
         }
     }
 
@@ -339,6 +350,9 @@ public final class TVVideoPlayerViewModel {
         case .speed:
             activeFocusRow = .buttons
             activeFocusedButton = .speed
+        case .pip:
+            activeFocusRow = .buttons
+            activeFocusedButton = .pip
         }
     }
 
@@ -718,9 +732,13 @@ public final class TVVideoPlayerViewModel {
         case .tracks:
             activeFocusedButton = forward ? .speed : .chapters
         case .speed:
-            activeFocusedButton = forward ? .switchEngine : .tracks
+            activeFocusedButton = forward ? (activeEngineKind == .native ? .pip : .switchEngine) : .tracks
+        case .pip:
+            activeFocusedButton = forward ? .switchEngine : .speed
         case .switchEngine:
-            if !forward { activeFocusedButton = .speed }
+            if !forward {
+                activeFocusedButton = (activeEngineKind == .native) ? .pip : .speed
+            }
         }
     }
 
@@ -740,7 +758,16 @@ public final class TVVideoPlayerViewModel {
             openTracksMenu()
         case .speed:
             openSpeedMenu()
+        case .pip:
+            togglePiP()
         }
+    }
+
+    /// Toggles Picture-in-Picture presentation for the native playback engine on tvOS.
+    public func togglePiP() {
+        resetInactivityTimer()
+        guard activeEngineKind == .native else { return }
+        pipCoordinator.togglePiP()
     }
 
     public func nextVideo() {
@@ -941,6 +968,13 @@ public final class TVVideoPlayerViewModel {
     }
 
     private func mount(url: URL, kind: PlayerEngineKind, playerItem: AVPlayerItem? = nil) {
+        if kind == .extended {
+            pipCoordinator.reset()
+            isPiPActive = false
+            nativeEngine.pause()
+        } else {
+            extendedEngine.pause()
+        }
         setActiveEngine(kind: kind)
 
         switch kind {
@@ -972,6 +1006,9 @@ public final class TVVideoPlayerViewModel {
             activeEngine = nativeEngine
         case .extended:
             activeEngine = extendedEngine
+            if activeFocusedButton == .pip {
+                activeFocusedButton = .playPause
+            }
         }
         syncState(from: activeEngine)
     }
@@ -1157,7 +1194,20 @@ public final class TVVideoPlayerViewModel {
         }
     }
 
+    /// Clears the disappearance flag when the player view appears or restores from PiP.
+    public func handleViewAppear() {
+        hasDisappeared = false
+    }
+
+    /// Defers teardown while PiP is active and tears down immediately otherwise.
+    public func handleViewDisappear() {
+        hasDisappeared = true
+        guard !isPiPActive else { return }
+        tearDown()
+    }
+
     public func tearDown() {
+        hasDisappeared = false
         saveCurrentProgressSnapshot()
         clearRemoteSeekState()
         resetCachedSeekThumbnails()
@@ -1178,8 +1228,10 @@ public final class TVVideoPlayerViewModel {
         progressPersistenceTask = nil
         paginationTask?.cancel()
         paginationTask = nil
+        pipCoordinator.reset()
         nativeEngine.tearDown()
         extendedEngine.tearDown()
+        isPiPActive = false
         syncState(from: activeEngine)
     }
 }

@@ -9,7 +9,7 @@
 import Foundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("StorageLocationManager Folder Loading, Stale Protection & Cancellation Tests")
 @MainActor

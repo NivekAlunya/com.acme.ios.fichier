@@ -5,7 +5,7 @@
 
 #if DEBUG && canImport(XCTest)
 import XCTest
-@testable import fichier
+@testable import Fichier
 import FichierKit
 
 final class FileOperationsTests: XCTestCase {

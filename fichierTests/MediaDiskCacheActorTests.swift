@@ -6,7 +6,7 @@
 #if DEBUG && canImport(XCTest)
 import XCTest
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 final class MediaDiskCacheActorTests: XCTestCase {
     

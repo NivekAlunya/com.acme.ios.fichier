@@ -7,7 +7,7 @@
 import UIKit
 import XCTest
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 final class VLCMediaThumbnailerActorTests: XCTestCase {
     func testSingletonInstanceExists() async {

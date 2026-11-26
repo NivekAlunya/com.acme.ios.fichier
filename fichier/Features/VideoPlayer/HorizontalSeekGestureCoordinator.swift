@@ -17,15 +17,18 @@ final class HorizontalSeekGestureCoordinator: NSObject, UIGestureRecognizerDeleg
     var onChanged: (CGFloat) -> Void
     var onEnded: () -> Void
     var onTap: () -> Void
+    var onTwoFingerTap: () -> Void
 
     init(
         onChanged: @escaping (CGFloat) -> Void,
         onEnded: @escaping () -> Void,
-        onTap: @escaping () -> Void
+        onTap: @escaping () -> Void,
+        onTwoFingerTap: @escaping () -> Void
     ) {
         self.onChanged = onChanged
         self.onEnded = onEnded
         self.onTap = onTap
+        self.onTwoFingerTap = onTwoFingerTap
     }
 
     @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
@@ -41,6 +44,10 @@ final class HorizontalSeekGestureCoordinator: NSObject, UIGestureRecognizerDeleg
 
     @objc func handleTap() {
         onTap()
+    }
+
+    @objc func handleTwoFingerTap() {
+        onTwoFingerTap()
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

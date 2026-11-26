@@ -10,7 +10,7 @@ import Foundation
 import Testing
 import UIKit
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("StorageLocationManager SMB Connection & Persistence Tests")
 @MainActor

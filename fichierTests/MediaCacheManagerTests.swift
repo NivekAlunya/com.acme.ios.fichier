@@ -7,7 +7,7 @@
 import XCTest
 import PDFKit
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 final class MediaCacheManagerTests: XCTestCase {
     func testDocumentsDirectoryInitialization() {

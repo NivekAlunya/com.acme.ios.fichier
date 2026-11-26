@@ -266,7 +266,7 @@ public struct VideoPlayerTopBarView: View {
     private var playbackOptionsMenu: some View {
         Menu {
             Button {
-                controller.pipCoordinator.togglePiP()
+                controller.togglePiP()
             } label: {
                 Label(
                     controller.isPiPActive ? String(localized: .Strings.videoPlayerMenuPipExit) : String(localized: .Strings.videoPlayerMenuPipEnter),

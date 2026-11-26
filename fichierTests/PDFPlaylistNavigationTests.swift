@@ -5,7 +5,7 @@
 
 #if !os(tvOS) && DEBUG && canImport(XCTest)
 import XCTest
-@testable import fichier
+@testable import Fichier
 
 @MainActor
 final class PDFPlaylistNavigationTests: XCTestCase {

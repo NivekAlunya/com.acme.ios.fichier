@@ -6,7 +6,7 @@
 #if DEBUG && canImport(XCTest)
 import XCTest
 import PDFKit
-@testable import fichier
+@testable import Fichier
 
 @MainActor
 final class StorageLocationManagerTests: XCTestCase {

@@ -89,7 +89,16 @@ public final class VideoPlayerController {
     public var showControls: Bool = false
     
     /// Indicates whether Picture-in-Picture presentation is actively running.
-    public var isPiPActive: Bool = false
+    public var isPiPActive: Bool = false {
+        didSet {
+            if !isPiPActive && hasDisappeared {
+                tearDownPlayer(deactivateAudioSession: true)
+            }
+        }
+    }
+
+    /// Tracks whether the hosting player view has disappeared while PiP remained active.
+    public private(set) var hasDisappeared: Bool = false
     
     /// Coordinator managing Picture-in-Picture lifecycle and delegate callbacks.
     public let pipCoordinator = CustomVideoPlayerCoordinator()
@@ -382,6 +391,8 @@ public final class VideoPlayerController {
     ) {
         self.engineKind = .extended
         self.player = nil
+        pipCoordinator.reset()
+        isPiPActive = false
         self.trackManager.reset()
         
         let extended = TVVLCPlayerEngine()
@@ -460,6 +471,19 @@ public final class VideoPlayerController {
         }
         extended.onPlaybackEnded = { [weak self] in
             self?.handlePlaybackCompletion()
+        }
+        extended.onPiPStatusChanged = { [weak self] isActive in
+            self?.isPiPActive = isActive
+        }
+    }
+
+    /// Toggles Picture-in-Picture presentation for the currently active playback engine.
+    public func togglePiP() {
+        switch engineKind {
+        case .native:
+            pipCoordinator.togglePiP()
+        case .extended:
+            extendedEngine?.togglePiP()
         }
     }
     
@@ -1032,7 +1056,20 @@ public final class VideoPlayerController {
     /// Tears down the active player instance, flushing saved progress and cancelling in-flight tasks.
     ///
     /// - Parameter deactivateAudioSession: Whether to release the system audio session.
+    /// Clears the disappearance flag when the player view appears or restores from PiP.
+    public func handleViewAppear() {
+        hasDisappeared = false
+    }
+
+    /// Defers teardown while PiP is active and tears down immediately otherwise.
+    public func handleViewDisappear() {
+        hasDisappeared = true
+        guard !isPiPActive else { return }
+        tearDownPlayer(deactivateAudioSession: true)
+    }
+
     public func tearDownPlayer(deactivateAudioSession: Bool = false) {
+        hasDisappeared = false
         if let currentEngine = engine, let loadedItem = currentlyLoadedItem {
             let secs = currentEngine.currentTime
             let engineDur = currentEngine.duration
@@ -1078,6 +1115,8 @@ public final class VideoPlayerController {
         
         player?.pause()
         player = nil
+        pipCoordinator.reset()
+        isPiPActive = false
         playbackState = .idle
         errorMessage = nil
         
@@ -1150,6 +1189,14 @@ public final class VideoPlayerController {
             }
         }
         VideoPlaybackStore.shared.flush()
+        #if !os(tvOS)
+        if engineKind == .extended,
+           let extendedEngine,
+           !isPiPActive,
+           extendedEngine.isPlaying {
+            extendedEngine.startPiP()
+        }
+        #endif
     }
     
     /// Checks player health and recovers active SMB streams when the application enters the foreground.

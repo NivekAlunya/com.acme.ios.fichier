@@ -16,4 +16,5 @@ public enum TVVideoOverlayFocusTarget: Hashable, Sendable {
     case chapters
     case tracks
     case speed
+    case pip
 }

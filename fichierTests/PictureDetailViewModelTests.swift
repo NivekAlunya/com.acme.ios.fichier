@@ -7,7 +7,7 @@ import Foundation
 import Testing
 import UIKit
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("PictureDetailViewModel")
 @MainActor
