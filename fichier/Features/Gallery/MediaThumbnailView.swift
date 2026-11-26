@@ -170,7 +170,7 @@ public struct MediaThumbnailView: View {
                         .padding(isCompact ? 2 : 6)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 } else if item.isPDF && image != nil {
-                    Text("PDF")
+                    Text(.Strings.mediaBadgePdf)
                         .font(.system(size: isCompact ? 7 : 8, weight: .bold))
                         .foregroundColor(.white)
                         .padding(.horizontal, isCompact ? 3 : 5)

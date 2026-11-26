@@ -24,10 +24,21 @@ opt_in_rules:
 disabled_rules:
   - line_length             # Avoid unnecessary warnings on long comments / URLs
   - trailing_whitespace     # Can be auto-handled by SwiftFormat
-  - type_body_length        # Prevents build-failing errors on larger SwiftUI views
-  - file_length             # Prevents build-failing errors on larger files
-  - function_body_length    # Avoids hard errors on complex SwiftUI views or body properties
   - identifier_name         # Allows concise loop indices (i), coordinates (w, h, p, d), and speeds (speed1_5)
+
+# Length warnings only (generous thresholds; do not fail builds)
+file_length:
+  warning: 800
+  error: 2000
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 500
+  error: 1500
+
+function_body_length:
+  warning: 100
+  error: 300
 
 # Rule thresholds customized for Swift 6 async controllers
 large_tuple:

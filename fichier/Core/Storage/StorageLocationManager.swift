@@ -299,13 +299,18 @@ public final class StorageLocationManager {
     ///   - pass: Plaintext password to store in Keychain.
     ///   - hostname: Optional Bonjour or NetBIOS display hostname.
     private func saveValidatedConnection(host: String, user: String, pass: String, hostname: String? = nil) async {
-        savedConnections = await persistenceStore.saveValidatedConnection(
-            host: host,
-            user: user,
-            pass: pass,
-            hostname: hostname,
-            existingConnections: savedConnections
-        )
+        do {
+            savedConnections = try await persistenceStore.saveValidatedConnection(
+                host: host,
+                user: user,
+                pass: pass,
+                hostname: hostname,
+                existingConnections: savedConnections
+            )
+        } catch {
+            loge("Failed to persist validated SMB connection credentials: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
     }
     
     /// Deletes a saved connection record from `UserDefaults` and removes its password from Keychain.
