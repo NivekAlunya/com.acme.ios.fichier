@@ -382,6 +382,8 @@ public final class VideoPlayerController {
     ) {
         self.engineKind = .extended
         self.player = nil
+        pipCoordinator.reset()
+        isPiPActive = false
         self.trackManager.reset()
         
         let extended = TVVLCPlayerEngine()
@@ -1091,6 +1093,7 @@ public final class VideoPlayerController {
         
         player?.pause()
         player = nil
+        pipCoordinator.reset()
         isPiPActive = false
         playbackState = .idle
         errorMessage = nil
@@ -1164,12 +1167,14 @@ public final class VideoPlayerController {
             }
         }
         VideoPlaybackStore.shared.flush()
+        #if !os(tvOS)
         if engineKind == .extended,
            let extendedEngine,
            !isPiPActive,
-           extendedEngine.isPlaying || playbackState.isPlaying {
+           extendedEngine.isPlaying {
             extendedEngine.startPiP()
         }
+        #endif
     }
     
     /// Checks player health and recovers active SMB streams when the application enters the foreground.

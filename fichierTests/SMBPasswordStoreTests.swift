@@ -7,7 +7,7 @@
 import Foundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("SMBPasswordStore Tests")
 struct SMBPasswordStoreTests {

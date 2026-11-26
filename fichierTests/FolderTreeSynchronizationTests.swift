@@ -8,7 +8,7 @@
 import Foundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("Folder Tree Synchronization Tests")
 @MainActor

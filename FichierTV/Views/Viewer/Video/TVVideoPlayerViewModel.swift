@@ -966,7 +966,6 @@ public final class TVVideoPlayerViewModel {
             isPiPActive = false
             nativeEngine.pause()
         } else {
-            extendedEngine.stopPiP()
             extendedEngine.pause()
         }
         setActiveEngine(kind: kind)
@@ -1000,6 +999,9 @@ public final class TVVideoPlayerViewModel {
             activeEngine = nativeEngine
         case .extended:
             activeEngine = extendedEngine
+            if activeFocusedButton == .pip {
+                activeFocusedButton = .playPause
+            }
         }
         syncState(from: activeEngine)
     }

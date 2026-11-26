@@ -8,7 +8,7 @@
 #if DEBUG
 import Foundation
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @MainActor
 final class MockPlayerEngine: PlayerEngine {

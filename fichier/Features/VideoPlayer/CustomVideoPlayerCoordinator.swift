@@ -54,21 +54,33 @@ public final class CustomVideoPlayerCoordinator: NSObject, AVPictureInPictureCon
         }
     }
     
-    // MARK: - AVPictureInPictureControllerDelegate
-    
-    public func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        isPiPActive = true
-        onPiPStatusChanged?(true)
-    }
-    
-    public func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        isPiPActive = true
-        onPiPStatusChanged?(true)
-    }
-    
-    public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+    /// Tears down the Picture-in-Picture controller reference when switching engines or closing playback.
+    public func reset() {
+        if let pip = pipController, pip.isPictureInPictureActive {
+            pip.stopPictureInPicture()
+        }
+        pipController = nil
         isPiPActive = false
-        onPiPStatusChanged?(false)
+    }
+
+    // MARK: - AVPictureInPictureControllerDelegate
+
+    public func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        setPiPActive(true)
+    }
+
+    public func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        setPiPActive(true)
+    }
+
+    public func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        setPiPActive(false)
+    }
+
+    private func setPiPActive(_ active: Bool) {
+        guard isPiPActive != active else { return }
+        isPiPActive = active
+        onPiPStatusChanged?(active)
     }
     
     public func pictureInPictureController(

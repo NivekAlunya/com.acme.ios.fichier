@@ -10,7 +10,7 @@ import Foundation
 import AVFoundation
 import Testing
 import FichierKit
-@testable import fichier
+@testable import Fichier
 
 @Suite("VideoPlayerController & Engine Flow Tests")
 @MainActor

@@ -62,22 +62,25 @@ public final class TVVideoPictureInPictureCoordinator: NSObject, @MainActor AVPi
     public func pictureInPictureControllerWillStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        isPiPActive = true
-        onPiPStatusChanged?(true)
+        setPiPActive(true)
     }
 
     public func pictureInPictureControllerDidStartPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        isPiPActive = true
-        onPiPStatusChanged?(true)
+        setPiPActive(true)
     }
 
     public func pictureInPictureControllerDidStopPictureInPicture(
         _ pictureInPictureController: AVPictureInPictureController
     ) {
-        isPiPActive = false
-        onPiPStatusChanged?(false)
+        setPiPActive(false)
+    }
+
+    private func setPiPActive(_ active: Bool) {
+        guard isPiPActive != active else { return }
+        isPiPActive = active
+        onPiPStatusChanged?(active)
     }
 
     public func pictureInPictureController(
