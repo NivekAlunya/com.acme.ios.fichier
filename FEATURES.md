@@ -260,7 +260,7 @@ flowchart TD
   - Centered visual progress ring displaying live percentage completion and downloaded byte count.
   - Once cached, future opens load instantly with zero network roundtrips.
 - **Master First-Page Thumbnail Generation**:
-  - Generates high-fidelity 420px first-page previews upon first discovery, cached in `MediaCacheManager` for 0ms gallery grid rendering.
+  - Generates high-fidelity 560px first-page previews upon first discovery, cached in `MediaCacheManager` for 0ms gallery grid rendering.
 
 ---
 
@@ -300,7 +300,7 @@ flowchart TD
 
 - **Two-Tier Cache Architecture**:
   - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: Fast LRU in-memory RAM cache with `@unchecked Sendable` isolation over `NSCache` for immediate scrolling and instantaneous UI updates.
-  - **Standardized Master Disk Cache (`MediaCacheManager`)**: Persistent disk cache standardizing on a single 420px master thumbnail dimension (`standardThumbnailDimension`) to eliminate redundant re-encodings across grid sizes, with background FIFO eviction and one-tap manual cache clearing.
+  - **Standardized Master Disk Cache (`MediaCacheManager`)**: Persistent disk cache standardizing on a single 560px master thumbnail dimension (`standardThumbnailDimension`) to eliminate redundant re-encodings across grid sizes, with background FIFO eviction and one-tap manual cache clearing.
 - **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**:
   - Full thumbnail frame extraction for open containers and non-Apple codecs (`.mkv`, `.avi`, `.webm`, `.flv`, `.wmv`, `.ts`, `.ogv`, etc.) powered by VLCKit (`VLCMediaThumbnailer`).
   - Serialized actor execution prevents memory spikes and LibVLC thread contention, with watchdog timeouts preventing hangs on corrupt files.

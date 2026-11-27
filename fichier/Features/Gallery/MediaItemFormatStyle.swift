@@ -21,7 +21,8 @@ public enum MediaItemFormatStyle: Sendable {
             name: item.name,
             type: type,
             isPDF: item.isPDF,
-            isGIF: item.isGIF
+            isGIF: item.isGIF,
+            photoSubtype: item.photoSubtype
         )
     }
 

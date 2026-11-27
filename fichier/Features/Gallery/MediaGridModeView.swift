@@ -151,15 +151,15 @@ struct MediaGridModeView: View {
                 Text(mediaSectionHeader)
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(.secondary)
-                
+
                 Spacer()
-                
+
                 Text(sortOption.localizedTitle)
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
-            
+
             LazyVGrid(columns: gridColumns, spacing: 10) {
                 ForEach(pictures) { pic in
                     pictureCell(for: pic)

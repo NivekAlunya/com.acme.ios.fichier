@@ -85,6 +85,7 @@ public struct MediaThumbnailView: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                    .transition(.opacity)
             } else if item.isPDF && !loadFailed {
                 pdfPlaceholderView
             } else if loadFailed {
@@ -182,6 +183,7 @@ public struct MediaThumbnailView: View {
                 }
             }
         }
+        .animation(.easeOut(duration: 0.15), value: image != nil)
         .task(id: "\(item.id)-\(manager.thumbnailVersions[item.id] ?? 0)") {
             await loadThumbnail()
         }
@@ -268,7 +270,7 @@ public struct MediaThumbnailView: View {
         
         let loaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
         guard !Task.isCancelled else { return }
-        
+
         if let loaded {
             withAnimation(.easeIn(duration: 0.2)) {
                 self.image = loaded

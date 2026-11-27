@@ -182,14 +182,14 @@ public struct TVMediaBrowserView: View {
     private func gridLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 40), count: 4),
-                spacing: 40
+                columns: Array(repeating: GridItem(.flexible(), spacing: 32), count: 6),
+                spacing: 32
             ) {
                 ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaGridItemView(item: item)
                     }
-                    .buttonStyle(.card)
+                    .buttonStyle(TVMediaCardButtonStyle())
                     .focused($focusedTarget, equals: .item(item.id))
                     .contextMenu {
                         layoutContextMenu(viewModel: viewModel)
@@ -213,7 +213,7 @@ public struct TVMediaBrowserView: View {
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaListRowView(item: item)
                     }
-                    .buttonStyle(.card)
+                    .buttonStyle(TVMediaCardButtonStyle())
                     .focused($focusedTarget, equals: .item(item.id))
                     .contextMenu {
                         layoutContextMenu(viewModel: viewModel)

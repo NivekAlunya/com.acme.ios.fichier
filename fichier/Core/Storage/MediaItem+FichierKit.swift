@@ -39,7 +39,8 @@ extension MediaItem {
                 localURL: sourceItem.localURL,
                 phAssetIdentifier: phAssetIdentifier,
                 isMediaVideo: sourceItem.type == .video,
-                folderIconName: folderIconName
+                folderIconName: folderIconName,
+                photoSubtype: sourceItem.photoSubtype
             )
             return
         }
@@ -57,7 +58,8 @@ extension MediaItem {
                 localURL: sourceItem.localURL,
                 phAssetIdentifier: nil,
                 isMediaVideo: sourceItem.type == .video ? true : nil,
-                folderIconName: folderIconName
+                folderIconName: folderIconName,
+                photoSubtype: sourceItem.photoSubtype
             )
             return
         }
@@ -77,7 +79,8 @@ extension MediaItem {
                 localURL: nil,
                 phAssetIdentifier: nil,
                 isMediaVideo: sourceItem.type == .video ? true : nil,
-                folderIconName: folderIconName
+                folderIconName: folderIconName,
+                photoSubtype: sourceItem.photoSubtype
             )
             return
         }
@@ -94,7 +97,8 @@ extension MediaItem {
             localURL: nil,
             phAssetIdentifier: nil,
             isMediaVideo: sourceItem.type == .video ? true : nil,
-            folderIconName: folderIconName
+            folderIconName: folderIconName,
+            photoSubtype: sourceItem.photoSubtype
         )
     }
 
@@ -123,7 +127,8 @@ extension MediaItem {
                 modifiedDate: modifiedDate,
                 localURL: localURL,
                 phAssetIdentifier: phAssetIdentifier,
-                sourceID: locationID
+                sourceID: locationID,
+                photoSubtype: photoSubtype
             )
         }
 
@@ -136,7 +141,8 @@ extension MediaItem {
                 size: size,
                 modifiedDate: modifiedDate,
                 localURL: localURL,
-                sourceID: locationID
+                sourceID: locationID,
+                photoSubtype: photoSubtype
             )
         }
 
@@ -148,7 +154,8 @@ extension MediaItem {
                 type: itemType,
                 size: size,
                 modifiedDate: modifiedDate,
-                sourceID: locationID
+                sourceID: locationID,
+                photoSubtype: photoSubtype
             )
         }
 
@@ -163,7 +170,8 @@ extension MediaItem {
             modifiedDate: modifiedDate,
             sourceID: locationID,
             smbShare: shareName,
-            smbPath: cleanRelative
+            smbPath: cleanRelative,
+            photoSubtype: photoSubtype
         )
     }
 }
