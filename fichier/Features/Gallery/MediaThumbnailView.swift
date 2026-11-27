@@ -26,7 +26,7 @@ public struct MediaThumbnailView: View {
     public let item: MediaItem
     
     /// Target maximum pixel bounding box for downsampled image decoding.
-    public var maxDimension: CGFloat = 260
+    public var maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension
     
     /// Corner radius applied to thumbnail clipping and placeholder styling.
     public var cornerRadius: CGFloat = 10

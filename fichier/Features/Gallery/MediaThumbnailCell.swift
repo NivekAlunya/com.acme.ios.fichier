@@ -35,7 +35,7 @@ struct MediaThumbnailCell: View {
     var gridSize: GridSize = .medium
 
     /// Maximum pixel bounding dimension for downsampled thumbnail decoding.
-    var maxDimension: CGFloat = 280
+    var maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension
 
     /// Indicates whether this cell is checked in multi-selection mode.
     var isSelected: Bool = false

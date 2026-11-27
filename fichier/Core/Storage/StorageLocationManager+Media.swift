@@ -38,12 +38,58 @@ extension StorageLocationManager {
     /// - Returns: A decoded, downsampled `UIImage`, or `nil` if loading failed or was cancelled.
     /// Returns a thumbnail already stored in RAM or persistent disk cache without hitting SMB or decoding.
     public func cachedThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+        if let cached = memoryCachedThumbnail(for: item, maxDimension: maxDimension) {
+            return cached
+        }
+        return await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension).image
+    }
+
+    public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
+        if Task.isCancelled { return nil }
+        if let cached = memoryCachedThumbnail(for: item, maxDimension: maxDimension) {
             return cached
         }
 
+        if item.phAssetIdentifier != nil {
+            if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
+                worker.cacheThumbnail(thumb, forKey: "\(item.id)_thumb" as NSString)
+                return thumb
+            }
+            return nil
+        }
+
+        if item.localURL != nil {
+            return await fetchLocalThumbnail(for: item, maxDimension: maxDimension)
+        }
+
+        let currentActive = activeFolderID
+        if let current = selectedFolder {
+            let cleanCurrentPath = current.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            let cleanItemPath = item.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            if item.shareName != current.shareName || (!cleanCurrentPath.isEmpty && cleanItemPath != cleanCurrentPath && !cleanItemPath.hasPrefix(cleanCurrentPath + "/")) {
+                return nil
+            }
+        }
+
+        if item.isVideo {
+            return await fetchRemoteVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+        }
+        if item.isPDF {
+            return await fetchPDFThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension)
+        }
+        return await fetchRemotePhotoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
+    }
+
+    nonisolated private func memoryCachedThumbnail(for item: MediaItem, maxDimension: CGFloat) -> UIImage? {
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        return worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey)
+    }
+
+    private func promoteDiskCachedThumbnail(
+        for item: MediaItem,
+        maxDimension: CGFloat
+    ) async -> (image: UIImage?, diskKey: String) {
         let subPath = MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
         let diskDimension = item.isVideo ? MediaCacheManager.standardThumbnailDimension : maxDimension
         let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
@@ -57,162 +103,105 @@ extension StorageLocationManager {
             fallbackKey: fallbackKey,
             legacyKey: legacyKey
         ) {
-            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-            return diskCached
+            worker.cacheThumbnail(diskCached, forKey: "\(item.id)_thumb" as NSString)
+            return (diskCached, diskKey)
         }
-        return nil
+        return (nil, diskKey)
     }
 
-    public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
-        if Task.isCancelled { return nil }
-        
-        let memoryCacheKey = "\(item.id)_thumb" as NSString
-        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
-            return cached
+    private func storeThumbnail(
+        _ thumb: UIImage,
+        for item: MediaItem,
+        diskKey: String?,
+        linkFolder: Bool
+    ) async {
+        worker.cacheThumbnail(thumb, forKey: "\(item.id)_thumb" as NSString)
+        if let diskKey {
+            await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
         }
-        
-        // Photos Library asset thumbnail
-        if item.phAssetIdentifier != nil {
-            if let thumb = await photosWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                return thumb
-            }
-            return nil
-        }
-        
-        // Local or iCloud Drive file thumbnail
-        if item.localURL != nil {
-            // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
-            let subPath = MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
-            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
-                for: item.shareName,
-                path: subPath,
-                dimension: maxDimension,
-                connectionID: item.connectionID
-            )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-                return diskCached
-            }
-            
-            if let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                if item.isImage || item.isVideo {
-                    MediaCacheManager.shared.linkFolderIcon(
-                        thumb,
-                        childPath: item.path,
-                        shareName: item.shareName,
-                        connectionID: item.connectionID,
-                        isVideo: item.isVideo
-                    )
-                }
-                return thumb
-            }
-            return nil
-        }
-        
-        let currentActive = activeFolderID
-        // Early discard if folder already changed
-        if let current = selectedFolder {
-            let cleanCurrentPath = current.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let cleanItemPath = item.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            if item.shareName != current.shareName || (!cleanCurrentPath.isEmpty && cleanItemPath != cleanCurrentPath && !cleanItemPath.hasPrefix(cleanCurrentPath + "/")) {
-                return nil
-            }
-        }
-        
-        // Video thumbnail streaming & caching
-        if item.isVideo {
-            let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
-                for: item.shareName,
-                path: MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: true),
-                dimension: maxDimension,
-                connectionID: item.connectionID
-            )
-            if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: diskKey, fallbackKey: fallbackKey, legacyKey: legacyKey) {
-                worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-                return diskCached
-            }
-            
-            guard !Task.isCancelled else { return nil }
-            
-            // 1. If full video was already cached locally, extract frame directly from disk file (defaults to 12.0s with 0.0s fallback)
-            if MediaCacheManager.shared.hasCachedVideo(for: item) {
-                let localURL = MediaCacheManager.shared.localVideoURL(for: item)
-                if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
-                    from: localURL,
-                    maxDimension: MediaCacheManager.standardThumbnailDimension
-                ) {
-                    worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                    await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                    MediaCacheManager.shared.linkFolderIcon(
-                        thumb,
-                        childPath: item.path,
-                        shareName: item.shareName,
-                        connectionID: item.connectionID,
-                        isVideo: true
-                    )
-                    return thumb
-                }
-            }
-            
-            // 2. Stream video frame on demand via AVAssetResourceLoader (reads front header + moov atom only!)
-            // Debounce briefly so cells flying past during fast scroll are cancelled before hitting SMB
-            try? await Task.sleep(for: .milliseconds(60))
-            guard !Task.isCancelled else { return nil }
-            
-            if let thumb = await streamVideoThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension) {
-                worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
-                await MediaCacheManager.shared.saveThumbnailAsync(thumb, for: diskKey)
-                MediaCacheManager.shared.linkFolderIcon(
-                    thumb,
-                    childPath: item.path,
-                    shareName: item.shareName,
-                    connectionID: item.connectionID,
-                    isVideo: true
-                )
-                return thumb
-            }
-            
-            // 3. If streaming failed or was cancelled due to scrolling, do NOT cache a placeholder
-            // This allows the cell to retry fetching the actual thumbnail when visible
-            return nil
-        }
-        
-        // PDF document thumbnail streaming, fast-path prefix caching, and placeholder generation
-        if item.isPDF {
-            return await fetchPDFThumbnail(for: item, expectedFolderID: currentActive, maxDimension: MediaCacheManager.standardThumbnailDimension)
-        }
-        
-        // Check persistent disk cache for SMB photos off the MainActor before queuing on SMBClientActor
-        let (photoDiskKey, photoFallbackKey, photoLegacyKey) = MediaCacheManager.shared.thumbnailKeys(
-            for: item.shareName,
-            path: item.path,
-            dimension: maxDimension,
-            connectionID: item.connectionID
-        )
-        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(for: photoDiskKey, fallbackKey: photoFallbackKey, legacyKey: photoLegacyKey) {
-            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
-            return diskCached
-        }
-        
-        // Debounce briefly (40ms for photos) to prevent network thrashing during fast scrolls
-        try? await Task.sleep(for: .milliseconds(40))
-        guard !Task.isCancelled else { return nil }
-        
-        let thumb = await worker.fetchThumbnail(for: item, expectedFolderID: currentActive, maxDimension: maxDimension)
-        if let thumb {
-            worker.cacheThumbnail(thumb, forKey: memoryCacheKey)
+        if linkFolder {
             MediaCacheManager.shared.linkFolderIcon(
                 thumb,
                 childPath: item.path,
                 shareName: item.shareName,
                 connectionID: item.connectionID,
-                isVideo: false
+                isVideo: item.isVideo
             )
         }
+    }
+
+    private func fetchLocalThumbnail(for item: MediaItem, maxDimension: CGFloat) async -> UIImage? {
+        let (diskCached, diskKey) = await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension)
+        if let diskCached {
+            return diskCached
+        }
+        guard let thumb = await localWorker.fetchThumbnail(for: item, maxDimension: maxDimension) else {
+            return nil
+        }
+        await storeThumbnail(thumb, for: item, diskKey: diskKey, linkFolder: item.isImage || item.isVideo)
+        return thumb
+    }
+
+    private func fetchRemoteVideoThumbnail(
+        for item: MediaItem,
+        expectedFolderID: String?,
+        maxDimension: CGFloat
+    ) async -> UIImage? {
+        let (diskCached, diskKey) = await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension)
+        if let diskCached {
+            return diskCached
+        }
+        guard !Task.isCancelled else { return nil }
+
+        // 1. If full video was already cached locally, extract frame directly from disk file
+        if MediaCacheManager.shared.hasCachedVideo(for: item) {
+            let localURL = MediaCacheManager.shared.localVideoURL(for: item)
+            if let thumb = await MediaCacheManager.shared.generateVideoThumbnail(
+                from: localURL,
+                maxDimension: MediaCacheManager.standardThumbnailDimension
+            ) {
+                await storeThumbnail(thumb, for: item, diskKey: diskKey, linkFolder: true)
+                return thumb
+            }
+        }
+
+        // 2. Stream video frame on demand via AVAssetResourceLoader (reads front header + moov atom only!)
+        // Debounce briefly so cells flying past during fast scroll are cancelled before hitting SMB
+        try? await Task.sleep(for: .milliseconds(60))
+        guard !Task.isCancelled else { return nil }
+
+        if let thumb = await streamVideoThumbnail(
+            for: item,
+            expectedFolderID: expectedFolderID,
+            maxDimension: MediaCacheManager.standardThumbnailDimension
+        ) {
+            await storeThumbnail(thumb, for: item, diskKey: diskKey, linkFolder: true)
+            return thumb
+        }
+
+        // 3. If streaming failed or was cancelled due to scrolling, do NOT cache a placeholder
+        // This allows the cell to retry fetching the actual thumbnail when visible
+        return nil
+    }
+
+    private func fetchRemotePhotoThumbnail(
+        for item: MediaItem,
+        expectedFolderID: String?,
+        maxDimension: CGFloat
+    ) async -> UIImage? {
+        let (diskCached, _) = await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension)
+        if let diskCached {
+            return diskCached
+        }
+
+        // Debounce briefly (40ms for photos) to prevent network thrashing during fast scrolls
+        try? await Task.sleep(for: .milliseconds(40))
+        guard !Task.isCancelled else { return nil }
+
+        guard let thumb = await worker.fetchThumbnail(for: item, expectedFolderID: expectedFolderID, maxDimension: maxDimension) else {
+            return nil
+        }
+        await storeThumbnail(thumb, for: item, diskKey: nil, linkFolder: true)
         return thumb
     }
     
@@ -253,9 +242,7 @@ extension StorageLocationManager {
             if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                 return nil
             }
-            let memoryCacheKey = "\(item.id)_thumb" as NSString
-            let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
-            if let cached = self.worker.getCachedThumbnail(forKey: memoryCacheKey) ?? self.worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+            if let cached = self.memoryCachedThumbnail(for: item, maxDimension: maxDimension) {
                 return cached
             }
             
