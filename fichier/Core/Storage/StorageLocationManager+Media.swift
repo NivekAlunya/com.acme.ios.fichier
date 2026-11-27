@@ -22,6 +22,20 @@ extension StorageLocationManager {
     // MARK: - Download Picture / Thumbnail
     
     /// Downloads or retrieves a cached thumbnail image for a given media item.
+    /// Returns a thumbnail already stored in RAM or persistent disk cache without hitting SMB or decoding.
+    ///
+    /// - Parameters:
+    ///   - item: The target media item.
+    ///   - maxDimension: Maximum pixel bounding dimension for cache key lookup.
+    /// - Returns: A cached `UIImage`, or `nil` if not present in RAM or on disk.
+    public func cachedThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
+        if let cached = memoryCachedThumbnail(for: item, maxDimension: maxDimension) {
+            return cached
+        }
+        return await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension).image
+    }
+
+    /// Downloads or extracts a thumbnail for the given item, checking memory and disk caches first.
     ///
     /// ### Multi-Tier Thumbnail Pipeline
     /// 1. **Tier 1 (RAM)**: Checks `SMBClientActor`'s in-memory `NSCache` for immediate rendering.
@@ -36,14 +50,6 @@ extension StorageLocationManager {
     ///   - item: The target media item.
     ///   - maxDimension: Maximum pixel bounding dimension for downsampling.
     /// - Returns: A decoded, downsampled `UIImage`, or `nil` if loading failed or was cancelled.
-    /// Returns a thumbnail already stored in RAM or persistent disk cache without hitting SMB or decoding.
-    public func cachedThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
-        if let cached = memoryCachedThumbnail(for: item, maxDimension: maxDimension) {
-            return cached
-        }
-        return await promoteDiskCachedThumbnail(for: item, maxDimension: maxDimension).image
-    }
-
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         if let cached = memoryCachedThumbnail(for: item, maxDimension: maxDimension) {

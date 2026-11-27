@@ -108,14 +108,11 @@ public struct TVMediaGridItemView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if isVideoFinished {
-                VStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(FichierTheme.secondaryAccent)
-                }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 6)
-                .background(Color.black.opacity(0.45), in: Capsule())
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(FichierTheme.secondaryAccent)
+                    .padding(6)
+                    .background(Color.black.opacity(0.45), in: Capsule())
             }
         }
         .padding(.horizontal, 12)

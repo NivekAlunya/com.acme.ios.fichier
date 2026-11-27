@@ -219,7 +219,7 @@ public struct TVMediaBrowserView: View {
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaListRowView(item: item)
                     }
-                    .buttonStyle(TVMediaCardButtonStyle())
+                    .buttonStyle(.card)
                     .focused($focusedTarget, equals: .item(item.id))
                     .contextMenu {
                         layoutContextMenu(viewModel: viewModel)

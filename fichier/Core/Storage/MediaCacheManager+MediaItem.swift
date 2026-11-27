@@ -135,9 +135,15 @@ nonisolated extension MediaCacheManager {
     private func collectThumbnailURLsToRemove(for items: [MediaItem]) -> [URL] {
         items.flatMap { item -> [URL] in
             var urls = thumbnailURLs(for: item.shareName, path: item.path, connectionID: item.connectionID)
-            let subPath = Self.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
-            if subPath != item.path {
-                urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: subPath, connectionID: item.connectionID))
+            if item.isVideo {
+                let subPath = Self.thumbnailCacheSubPath(for: item.path, isVideo: true)
+                if subPath != item.path {
+                    urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: subPath, connectionID: item.connectionID))
+                }
+                let legacySubPath = "\(item.path)_vidstream_v7"
+                if legacySubPath != subPath {
+                    urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: legacySubPath, connectionID: item.connectionID))
+                }
             }
             if item.isPDF {
                 urls.append(localDocumentURL(for: item))
