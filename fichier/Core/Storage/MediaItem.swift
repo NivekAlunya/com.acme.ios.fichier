@@ -57,6 +57,9 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
     
     /// Custom SF Symbol icon name used for special folder categories (e.g. "icloud", "photo.on.rectangle").
     public let folderIconName: String?
+
+    /// Specialized photo capture or format subtype when the item represents a photo.
+    public let photoSubtype: PhotoSubtype?
     
     // MARK: - Computed Properties
     
@@ -95,7 +98,8 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         localURL: URL? = nil,
         phAssetIdentifier: String? = nil,
         isMediaVideo: Bool? = nil,
-        folderIconName: String? = nil
+        folderIconName: String? = nil,
+        photoSubtype: PhotoSubtype? = nil
     ) {
         if let phAssetIdentifier {
             self.id = "ph::\(phAssetIdentifier)"
@@ -116,6 +120,7 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
         self.phAssetIdentifier = phAssetIdentifier
         self.isMediaVideo = isMediaVideo
         self.folderIconName = folderIconName
+        self.photoSubtype = photoSubtype
     }
     
     // MARK: - Mutation Helpers
@@ -137,7 +142,8 @@ nonisolated public struct MediaItem: Identifiable, Hashable, Sendable {
             localURL: localURL,
             phAssetIdentifier: phAssetIdentifier,
             isMediaVideo: isMediaVideo,
-            folderIconName: folderIconName
+            folderIconName: folderIconName,
+            photoSubtype: photoSubtype
         )
     }
     

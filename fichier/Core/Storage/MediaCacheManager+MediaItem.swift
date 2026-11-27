@@ -69,14 +69,27 @@ nonisolated extension MediaCacheManager {
         await diskActor.removeFiles(at: targets)
     }
 
+    /// Canonical cache sub-path for an item's thumbnail.
+    ///
+    /// In `DEBUG` builds, appends a versioned video suffix so thumbnail-extraction
+    /// experiments invalidate local caches without affecting release caches.
+    nonisolated public static func thumbnailCacheSubPath(for path: String, isVideo: Bool) -> String {
+        guard isVideo else { return path }
+        #if DEBUG
+        return "\(path)_vidstream_v14"
+        #else
+        return path
+        #endif
+    }
+
     /// Asynchronously migrates thumbnail, video, and document disk caches when an item is renamed.
     ///
     /// - Parameters:
     ///   - source: Original `MediaItem` before rename.
     ///   - destination: Mutated `MediaItem` after rename.
     public func migrateThumbnailCache(from source: MediaItem, to destination: MediaItem) async {
-        let sourceSubPath = source.isVideo ? "\(source.path)_vidstream_v7" : source.path
-        let destSubPath = destination.isVideo ? "\(destination.path)_vidstream_v7" : destination.path
+        let sourceSubPath = Self.thumbnailCacheSubPath(for: source.path, isVideo: source.isVideo)
+        let destSubPath = Self.thumbnailCacheSubPath(for: destination.path, isVideo: destination.isVideo)
 
         let sourceKey = cacheKey(
             for: source.shareName,
@@ -123,7 +136,14 @@ nonisolated extension MediaCacheManager {
         items.flatMap { item -> [URL] in
             var urls = thumbnailURLs(for: item.shareName, path: item.path, connectionID: item.connectionID)
             if item.isVideo {
-                urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: "\(item.path)_vidstream_v7", connectionID: item.connectionID))
+                let subPath = Self.thumbnailCacheSubPath(for: item.path, isVideo: true)
+                if subPath != item.path {
+                    urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: subPath, connectionID: item.connectionID))
+                }
+                let legacySubPath = "\(item.path)_vidstream_v7"
+                if legacySubPath != subPath {
+                    urls.append(contentsOf: thumbnailURLs(for: item.shareName, path: legacySubPath, connectionID: item.connectionID))
+                }
             }
             if item.isPDF {
                 urls.append(localDocumentURL(for: item))

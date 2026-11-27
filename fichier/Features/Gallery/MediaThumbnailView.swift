@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Wappn
 import FichierKit
 
 /// Asynchronous thumbnail loading component rendering cached or remote previews for photos, videos, and documents.
@@ -25,7 +26,7 @@ public struct MediaThumbnailView: View {
     public let item: MediaItem
     
     /// Target maximum pixel bounding box for downsampled image decoding.
-    public var maxDimension: CGFloat = 260
+    public var maxDimension: CGFloat = MediaCacheManager.standardThumbnailDimension
     
     /// Corner radius applied to thumbnail clipping and placeholder styling.
     public var cornerRadius: CGFloat = 10
@@ -85,6 +86,7 @@ public struct MediaThumbnailView: View {
                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                     .clipped()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                    .transition(.opacity)
             } else if item.isPDF && !loadFailed {
                 pdfPlaceholderView
             } else if loadFailed {
@@ -182,6 +184,7 @@ public struct MediaThumbnailView: View {
                 }
             }
         }
+        .animation(.easeOut(duration: 0.15), value: image != nil)
         .task(id: "\(item.id)-\(manager.thumbnailVersions[item.id] ?? 0)") {
             await loadThumbnail()
         }
@@ -266,9 +269,19 @@ public struct MediaThumbnailView: View {
             return
         }
         
+        if let cached = await manager.cachedThumbnail(for: item, maxDimension: maxDimension) {
+            guard !Task.isCancelled else { return }
+            self.image = cached
+            self.loadFailed = false
+            return
+        }
+
+        await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
+        guard !Task.isCancelled else { return }
+
         let loaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
         guard !Task.isCancelled else { return }
-        
+
         if let loaded {
             withAnimation(.easeIn(duration: 0.2)) {
                 self.image = loaded
@@ -281,6 +294,8 @@ public struct MediaThumbnailView: View {
             if retryCount < 1 {
                 retryCount += 1
                 try? await Task.sleep(for: .milliseconds(1500))
+                guard !Task.isCancelled && self.image == nil else { return }
+                await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
                 guard !Task.isCancelled && self.image == nil else { return }
                 let retryLoaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
                 guard !Task.isCancelled else { return }

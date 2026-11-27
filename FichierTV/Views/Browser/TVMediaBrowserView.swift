@@ -19,6 +19,7 @@ public struct TVMediaBrowserView: View {
     @FocusState private var focusedTarget: TVBrowserFocusTarget?
     @State private var hasAppliedInitialFocus: Bool = false
     @State private var lastPlayPauseTimestamp: Date = .distantPast
+    @State private var scrollSourceID = UUID()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -182,14 +183,14 @@ public struct TVMediaBrowserView: View {
     private func gridLayout(viewModel: TVBrowserViewModel) -> some View {
         ScrollView {
             LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 40), count: 4),
-                spacing: 40
+                columns: Array(repeating: GridItem(.flexible(), spacing: 32), count: 6),
+                spacing: 32
             ) {
                 ForEach(viewModel.items) { item in
                     NavigationLink(value: destination(for: item, in: viewModel)) {
                         TVMediaGridItemView(item: item)
                     }
-                    .buttonStyle(.card)
+                    .buttonStyle(TVMediaCardButtonStyle())
                     .focused($focusedTarget, equals: .item(item.id))
                     .contextMenu {
                         layoutContextMenu(viewModel: viewModel)
@@ -202,6 +203,12 @@ public struct TVMediaBrowserView: View {
             .padding(.horizontal, 48)
             .padding(.top, 20)
             .padding(.bottom, 48)
+        }
+        .onScrollPhaseChange { _, newPhase in
+            ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle, sourceID: scrollSourceID)
+        }
+        .onDisappear {
+            ThumbnailPrefetchCoordinator.shared.setScrolling(false, sourceID: scrollSourceID)
         }
     }
 
@@ -225,6 +232,12 @@ public struct TVMediaBrowserView: View {
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 20)
+        }
+        .onScrollPhaseChange { _, newPhase in
+            ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle, sourceID: scrollSourceID)
+        }
+        .onDisappear {
+            ThumbnailPrefetchCoordinator.shared.setScrolling(false, sourceID: scrollSourceID)
         }
     }
 

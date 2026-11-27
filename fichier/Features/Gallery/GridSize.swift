@@ -43,13 +43,9 @@ enum GridSize: String, CaseIterable, Identifiable {
         }
     }
     
-    /// Target pixel width/height requested from downsampling decoders to optimize RAM allocation.
+    /// Canonical master pixel dimension shared across all grid densities.
     var thumbnailPixels: CGFloat {
-        switch self {
-        case .compact: return 200
-        case .medium: return 280
-        case .large: return MediaCacheManager.standardThumbnailDimension
-        }
+        MediaCacheManager.standardThumbnailDimension
     }
     
     /// SF Symbol icon name representing this grid density in toolbar menus.

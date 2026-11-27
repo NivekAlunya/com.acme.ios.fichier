@@ -249,7 +249,7 @@ public actor LocalStorageActor {
         guard let url = item.localURL else { return nil }
         
         // Check persistent disk cache before invoking heavy image/video decoding
-        let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
+        let subPath = MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
         let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
             path: subPath,

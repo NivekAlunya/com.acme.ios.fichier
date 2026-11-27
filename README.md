@@ -48,7 +48,7 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 - **Reading Mode Persistence**: Reading mode preferences (`isBookMode`, `displaysAsBook`) automatically save via `@AppStorage` and can be configured in **App Settings** (`AppSettingsView`).
 - **Leading-Edge Thumbnail Sidebar**: Vertically scrollable glassmorphic thumbnail sidebar (`PDFLeadingThumbnailSidebarView`, `PDFThumbnailItemCell`) with active page/spread tracking, auto-centering scroll synchronization, throttled SMB extraction (`PDFThumbnailLimiter`), and one-tap page jumps.
 - **Dynamic Reading HUD & Keyboard Shortcuts**: Glassmorphic overlay with live page/spread indicator, document title, file size, favorite bookmarking, Share Sheet export (`PDFDetailView`), and keyboard navigation (`b` for book mode, `←` / `→` for page turning, `Esc` to dismiss).
-- **Zero-Latency Local Caching**: Atomic downloads from SMB servers to the document cache directory (`SMBDocuments`) with live byte progress and 420px first-page grid thumbnails.
+- **Zero-Latency Local Caching**: Atomic downloads from SMB servers to the document cache directory (`SMBDocuments`) with live byte progress and 560px first-page grid thumbnails.
 
 ### 📸 Photo Viewer & Slideshow
 - **Deep Zoom & Pan**: Integrated `UIScrollView`-backed zoom (`ZoomableImageView`) providing 1:1 pixel rendering, double-tap zoom, and smooth deceleration.
@@ -73,7 +73,7 @@ Built with modern **SwiftUI** and structured around **Pure Swift Concurrency**, 
 
 ### ⚡ Two-Tier Caching System
 - **Thread-Safe Memory Cache (`ThreadSafeMemoryCache`)**: In-memory LRU cache wrapping `NSCache` with `@unchecked Sendable` isolation for immediate UI responsiveness.
-- **Actor-Isolated Disk Cache (`MediaCacheManager`, `MediaDiskCacheActor`)**: Persistent disk cache standardizing on a 420px master thumbnail dimension (`standardThumbnailDimension`), eliminating redundant re-encodings across grid sizes with real-time size reporting, background 300MB FIFO eviction, and one-tap cache purging.
+- **Actor-Isolated Disk Cache (`MediaCacheManager`, `MediaDiskCacheActor`)**: Persistent disk cache standardizing on a 560px master thumbnail dimension (`standardThumbnailDimension`), eliminating redundant re-encodings across grid sizes with real-time size reporting, background 300MB FIFO eviction, and one-tap cache purging.
 - **Extended Video Thumbnailing (`VLCMediaThumbnailerActor`, `VLCMediaThumbnailerSession`)**: Serialized `VLCKit` (`VLCMediaThumbnailer`) keyframe extraction over loopback HTTP (`SMBStreamingServerActor`) with watchdog timeouts and concurrency throttling (`VideoThumbnailLimiter`).
 - **Non-Blocking Thumbnail Failure & Playback Fallback (`MediaThumbnailView`)**: Displays a non-interactive play placeholder on timeout/failure (`allowsHitTesting(false)`) alongside a non-interfering top-leading retry trigger.
 
@@ -84,7 +84,7 @@ flowchart LR
     Tier1 -->|Miss| Tier2{"Tier 2: Disk Cache<br/>MediaDiskCacheActor"}
     Tier2 -->|"Hit (2-5ms)"| Promote["Promote to Tier 1"] --> Render
     Tier2 -->|Miss| Remote["Fetch via SMBClientActor / LocalStorageActor"]
-    Remote --> Downsample["Downsample to 420px Standard"]
+    Remote --> Downsample["Downsample to 560px Standard"]
     Downsample --> SaveDisk["Save to Tier 2 Disk"]
     Downsample --> SaveRAM["Save to Tier 1 RAM"]
     Downsample --> Render
@@ -98,7 +98,7 @@ Built natively for tvOS 18+ using **`FichierKit`** and Focus Engine ergonomics:
 
 - **Top-Level Segmented Navigation (`TVRootMediaBrowserView`)**: Switches cleanly between **Photos** and **Shares** inside a single `NavigationStack` so Menu button presses pop logically without exiting the app prematurely.
 - **SMB Server Shelf & Bonjour Form (`TVSharesRootView`, `TVServerFormView`)**: Horizontal card shelf with live reachability status badges (`Online` / `Offline` / `Connecting`), context menus & Play/Pause action sheets, Bonjour `_smb._tcp` discovery, and pre-save credential/share validation.
-- **Focused Media Browser (`TVMediaBrowserView`, `TVBrowserViewModel`)**: Photos authorization & limited-access guidance banner (`TVPhotosRootView`), 4-column grid and detailed list views persisted per source, filename-first sorting (`Name`, `Date`, `Size`, `Type`), infinite pagination, and first-item focus restoration.
+- **Focused Media Browser (`TVMediaBrowserView`, `TVBrowserViewModel`)**: Photos authorization & limited-access guidance banner (`TVPhotosRootView`), 6-column portrait grid and detailed list views persisted per source, filename-first sorting (`Name`, `Date`, `Size`, `Type`), infinite pagination, and first-item focus restoration.
 - **Fullscreen TV Photo Viewer & Slideshow (`TVImageViewerView`)**: D-pad Left/Right browsing backed by multi-page lookahead pagination (`TVViewerPaginationContext`), Play/Pause slideshow toggle, and persisted interval/transition settings (`TVSlideshowSettingsView`).
 - **TV Video Player & Accelerated Long-Video Seeking (`TVVideoPlayerView`, `TVVideoPlayerViewModel`)**:
   - **Dual-Engine & System Remote Integration**: Runs `AVPlayerEngine` and `TVVLCPlayerEngine` with automatic fallback, `SMBStreamingServer` loopback HTTP streaming, and `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter` hardware/CEC/IR integration (`TVSystemRemoteCommandBridge`).
@@ -349,8 +349,9 @@ com.acme.ios.fichier/
 │       │   ├── TVControlButtonStyle.swift          # Focusable pill toolbar button style
 │       │   ├── TVEmptyStateView.swift              # Empty folder / album placeholder
 │       │   ├── TVErrorStateView.swift              # Error display with Retry & Back actions
-│       │   ├── TVMediaBrowserView.swift            # 4-column grid / list browser & sort sheet
-│       │   ├── TVMediaGridItemView.swift           # Focusable .card grid item with badges
+│       │   ├── TVMediaBrowserView.swift            # 6-column portrait grid / list browser & sort sheet
+│       │   ├── TVMediaCardButtonStyle.swift        # Focus-reactive card button style without corner clipping
+│       │   ├── TVMediaGridItemView.swift           # Focusable portrait grid item with overlay badges
 │       │   ├── TVMediaListRowView.swift            # Metadata list row card
 │       │   └── TVThumbnailView.swift               # Async cancelled thumbnail view
 │       ├── Photos/                                 # Root shell & PhotoKit entry (2 files)
