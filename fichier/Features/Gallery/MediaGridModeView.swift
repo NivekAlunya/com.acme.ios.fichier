@@ -100,6 +100,12 @@ struct MediaGridModeView: View {
             #if !os(tvOS)
             .scrollDismissesKeyboard(.immediately)
             #endif
+            .onScrollPhaseChange { _, newPhase in
+                ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle)
+            }
+            .onDisappear {
+                ThumbnailPrefetchCoordinator.shared.setScrolling(false)
+            }
             .onChange(of: currentDirectoryID) { _, _ in
                 proxy.scrollTo("topOfGrid", anchor: .top)
             }

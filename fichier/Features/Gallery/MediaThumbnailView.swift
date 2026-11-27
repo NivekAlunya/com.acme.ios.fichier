@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Wappn
 import FichierKit
 
 /// Asynchronous thumbnail loading component rendering cached or remote previews for photos, videos, and documents.
@@ -268,6 +269,16 @@ public struct MediaThumbnailView: View {
             return
         }
         
+        if let cached = await manager.cachedThumbnail(for: item, maxDimension: maxDimension) {
+            guard !Task.isCancelled else { return }
+            self.image = cached
+            self.loadFailed = false
+            return
+        }
+
+        await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
+        guard !Task.isCancelled else { return }
+
         let loaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
         guard !Task.isCancelled else { return }
 
@@ -283,6 +294,8 @@ public struct MediaThumbnailView: View {
             if retryCount < 1 {
                 retryCount += 1
                 try? await Task.sleep(for: .milliseconds(1500))
+                guard !Task.isCancelled && self.image == nil else { return }
+                await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
                 guard !Task.isCancelled && self.image == nil else { return }
                 let retryLoaded = await manager.downloadThumbnail(for: item, maxDimension: maxDimension)
                 guard !Task.isCancelled else { return }

@@ -36,6 +36,33 @@ extension StorageLocationManager {
     ///   - item: The target media item.
     ///   - maxDimension: Maximum pixel bounding dimension for downsampling.
     /// - Returns: A decoded, downsampled `UIImage`, or `nil` if loading failed or was cancelled.
+    /// Returns a thumbnail already stored in RAM or persistent disk cache without hitting SMB or decoding.
+    public func cachedThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
+        let memoryCacheKey = "\(item.id)_thumb" as NSString
+        let legacyMemoryKey = "\(item.id)_thumb_\(Int(maxDimension))" as NSString
+        if let cached = worker.getCachedThumbnail(forKey: memoryCacheKey) ?? worker.getCachedThumbnail(forKey: legacyMemoryKey) {
+            return cached
+        }
+
+        let subPath = MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
+        let diskDimension = item.isVideo ? MediaCacheManager.standardThumbnailDimension : maxDimension
+        let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
+            for: item.shareName,
+            path: subPath,
+            dimension: diskDimension,
+            connectionID: item.connectionID
+        )
+        if let diskCached = await MediaCacheManager.shared.getThumbnailAsync(
+            for: diskKey,
+            fallbackKey: fallbackKey,
+            legacyKey: legacyKey
+        ) {
+            worker.cacheThumbnail(diskCached, forKey: memoryCacheKey)
+            return diskCached
+        }
+        return nil
+    }
+
     public func downloadThumbnail(for item: MediaItem, maxDimension: CGFloat = 260) async -> UIImage? {
         if Task.isCancelled { return nil }
         
@@ -57,7 +84,7 @@ extension StorageLocationManager {
         // Local or iCloud Drive file thumbnail
         if item.localURL != nil {
             // Check persistent on-disk thumbnail cache (Tier 2) to eliminate re-decoding local video/image files
-            let subPath = item.isVideo ? "\(item.path)_vidstream_v7" : item.path
+            let subPath = MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: item.isVideo)
             let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
                 path: subPath,
@@ -100,7 +127,7 @@ extension StorageLocationManager {
         if item.isVideo {
             let (diskKey, fallbackKey, legacyKey) = MediaCacheManager.shared.thumbnailKeys(
                 for: item.shareName,
-                path: "\(item.path)_vidstream_v7",
+                path: MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: true),
                 dimension: maxDimension,
                 connectionID: item.connectionID
             )
@@ -219,8 +246,9 @@ extension StorageLocationManager {
     /// - Returns: An extracted keyframe image, or `nil`.
     private func streamVideoThumbnail(for item: MediaItem, expectedFolderID: String?, maxDimension: CGFloat) async -> UIImage? {
         if Task.isCancelled { return nil }
+        let sampleAttempt = await MainActor.run { self.thumbnailVersions[item.id, default: 0] }
         
-        return try? await videoThumbnailLimiter.withPermit {
+        return try? await videoThumbnailLimiter.withPermit { () -> UIImage? in
             guard !Task.isCancelled else { return nil }
             if let expectedFolderID, await self.activeFolderID != expectedFolderID {
                 return nil
@@ -255,7 +283,8 @@ extension StorageLocationManager {
                 path: validItem.smbRelativePath,
                 fileName: validItem.name,
                 fileSize: validItem.size,
-                maxDimension: maxDimension
+                maxDimension: maxDimension,
+                sampleAttempt: sampleAttempt
             )
         }
     }

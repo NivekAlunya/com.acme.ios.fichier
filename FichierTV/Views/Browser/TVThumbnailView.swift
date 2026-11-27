@@ -75,6 +75,10 @@ public struct TVThumbnailView: View {
         }
 
         let isCached = await isPrecached(item: item)
+        if !isCached {
+            await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
+            guard !Task.isCancelled else { return }
+        }
         let loaded = await fetchThumbnailOnce()
 
         if let loaded {
@@ -90,6 +94,8 @@ public struct TVThumbnailView: View {
 
         if item.type == .video && !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(1500))
+            guard !Task.isCancelled else { return }
+            await ThumbnailPrefetchCoordinator.shared.waitUntilScrollIdle()
             guard !Task.isCancelled else { return }
             let retried = await fetchThumbnailOnce()
             if let retried, !Task.isCancelled {

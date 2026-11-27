@@ -206,7 +206,7 @@ extension SMBClientActor {
         // Upgrade thumbnail cache with real video frame now that it is downloaded
         let (diskKey, _, _) = MediaCacheManager.shared.thumbnailKeys(
             for: item.shareName,
-            path: "\(item.path)_vidstream_v7",
+            path: MediaCacheManager.thumbnailCacheSubPath(for: item.path, isVideo: true),
             dimension: MediaCacheManager.standardThumbnailDimension,
             connectionID: item.connectionID
         )

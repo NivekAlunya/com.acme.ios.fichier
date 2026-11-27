@@ -203,6 +203,12 @@ public struct TVMediaBrowserView: View {
             .padding(.top, 20)
             .padding(.bottom, 48)
         }
+        .onScrollPhaseChange { _, newPhase in
+            ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle)
+        }
+        .onDisappear {
+            ThumbnailPrefetchCoordinator.shared.setScrolling(false)
+        }
     }
 
     @ViewBuilder
@@ -225,6 +231,12 @@ public struct TVMediaBrowserView: View {
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 20)
+        }
+        .onScrollPhaseChange { _, newPhase in
+            ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle)
+        }
+        .onDisappear {
+            ThumbnailPrefetchCoordinator.shared.setScrolling(false)
         }
     }
 
