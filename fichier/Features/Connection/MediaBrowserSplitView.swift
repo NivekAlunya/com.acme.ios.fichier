@@ -189,6 +189,11 @@ public struct MediaBrowserSplitView: View {
         .sheet(isPresented: $showingAddRemote) {
             SMBConnectWithDiscoveryView(smbManager: storageManager)
         }
+        .onDisappear {
+            connectionTask?.cancel()
+            connectionTask = nil
+            connectingLocationID = nil
+        }
     }
     
     /// Asynchronously activates a storage location with haptic feedback and cooperative task cancellation.

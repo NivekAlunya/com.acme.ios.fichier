@@ -550,7 +550,12 @@ final class MediaGridViewModel {
     /// Prepares an individual media item for sharing by downloading its image or fetching its local video URL.
     static func prepareSingleItemForShare(_ item: MediaItem, manager: StorageLocationManager) async -> (any Sendable)? {
         if item.isVideo {
-            return try? await manager.fetchVideoURL(for: item)
+            do {
+                return try await manager.fetchVideoURL(for: item)
+            } catch {
+                logw("Failed to fetch shareable video URL: \(error.localizedDescription)")
+                return nil
+            }
         } else {
             return await manager.downloadImage(for: item)
         }

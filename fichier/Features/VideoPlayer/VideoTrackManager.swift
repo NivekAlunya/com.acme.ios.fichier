@@ -134,6 +134,7 @@ public final class VideoTrackManager {
             if let activeOption = currentSelection {
                 playerItem.select(nil, in: subGroup)
                 try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled else { return }
                 playerItem.select(activeOption, in: subGroup)
             }
         }
