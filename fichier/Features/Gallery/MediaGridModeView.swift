@@ -30,6 +30,7 @@ struct MediaGridModeView: View {
     var onRequestDelete: ((MediaItem) -> Void)?
     var onRequestSaveToPhotos: ((MediaItem) -> Void)?
     var onRequestDownloadToFiles: ((MediaItem) -> Void)?
+    @State private var scrollSourceID = UUID()
     
     init(
         manager: StorageLocationManager,
@@ -101,10 +102,10 @@ struct MediaGridModeView: View {
             .scrollDismissesKeyboard(.immediately)
             #endif
             .onScrollPhaseChange { _, newPhase in
-                ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle)
+                ThumbnailPrefetchCoordinator.shared.setScrolling(newPhase != .idle, sourceID: scrollSourceID)
             }
             .onDisappear {
-                ThumbnailPrefetchCoordinator.shared.setScrolling(false)
+                ThumbnailPrefetchCoordinator.shared.setScrolling(false, sourceID: scrollSourceID)
             }
             .onChange(of: currentDirectoryID) { _, _ in
                 proxy.scrollTo("topOfGrid", anchor: .top)
